@@ -1,0 +1,28 @@
+[build]
+  base = "complyze"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+# Next.js specific configuration
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Environment variables (you'll need to set these in Netlify dashboard)
+[context.production.environment]
+  NEXT_PUBLIC_SITE_URL = "https://your-domain.netlify.app"
+
+# Redirects for SPA behavior
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  conditions = {Role = ["admin"]}
+
+# API routes handling
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200 
