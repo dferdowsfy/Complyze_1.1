@@ -1,0 +1,68 @@
+{
+  "name": "Complyze - AI Prompt Security & Optimization",
+  "description": "Automatically analyze, optimize, and secure your AI prompts across ChatGPT, Claude, Gemini, and other LLM platforms. Real-time PII detection and compliance monitoring.",
+  "version": "2.0.0",
+  "manifest_version": 3,
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "cookies"
+  ],
+  "host_permissions": [
+    "*://chat.openai.com/*",
+    "*://chatgpt.com/*",
+    "*://claude.ai/*",
+    "*://gemini.google.com/*",
+    "*://bard.google.com/*",
+    "*://poe.com/*",
+    "*://character.ai/*",
+    "*://huggingface.co/*",
+    "*://replicate.com/*",
+    "*://cohere.ai/*",
+    "http://localhost:3002/*",
+    "http://localhost:3001/*",
+    "https://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "https://127.0.0.1:3000/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://chat.openai.com/*",
+        "*://chatgpt.com/*",
+        "*://claude.ai/*",
+        "*://gemini.google.com/*",
+        "*://bard.google.com/*",
+        "*://poe.com/*",
+        "*://character.ai/*",
+        "*://huggingface.co/chat/*",
+        "*://replicate.com/*",
+        "*://cohere.ai/*",
+        "http://localhost:3002/*",
+        "http://localhost:3001/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Complyze - AI Prompt Security"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "injectUI.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+} 

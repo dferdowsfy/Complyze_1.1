@@ -4,55 +4,145 @@ import { supabase } from '@/lib/supabaseClient';
 
 interface IngestRequestBody {
   prompt: string;
-  userId: string;
-  projectId: string;
+  platform?: string;
+  url?: string;
+  timestamp?: string;
+  userId?: string;
+  projectId?: string;
+  source?: string;
+}
+
+async function getUserFromRequest(request: NextRequest): Promise<{ userId: string; projectId: string } | null> {
+  try {
+    // Try to get user from authorization header
+    const authHeader = request.headers.get('authorization');
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      
+      if (user && !error) {
+        // Get user's default project
+        const { data: project, error: projectError } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+        
+        if (project && !projectError) {
+          return { userId: user.id, projectId: project.id };
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting user from request:', error);
+    return null;
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as IngestRequestBody;
-    const { prompt, userId, projectId } = body;
+    const { prompt, platform, url, timestamp, source } = body;
 
-    if (!prompt || !userId || !projectId) {
-      return NextResponse.json({ error: 'Missing required fields: prompt, userId, projectId' }, { status: 400 });
+    if (!prompt) {
+      return NextResponse.json({ error: 'Missing required field: prompt' }, { status: 400 });
+    }
+
+    // Get user information
+    let userId = body.userId;
+    let projectId = body.projectId;
+
+    // If not provided in body, try to get from auth header
+    if (!userId || !projectId) {
+      const userInfo = await getUserFromRequest(req);
+      if (!userInfo) {
+        return NextResponse.json({ 
+          error: 'Authentication required. Please provide userId and projectId or valid authorization header.' 
+        }, { status: 401 });
+      }
+      userId = userInfo.userId;
+      projectId = userInfo.projectId;
+    }
+
+    // Verify user and project exist
+    const { data: userExists, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !userExists) {
+      return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
+    }
+
+    const { data: projectExists, error: projectError } = await supabase
+      .from('projects')
+      .select('id, user_id')
+      .eq('id', projectId)
+      .single();
+
+    if (projectError || !projectExists) {
+      return NextResponse.json({ error: 'Invalid project ID' }, { status: 400 });
+    }
+
+    // Verify user owns the project
+    if (projectExists.user_id !== userId) {
+      return NextResponse.json({ error: 'User does not have access to this project' }, { status: 403 });
     }
 
     // 1. Run redaction
     const redactionOutput: RedactionResult = await comprehensiveRedact(prompt);
 
-    // 2. Log to Supabase (PromptLog table)
+    // 2. Log to Supabase (prompt_logs table)
     const logEntry = {
       original_prompt: prompt,
       redacted_prompt: redactionOutput.redactedText,
       user_id: userId,
       project_id: projectId,
-      redaction_details: redactionOutput.redactionDetails, // Store details of what was redacted
-      status: 'pending', // Initial status
-      created_at: new Date().toISOString(),
-      // Other fields like request_ip, user_agent could be added here
+      platform: platform || null,
+      url: url || null,
+      redaction_details: redactionOutput.redactionDetails,
+      status: 'pending' as const,
+      metadata: {
+        source: source || 'api',
+        ingested_at: timestamp || new Date().toISOString(),
+        redaction_count: redactionOutput.redactionDetails.length
+      }
     };
 
     const { data: loggedPrompt, error: dbError } = await supabase
-      .from('PromptLog')
+      .from('prompt_logs')
       .insert(logEntry)
-      .select() // Optionally get the inserted row back, useful for returning the ID
-      ;
+      .select()
+      .single();
 
     if (dbError) {
       console.error('Supabase error:', dbError);
-      return NextResponse.json({ error: 'Failed to log prompt', details: (dbError as any).message }, { status: 500 });
+      return NextResponse.json({ 
+        error: 'Failed to log prompt', 
+        details: dbError.message 
+      }, { status: 500 });
     }
 
     // 3. Return redacted prompt and pending status
     return NextResponse.json({
       message: 'Prompt ingested successfully',
+      logId: loggedPrompt.id,
       redactedPrompt: redactionOutput.redactedText,
-      logId: loggedPrompt ? loggedPrompt[0].id : null, // Assuming insert().select() returns the ID
+      piiDetected: redactionOutput.redactionDetails.map(detail => detail.type),
+      redactionCount: redactionOutput.redactionDetails.length,
       status: 'pending'
     }, { status: 201 });
 
   } catch (error: any) {
     console.error('Ingest endpoint error:', error);
-    return NextResponse.json({ error: 'An unexpected error occurred', details: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'An unexpected error occurred', 
+      details: error.message 
+    }, { status: 500 });
   }
 } 

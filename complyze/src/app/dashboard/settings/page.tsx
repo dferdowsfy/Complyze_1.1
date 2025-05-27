@@ -22,9 +22,9 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] font-sans">
+    <div className="min-h-screen font-sans" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex gap-12 bg-[#0F172A] px-8 py-5 shadow-md justify-center items-center">
+      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-center items-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
         <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
           Dashboard
           {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (

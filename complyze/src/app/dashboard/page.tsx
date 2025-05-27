@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 
@@ -22,6 +22,47 @@ const COLORS = {
 const FONT = {
   fontFamily: 'Inter, sans-serif',
 };
+
+// Authentication hook
+function useAuth() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = localStorage.getItem('complyze_token');
+      const userData = localStorage.getItem('complyze_user');
+      
+      if (token && userData) {
+        try {
+          const parsedUser = JSON.parse(userData);
+          setUser(parsedUser);
+          setIsAuthenticated(true);
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+          localStorage.removeItem('complyze_token');
+          localStorage.removeItem('complyze_user');
+          router.push('/');
+        }
+      } else {
+        router.push('/');
+      }
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, [router]);
+
+  const logout = () => {
+    localStorage.removeItem('complyze_token');
+    localStorage.removeItem('complyze_user');
+    router.push('/');
+  };
+
+  return { isAuthenticated, user, loading, logout };
+}
 
 function RiskBadge({ level }: { level: 'High' | 'Medium' | 'Low' }) {
   const color =
@@ -220,12 +261,30 @@ function FlaggedPromptsPanel() {
 export default function ComplyzeDashboard() {
   const router = useRouter();
   const pathname = usePathname();
+  const { isAuthenticated, user, loading: authLoading, logout } = useAuth();
   const [prompt, setPrompt] = useState("");
   const [enhancedPrompt, setEnhancedPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
   const [optimizerTab, setOptimizerTab] = useState<'optimize' | 'history' | 'analysis'>('optimize');
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-[#0E1E36] mb-4">Loading...</div>
+          <div className="text-gray-600">Checking authentication...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated, the useAuth hook will redirect to home
+  if (!isAuthenticated) {
+    return null;
+  }
 
   // Placeholder data
   const riskBreakdown = [
@@ -447,33 +506,48 @@ export default function ComplyzeDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0F172A] font-sans" style={{ fontSize: 22 }}>
+    <div className="min-h-screen font-sans" style={{ fontSize: 22, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex gap-12 bg-[#0F172A] px-8 py-5 shadow-md justify-center items-center">
-        <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
-          Dashboard
-          {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-              <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-            </span>
-          )}
-        </Link>
-        <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
-          Reports
-          {pathname && pathname.includes('reports') && (
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-              <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-            </span>
-          )}
-        </Link>
-        <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
-          Settings
-          {pathname && pathname.includes('settings') && (
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-              <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-            </span>
-          )}
-        </Link>
+      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-between items-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <div className="flex gap-12 items-center">
+          <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            Dashboard
+            {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+              </span>
+            )}
+          </Link>
+          <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            Reports
+            {pathname && pathname.includes('reports') && (
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+              </span>
+            )}
+          </Link>
+          <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            Settings
+            {pathname && pathname.includes('settings') && (
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+              </span>
+            )}
+          </Link>
+        </div>
+        
+        {/* User Menu */}
+        <div className="flex items-center gap-4">
+          <span className="text-white text-lg">
+            Welcome, {user?.full_name || user?.email || 'User'}
+          </span>
+          <button
+            onClick={logout}
+            className="bg-[#FF6F3C] text-white px-4 py-2 rounded-lg font-semibold hover:bg-[#e65d2d] transition"
+          >
+            Logout
+          </button>
+        </div>
       </nav>
       {/* Notification Bar */}
       <div className="w-full bg-[#E53935] text-white font-bold text-lg py-3 text-center shadow" style={{ letterSpacing: 0.2 }}>

@@ -228,9 +228,9 @@ export default function Reports() {
   }, [exportOpen]);
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] font-sans">
+    <div className="min-h-screen font-sans" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex gap-12 bg-[#0F172A] px-8 py-5 shadow-md justify-center items-center">
+      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-center items-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
         <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
           Dashboard
           {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
@@ -259,8 +259,8 @@ export default function Reports() {
       <main className="max-w-7xl mx-auto flex flex-row gap-10 py-12 px-4">
         {/* Left Rail: Templates */}
         <aside
-          className="w-80 flex-shrink-0 fixed left-0 top-[76px] z-30 h-[calc(100vh-76px)] overflow-y-auto bg-[#FAF9F6] border-r border-slate-200 px-6 py-6"
-          style={{ boxShadow: '2px 0 8px rgba(14,30,54,0.04)' }}
+          className="w-80 flex-shrink-0 fixed left-0 top-[76px] z-30 h-[calc(100vh-76px)] overflow-y-auto border-r border-slate-200 px-6 py-6"
+          style={{ boxShadow: '2px 0 8px rgba(14,30,54,0.04)', background: 'rgba(255,255,255,0.95)' }}
         >
           <h2 className="text-lg font-bold mb-4 text-[#0E1E36]">Report Blueprints</h2>
           {TEMPLATES.map(t => (
