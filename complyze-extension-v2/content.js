@@ -1270,22 +1270,63 @@ window.complyzeTestSafePanel = function() {
     promptElement.textContent = testContent;
   }
   
-  // Trigger analysis
+  // Trigger analysis with proper warning first
   const mockAnalysis = {
     risk_level: 'high',
-    detectedPII: ['email', 'ssn', 'sensitive_keywords'],
+    detectedPII: ['email', 'ssn', 'credentials'],
     redacted_prompt: null // Will use generateSafePrompt
   };
   
+  // Show the warning first (which includes the "View Safe Version" button)
+  promptWatcher.showRealTimeWarning(promptElement, mockAnalysis);
+  console.log('Complyze: Warning displayed. Click "View Safe Version" to see the side panel');
+};
+
+// NEW: Direct test for side panel (bypasses warning)
+window.complyzeTestPanelDirect = function() {
+  console.log('Complyze: Testing side panel directly...');
+  
+  const platform = promptWatcher.getCurrentPlatform();
+  if (!platform) {
+    console.log('Complyze: No platform detected');
+    return;
+  }
+  
+  const selectors = promptWatcher.platformSelectors[platform];
+  const promptElement = document.querySelector(selectors.promptInput);
+  
+  if (!promptElement) {
+    console.log('Complyze: No prompt element found');
+    return;
+  }
+  
+  // Set test content with PII
+  const testContent = "My email is john.doe@example.com and my SSN is 123-45-6789. API key: sk-1234567890abcdef. This is confidential information.";
+  
+  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+    promptElement.value = testContent;
+  } else if (promptElement.contentEditable === 'true') {
+    promptElement.textContent = testContent;
+  }
+  
+  // Create analysis with comprehensive PII detection
+  const mockAnalysis = {
+    risk_level: 'critical',
+    detectedPII: ['email', 'ssn', 'api_key', 'confidential'],
+    redacted_prompt: null // Will use generateSafePrompt
+  };
+  
+  // Show the side panel directly
   promptWatcher.createSafePromptPanel(promptElement, mockAnalysis);
-  console.log('Complyze: Safe prompt panel should now be visible');
+  console.log('Complyze: Side panel should now be visible on the right side of the screen');
 };
 
 console.log('Complyze: Test functions available:');
 console.log('- complyzeTest() - Send test prompt');
 console.log('- complyzeDebug() - Show debug info');
 console.log('- complyzeForcePrompt() - Force capture current prompt');
-console.log('- complyzeTestSafePanel() - Test safe prompt panel');
+console.log('- complyzeTestSafePanel() - Test warning with "View Safe Version" button');
+console.log('- complyzeTestPanelDirect() - Show side panel directly');
 
 // Authentication sync functionality
 class AuthSync {
