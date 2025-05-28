@@ -9,8 +9,8 @@ class ComplyzePopup {
   }
 
   async init() {
-    // Auto-detect the correct port first
-    await this.detectServerPort();
+    // Get dashboard URL from background script instead of detecting independently
+    await this.getDashboardUrlFromBackground();
     
     // Check authentication status
     await this.checkAuthStatus();
@@ -22,32 +22,29 @@ class ComplyzePopup {
     }
   }
 
-  async detectServerPort() {
-    const ports = [3002, 3001, 3000];
-    
-    for (const port of ports) {
-      try {
-        console.log(`Complyze Popup: Trying port ${port}...`);
-        const response = await fetch(`http://localhost:${port}/api/test-db`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (response.ok || response.status === 401) { // 401 means server is running but not authenticated
-          console.log(`Complyze Popup: Found server on port ${port}`);
-          this.apiBase = `http://localhost:${port}/api`;
-          this.dashboardUrl = `http://localhost:${port}/dashboard`;
-          return;
-        }
-      } catch (error) {
-        console.log(`Complyze Popup: Port ${port} not available:`, error.message);
+  async getDashboardUrlFromBackground() {
+    try {
+      // Get the dashboard URL from background script which has proper port detection
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'get_dashboard_url' }, resolve);
+      });
+      
+      if (response && response.dashboardUrl) {
+        this.dashboardUrl = response.dashboardUrl;
+        // Extract API base from dashboard URL
+        this.apiBase = this.dashboardUrl.replace('/dashboard', '/api');
+        console.log('Complyze Popup: Got dashboard URL from background:', this.dashboardUrl);
+      } else {
+        // Fallback to production
+        console.log('Complyze Popup: No dashboard URL from background, using production');
+        this.dashboardUrl = 'https://complyze.co/dashboard';
+        this.apiBase = 'https://complyze.co/api';
       }
+    } catch (error) {
+      console.log('Complyze Popup: Failed to get dashboard URL from background, using production:', error);
+      this.dashboardUrl = 'https://complyze.co/dashboard';
+      this.apiBase = 'https://complyze.co/api';
     }
-    
-    // Fallback to default port
-    console.log('Complyze Popup: No server found, using default port 3002');
-    this.apiBase = 'http://localhost:3002/api';
-    this.dashboardUrl = 'http://localhost:3002/dashboard';
   }
 
   async checkAuthStatus() {

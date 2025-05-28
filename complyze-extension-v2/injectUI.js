@@ -2,32 +2,30 @@
 class ComplyzeUI {
   constructor() {
     this.dashboardUrl = null;
-    this.detectServerPort().then(() => {
+    this.getDashboardUrlFromBackground().then(() => {
       this.init();
     });
   }
 
-  async detectServerPort() {
-    const ports = [3002, 3001, 3000];
-    
-    for (const port of ports) {
-      try {
-        const response = await fetch(`http://localhost:${port}/api/test-db`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (response.ok || response.status === 401) {
-          this.dashboardUrl = `http://localhost:${port}/dashboard`;
-          return;
-        }
-      } catch (error) {
-        // Port not available, try next
+  async getDashboardUrlFromBackground() {
+    try {
+      // Get the dashboard URL from background script
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'get_dashboard_url' }, resolve);
+      });
+      
+      if (response && response.dashboardUrl) {
+        this.dashboardUrl = response.dashboardUrl;
+        console.log('Complyze UI: Got dashboard URL from background:', this.dashboardUrl);
+      } else {
+        // Fallback to production
+        console.log('Complyze UI: No dashboard URL from background, using production');
+        this.dashboardUrl = 'https://complyze.co/dashboard';
       }
+    } catch (error) {
+      console.log('Complyze UI: Failed to get dashboard URL from background, using production:', error);
+      this.dashboardUrl = 'https://complyze.co/dashboard';
     }
-    
-    // Fallback to default port
-    this.dashboardUrl = 'http://localhost:3002/dashboard';
   }
 
   async init() {

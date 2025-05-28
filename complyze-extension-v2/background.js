@@ -21,6 +21,12 @@ class ComplyzeBackground {
         this.handlePromptAnalysis(message.payload, sender.tab.id);
       }
       
+      if (message.type === 'analyze_prompt_realtime') {
+        this.handleRealTimeAnalysis(message.payload)
+          .then(result => sendResponse(result));
+        return true; // Keep message channel open for async response
+      }
+      
       if (message.type === 'login') {
         this.login(message.email, message.password)
           .then(result => sendResponse(result));
@@ -46,6 +52,13 @@ class ComplyzeBackground {
         });
       }
 
+      if (message.type === 'get_dashboard_url') {
+        sendResponse({
+          dashboardUrl: this.dashboardUrl,
+          apiBase: this.apiBase
+        });
+      }
+
       if (message.type === 'sync_auth_from_website') {
         this.handleAuthSyncFromWebsite(message.token, message.user)
           .then(result => sendResponse(result));
@@ -61,24 +74,29 @@ class ComplyzeBackground {
   }
 
   async detectServerPort() {
-    const ports = [3002, 3001, 3000];
+    const domains = [
+      'https://complyze.co',
+      'http://localhost:3002',
+      'http://localhost:3001',
+      'http://localhost:3000'
+    ];
     
-    for (const port of ports) {
+    for (const domain of domains) {
       try {
-        console.log(`Complyze: Trying port ${port}...`);
-        const response = await fetch(`http://localhost:${port}/api/test-db`, {
+        console.log(`Complyze: Trying port ${domain}...`);
+        const response = await fetch(`${domain}/api/test-db`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         });
         
         if (response.ok || response.status === 401) { // 401 means server is running but not authenticated
-          console.log(`Complyze: Found server on port ${port}`);
-          this.apiBase = `http://localhost:${port}/api`;
-          this.dashboardUrl = `http://localhost:${port}/dashboard`;
+          console.log(`Complyze: Found server on port ${domain}`);
+          this.apiBase = `${domain}/api`;
+          this.dashboardUrl = `${domain}/dashboard`;
           return;
         }
       } catch (error) {
-        console.log(`Complyze: Port ${port} not available:`, error.message);
+        console.log(`Complyze: Port ${domain} not available:`, error.message);
       }
     }
     
@@ -250,6 +268,34 @@ class ComplyzeBackground {
       return { 
         redacted_prompt: prompt,
         optimized_prompt: prompt,
+        risk_level: 'low', 
+        clarity_score: 0, 
+        quality_score: 0, 
+        control_tags: [] 
+      };
+    }
+  }
+
+  async handleRealTimeAnalysis(payload) {
+    try {
+      console.log('Complyze: Handling real-time analysis for:', payload.prompt.substring(0, 50) + '...');
+      
+      // Check if user is authenticated
+      const isAuthenticated = await this.checkUserAuth();
+      if (!isAuthenticated) {
+        console.log('Complyze: User not authenticated for real-time analysis');
+        return { error: 'Authentication required' };
+      }
+
+      // Perform the analysis
+      const result = await this.analyzePrompt(payload.prompt);
+      console.log('Complyze: Real-time analysis result:', result);
+      
+      return result;
+    } catch (error) {
+      console.error('Complyze: Real-time analysis failed:', error);
+      return { 
+        error: error.message,
         risk_level: 'low', 
         clarity_score: 0, 
         quality_score: 0, 

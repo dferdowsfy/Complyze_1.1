@@ -10,6 +10,7 @@
     "cookies"
   ],
   "host_permissions": [
+    "https://complyze.co/*",
     "*://chat.openai.com/*",
     "*://chatgpt.com/*",
     "*://claude.ai/*",
@@ -29,6 +30,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://complyze.co/*",
         "*://chat.openai.com/*",
         "*://chatgpt.com/*",
         "*://claude.ai/*",
