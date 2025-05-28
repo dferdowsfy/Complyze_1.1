@@ -1087,7 +1087,12 @@ export default function ComplyzeDashboard() {
   return (
     <div className="min-h-screen font-sans" style={{ fontSize: 22, background: COLORS.bg }}>
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-between items-center" style={{ background: COLORS.bg }}>
+      <nav className="sticky top-0 z-40 flex px-8 py-5 shadow-md justify-between items-center" style={{ background: COLORS.bg }}>
+        {/* Left: Branding */}
+        <div className="flex items-center gap-12 min-w-[180px]">
+          <span className="text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
+        </div>
+        {/* Center: Nav Links */}
         <div className="flex gap-12 items-center">
           <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
             Dashboard
@@ -1122,11 +1127,10 @@ export default function ComplyzeDashboard() {
             )}
           </Link>
         </div>
-        
-        {/* User Menu */}
-        <div className="flex items-center gap-4">
-          <span className="text-white text-lg">
-            Welcome, {user?.full_name || user?.email || 'User'}
+        {/* Right: User Info and Logout */}
+        <div className="flex items-center gap-4 min-w-[220px] justify-end">
+          <span className="text-white text-lg truncate max-w-[140px]" title={user?.full_name || user?.email || 'User'}>
+            {user?.full_name || user?.email || 'User'}
           </span>
           <button
             onClick={logout}

@@ -230,31 +230,50 @@ export default function Reports() {
   return (
     <div className="min-h-screen font-sans" style={{ background: '#0E1E36' }}>
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-center items-center" style={{ background: '#0E1E36' }}>
-        <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
-          Dashboard
-          {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-              <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-            </span>
-          )}
-        </Link>
-        <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
-          Reports
-          {pathname && pathname.includes('reports') && (
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-              <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-            </span>
-          )}
-        </Link>
-        <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
-          Settings
-          {pathname && pathname.includes('settings') && (
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-              <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-            </span>
-          )}
-        </Link>
+      <nav className="sticky top-0 z-40 flex px-8 py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
+        {/* Left: Branding */}
+        <div className="flex items-center gap-12 min-w-[180px]">
+          <span className="text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
+        </div>
+        {/* Center: Nav Links */}
+        <div className="flex gap-12 items-center">
+          <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            Dashboard
+            {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+              </span>
+            )}
+          </Link>
+          <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            Reports
+            {pathname && pathname.includes('reports') && (
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+              </span>
+            )}
+          </Link>
+          <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            Settings
+            {pathname && pathname.includes('settings') && (
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+              </span>
+            )}
+          </Link>
+          <Link href="/dashboard/test-prevention" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            🛡️ Test Prevention
+            {pathname && pathname.includes('test-prevention') && (
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+              </span>
+            )}
+          </Link>
+        </div>
+        {/* Right: User Info and Logout (not available here) */}
+        <div className="flex items-center gap-4 min-w-[220px] justify-end">
+          {/* Placeholder for user info/logout if needed */}
+        </div>
       </nav>
       <main className="max-w-7xl mx-auto flex flex-row gap-10 py-12 px-4">
         {/* Left Rail: Templates */}
