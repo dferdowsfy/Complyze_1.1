@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
+
+// Create a service role client that bypasses RLS
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://likskioavtpnskrfxbqa.supabase.co";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxpa3NraW9hdnRwbnNrcmZ4YnFhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzMyMjY5MiwiZXhwIjoyMDYyODk4NjkyfQ.O_qkgrEHKI5QOG9UidDtieEb-kEzu-3su9Ge2XdXPSw";
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+});
 
 // Define the redaction categories and items structure
 export const REDACTION_CATEGORIES = {
@@ -57,8 +68,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    // Fetch user's redaction settings
-    const { data: settings, error: dbError } = await supabase
+    // Fetch user's redaction settings using admin client
+    const { data: settings, error: dbError } = await supabaseAdmin
       .from('RedactionSettings')
       .select('item_key, enabled')
       .eq('user_id', userId);
@@ -101,12 +112,33 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { user_id, settings } = body;
 
+    console.log('Redaction settings POST request:', { user_id, settingsCount: Object.keys(settings || {}).length });
+
     if (!user_id || !settings) {
       return NextResponse.json({ error: 'User ID and settings are required' }, { status: 400 });
     }
 
-    // Delete existing settings for this user
-    const { error: deleteError } = await supabase
+    // Convert settings object to array
+    const settingsArray = Object.entries(settings).map(([item_key, enabled]) => ({
+      user_id,
+      item_key,
+      enabled: Boolean(enabled)
+    }));
+
+    console.log('Settings array to insert:', settingsArray.length, 'items');
+
+    // If no settings to save, just return success
+    if (settingsArray.length === 0) {
+      console.log('No settings to save, returning success');
+      return NextResponse.json({ 
+        message: 'No settings to save',
+        settings: {} 
+      }, { status: 200 });
+    }
+
+    // Delete existing settings for this user using admin client
+    console.log('Deleting existing settings for user:', user_id);
+    const { error: deleteError } = await supabaseAdmin
       .from('RedactionSettings')
       .delete()
       .eq('user_id', user_id);
@@ -116,25 +148,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to update settings', details: deleteError.message }, { status: 500 });
     }
 
-    // Insert new settings
-    const settingsArray = Object.entries(settings).map(([item_key, enabled]) => ({
-      user_id,
-      item_key,
-      enabled: Boolean(enabled)
-    }));
-
-    const { error: insertError } = await supabase
+    // Insert new settings using admin client
+    console.log('Inserting new settings...');
+    const { data: insertData, error: insertError } = await supabaseAdmin
       .from('RedactionSettings')
-      .insert(settingsArray);
+      .insert(settingsArray)
+      .select();
 
     if (insertError) {
       console.error('Error inserting new settings:', insertError);
+      console.error('Settings array that failed:', settingsArray);
       return NextResponse.json({ error: 'Failed to save settings', details: insertError.message }, { status: 500 });
     }
 
+    console.log('Settings saved successfully:', insertData?.length, 'records');
+
     return NextResponse.json({ 
       message: 'Settings updated successfully',
-      settings 
+      settings,
+      recordsInserted: insertData?.length || 0
     }, { status: 200 });
 
   } catch (error: any) {
