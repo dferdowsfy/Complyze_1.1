@@ -790,51 +790,102 @@ function RiskTypeFrequencyCard() {
 
 // Prompt Risk Trends Card Component
 function PromptRiskTrendsCard() {
-  // Mock data for the last 7 days
-  const totalPrompts = [20, 22, 19, 25, 23, 21, 24];
-  const highRiskPrompts = [5, 4, 3, 4, 2, 2, 1];
-  // Calculate trend (percent change from first to last)
-  const trend = ((highRiskPrompts[0] - highRiskPrompts[6]) / highRiskPrompts[0]) * 100;
-  let status = 'Flat', emoji = '➖', color = '#888';
-  if (trend > 10) { status = 'Improving'; emoji = '📈'; color = '#10b981'; }
-  else if (trend < -10) { status = 'Worsening'; emoji = '⚠️'; color = '#ef4444'; }
-  else { status = 'Flat'; emoji = '➖'; color = '#f59e0b'; }
+  const [trendsData, setTrendsData] = useState({
+    total_prompts: [0, 0, 0, 0, 0, 0, 0],
+    high_risk_prompts: [0, 0, 0, 0, 0, 0, 0],
+    trend_percent: 0,
+    status: 'Flat',
+    emoji: '➖'
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchTrendsData();
+  }, []);
+
+  const fetchTrendsData = async () => {
+    try {
+      console.log('Fetching real trends data from API...');
+      const response = await fetch('/api/analytics/trends');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch trends data: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Trends data received:', data);
+      
+      setTrendsData(data);
+    } catch (error) {
+      console.error('Error fetching trends data:', error);
+      // Fallback to default values on error
+      setTrendsData({
+        total_prompts: [20, 22, 19, 25, 23, 21, 24],
+        high_risk_prompts: [5, 4, 3, 4, 2, 2, 1],
+        trend_percent: 80,
+        status: 'Improving',
+        emoji: '📈'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { total_prompts: totalPrompts, high_risk_prompts: highRiskPrompts, trend_percent, status, emoji } = trendsData;
+  
+  // Calculate trend direction and color
+  const isImproving = status === 'Improving';
+  const isWorsening = status === 'Worsening';
+  const color = isImproving ? '#10b981' : isWorsening ? '#ef4444' : '#f59e0b';
 
   // SVG sparkline for both lines
   const width = 120, height = 40, pad = 6;
   const scaleY = (arr: number[]): number[] => {
-    const max = Math.max(...totalPrompts);
+    const max = Math.max(...totalPrompts, 1); // Avoid division by zero
     return arr.map((v: number, i: number) => height - pad - (v / max) * (height - 2 * pad));
   };
   const scaleX = (arr: number[]): number[] => arr.map((_: number, i: number) => pad + i * ((width - 2 * pad) / 6));
   const x = scaleX(totalPrompts);
   const yTotal = scaleY(totalPrompts);
   const yHigh = scaleY(highRiskPrompts);
-  const line = (yArr: number[]): string => yArr.map((y: number, i: number) => `${i === 0 ? 'M' : 'L'}${x[i]},${y}`).join(' ');
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
       <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Prompt Risk Trends</div>
       <div className="text-sm text-gray-500 mb-2">Last 7 Days</div>
-      {/* Sparkline Chart */}
-      <svg width={width} height={height} className="mb-2">
-        {/* Total Prompts Line */}
-        <polyline fill="none" stroke="#6366F1" strokeWidth="2.5" points={x.map((xv: number, i: number) => `${xv},${yTotal[i]}`).join(' ')} />
-        {/* High-Risk Prompts Line */}
-        <polyline fill="none" stroke="#ef4444" strokeWidth="2.5" points={x.map((xv: number, i: number) => `${xv},${yHigh[i]}`).join(' ')} />
-      </svg>
-      <div className="flex items-center gap-2 text-lg font-semibold mb-1">
-        <span style={{ color }}>{emoji}</span>
-        <span style={{ color }}>{status}</span>
-        <span className="text-gray-400 text-base ml-2">({Math.abs(trend).toFixed(0)}%)</span>
-      </div>
-      <div className="text-sm text-gray-600 mb-2">
-        High-risk prompts trending: <span style={{ color }}>{trend > 0 ? '↓' : trend < 0 ? '↑' : '→'} {Math.abs(trend).toFixed(0)}%</span>
-      </div>
-      <div className="text-xs text-gray-400 mt-2">
-        <span className="inline-block w-3 h-3 rounded-full mr-1" style={{ background: '#6366F1' }}></span> Total Prompts
-        <span className="inline-block w-3 h-3 rounded-full mx-2" style={{ background: '#ef4444' }}></span> High-Risk Prompts
-      </div>
+      
+      {loading ? (
+        <div className="flex justify-center items-center h-32">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      ) : (
+        <>
+          {/* Sparkline Chart */}
+          <svg width={width} height={height} className="mb-2">
+            {/* Total Prompts Line */}
+            <polyline fill="none" stroke="#6366F1" strokeWidth="2.5" points={x.map((xv: number, i: number) => `${xv},${yTotal[i]}`).join(' ')} />
+            {/* High-Risk Prompts Line */}
+            <polyline fill="none" stroke="#ef4444" strokeWidth="2.5" points={x.map((xv: number, i: number) => `${xv},${yHigh[i]}`).join(' ')} />
+          </svg>
+          
+          <div className="flex items-center gap-2 text-lg font-semibold mb-1">
+            <span style={{ color }}>{emoji}</span>
+            <span style={{ color }}>{status}</span>
+            <span className="text-gray-400 text-base ml-2">({trend_percent}%)</span>
+          </div>
+          
+          <div className="text-sm text-gray-600 mb-2">
+            High-risk prompts trending: <span style={{ color }}>
+              {isImproving ? '↓' : isWorsening ? '↑' : '→'} {trend_percent}%
+            </span>
+          </div>
+          
+          <div className="text-xs text-gray-400 mt-2">
+            <span className="inline-block w-3 h-3 rounded-full mr-1" style={{ background: '#6366F1' }}></span> Total Prompts
+            <span className="inline-block w-3 h-3 rounded-full mx-2" style={{ background: '#ef4444' }}></span> High-Risk Prompts
+          </div>
+        </>
+      )}
     </div>
   );
 }

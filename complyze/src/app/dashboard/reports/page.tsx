@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -117,35 +117,116 @@ function TemplateCard({ template, selected, onClick }: TemplateCardProps) {
   );
 }
 
-function ExportBar() {
+interface ExportBarProps {
+  onExport: (format: string) => void;
+  isGenerating: boolean;
+}
+function ExportBar({ onExport, isGenerating }: ExportBarProps) {
   return (
     <div className="sticky bottom-0 left-0 w-full bg-white border-t border-slate-200 flex justify-end gap-4 px-8 py-4 z-40 shadow-lg">
-      <button className="bg-[#6366F1] text-white px-4 py-2 rounded font-semibold">PDF</button>
-      <button className="bg-[#4F46E5] text-white px-4 py-2 rounded font-semibold">Word Doc</button>
-      <button className="bg-[#06B6D4] text-white px-4 py-2 rounded font-semibold">JSON Bundle</button>
-      <button className="bg-[#F97316] text-white px-4 py-2 rounded font-semibold">Copy Share Link</button>
+      <button 
+        className="bg-[#6366F1] text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+        onClick={() => onExport('pdf')}
+        disabled={isGenerating}
+      >
+        {isGenerating ? 'Generating...' : 'PDF'}
+      </button>
+      <button 
+        className="bg-[#4F46E5] text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+        onClick={() => onExport('docx')}
+        disabled={isGenerating}
+      >
+        Word Doc
+      </button>
+      <button 
+        className="bg-[#06B6D4] text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+        onClick={() => onExport('json')}
+        disabled={isGenerating}
+      >
+        JSON Bundle
+      </button>
+      <button 
+        className="bg-[#F97316] text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+        onClick={() => onExport('share')}
+        disabled={isGenerating}
+      >
+        Copy Share Link
+      </button>
     </div>
   );
 }
 
-interface PreviewAccordionProps {
-  sections: { title: string; content: string }[];
+interface ReportSection {
+  title: string;
+  content: string;
+  data?: any;
 }
-function PreviewAccordion({ sections }: PreviewAccordionProps) {
+
+interface PreviewAccordionProps {
+  sections: ReportSection[];
+  isGenerating: boolean;
+}
+function PreviewAccordion({ sections, isGenerating }: PreviewAccordionProps) {
   const [open, setOpen] = useState(0);
+  
+  if (isGenerating) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white shadow p-8 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-4"></div>
+        <div className="text-lg font-semibold text-slate-700 mb-2">Generating Report with AI</div>
+        <div className="text-sm text-slate-500">
+          Analyzing extension data and generating compliance report using OpenRouter LLM...
+        </div>
+      </div>
+    );
+  }
+  
+  if (!sections || sections.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white shadow p-8 text-center">
+        <div className="text-lg font-semibold text-slate-700 mb-2">Select a Template</div>
+        <div className="text-sm text-slate-500">
+          Choose a report template from the left to generate a compliance report with real data from your Chrome extension.
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow divide-y divide-slate-100">
       {sections.map((s, i) => (
         <div key={i}>
           <button
-            className="w-full text-left px-6 py-4 font-semibold flex justify-between items-center focus:outline-none"
+            className="w-full text-left px-6 py-4 font-semibold flex justify-between items-center focus:outline-none hover:bg-slate-50"
             onClick={() => setOpen(open === i ? -1 : i)}
           >
             <span>{s.title}</span>
             <span className="text-xl">{open === i ? "▼" : "▶"}</span>
           </button>
           {open === i && (
-            <div className="px-8 pb-6 text-slate-700 text-base whitespace-pre-line">{s.content}</div>
+            <div className="px-8 pb-6 text-slate-700 text-base">
+              <div className="prose prose-sm max-w-none">
+                {s.content.split('\n').map((line, idx) => {
+                  // Handle markdown tables
+                  if (line.includes('|')) {
+                    return <div key={idx} className="font-mono text-xs bg-slate-50 p-2 rounded mb-2">{line}</div>;
+                  }
+                  // Handle headers
+                  if (line.startsWith('###')) {
+                    return <h4 key={idx} className="font-semibold text-lg mt-4 mb-2">{line.replace('###', '').trim()}</h4>;
+                  }
+                  if (line.startsWith('##')) {
+                    return <h3 key={idx} className="font-bold text-xl mt-4 mb-2">{line.replace('##', '').trim()}</h3>;
+                  }
+                  // Handle bullet points
+                  if (line.trim().startsWith('-')) {
+                    return <li key={idx} className="ml-4">{line.replace('-', '').trim()}</li>;
+                  }
+                  // Regular paragraphs
+                  return line.trim() ? <p key={idx} className="mb-2">{line}</p> : <br key={idx} />;
+                })}
+              </div>
+            </div>
           )}
         </div>
       ))}
@@ -153,82 +234,141 @@ function PreviewAccordion({ sections }: PreviewAccordionProps) {
   );
 }
 
-const DUMMY_SECTIONS = {
-  "framework-coverage-matrix": [
-    { title: "Executive Summary", content: "This matrix shows coverage of NIST 800-53, FedRAMP, and ISO 27001 controls.\n\nAll critical controls are mapped. See table below for details." },
-    { title: "Findings", content: "| Control | Status | Evidence |\n|---|---|---|\n| SC-28 | Met | [Link] |\n| AC-3 | Partially Met | [Link] |\n| SI-4 | Not Applicable | - |" },
-    { title: "Recommendations", content: "Address partial and unmet controls before next audit." },
-    { title: "Appendix", content: "{\n  controls: [...]\n}" },
-  ],
-  "prompt-risk-audit": [
-    { title: "Executive Summary", content: "Weekly audit of prompt risks.\n\nHigh: 3, Medium: 7, Low: 20." },
-    { title: "Findings", content: "Histogram: [▇▇▇▇▇▇▇▇▇▇] (see chart)\nTop flagged prompts:\n1. ..." },
-    { title: "Recommendations", content: "Reduce high-risk prompts by clarifying intent and redacting PII." },
-    { title: "Appendix", content: "{\n  risks: [...]\n}" },
-  ],
-  "redaction-effectiveness": [
-    { title: "Executive Summary", content: "% of prompts with PII: 12%.\nFalse positive rate: 2%.\nFalse negative rate: 1%." },
-    { title: "Findings", content: "Sample redaction diff:\n- Before: ...\n- After: ..." },
-    { title: "Recommendations", content: "Tune redaction patterns to reduce false results." },
-    { title: "Appendix", content: "{\n  redactionStats: {...}\n}" },
-  ],
-  "fedramp-conmon-exec": [
-    { title: "Executive Summary", content: "FedRAMP ConMon summary for May 2025." },
-    { title: "Findings", content: "Control status heatmap: [image]\nOpen POA&M items: 2\nMonthly test coverage: 95%" },
-    { title: "Recommendations", content: "Close open POA&M items and maintain test coverage > 90%." },
-    { title: "Appendix", content: "{\n  conmon: {...}\n}" },
-  ],
-  "cost-usage-ledger": [
-    { title: "Executive Summary", content: "Token usage and cost breakdown for May 2025." },
-    { title: "Findings", content: "Total tokens: 1,200,000\nModel cost: $24.00\nProjection vs budget: -$6.00" },
-    { title: "Recommendations", content: "Monitor usage to stay within budget." },
-    { title: "Appendix", content: "{\n  usage: {...}\n}" },
-  ],
-  "ai-rmf-profile": [
-    { title: "Executive Summary", content: "NIST AI RMF profile for LLM deployment." },
-    { title: "Findings", content: "Evidence paragraphs and risk tables for GOVERN, MAP, MEASURE, MANAGE." },
-    { title: "Recommendations", content: "Review evidence and update risk tables quarterly." },
-    { title: "Appendix", content: "{\n  rmf: {...}\n}" },
-  ],
-  "owasp-llm-findings": [
-    { title: "Executive Summary", content: "OWASP LLM Top-10 findings for May 2025." },
-    { title: "Findings", content: "Pie chart: LLM01-LLM10 occurrences.\nRemediation: ..." },
-    { title: "Recommendations", content: "Address top 3 risk categories." },
-    { title: "Appendix", content: "{\n  owasp: {...}\n}" },
-  ],
-  "soc2-evidence-pack": [
-    { title: "Executive Summary", content: "SOC 2 Type II evidence pack for May 2025." },
-    { title: "Findings", content: "Sampled prompts, control mappings, audit trail links." },
-    { title: "Recommendations", content: "Maintain evidence binder and update monthly." },
-    { title: "Appendix", content: "{\n  soc2: {...}\n}" },
-  ],
-};
-
-type TemplateId = keyof typeof DUMMY_SECTIONS;
-
-export default function Reports() {
-  const [selected, setSelected] = useState<TemplateId>(TEMPLATES[0].id as TemplateId);
-  const [exportOpen, setExportOpen] = useState(false);
-  const exportRef = useRef<HTMLDivElement>(null);
-  const pathname = usePathname();
-
-  // Close dropdown on outside click
-  React.useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
-        setExportOpen(false);
+// Authentication hook (simplified for reports page)
+function useAuth() {
+  const [user, setUser] = useState<any>(null);
+  
+  useEffect(() => {
+    const userData = localStorage.getItem('complyze_user');
+    if (userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (error) {
+        console.error('Error parsing user data:', error);
       }
     }
-    if (exportOpen) {
-      document.addEventListener('mousedown', handleClick);
-    } else {
-      document.removeEventListener('mousedown', handleClick);
+  }, []);
+  
+  return { user };
+}
+
+type TemplateId = string;
+
+export default function Reports() {
+  const pathname = usePathname();
+  const { user } = useAuth();
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId | null>(null);
+  const [reportSections, setReportSections] = useState<ReportSection[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [dateRange, setDateRange] = useState({
+    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
+    end: new Date().toISOString().split('T')[0] // today
+  });
+  const [projectName, setProjectName] = useState('Complyze AI Compliance');
+
+  const generateReport = async (templateId: string) => {
+    setIsGenerating(true);
+    setReportSections([]);
+    
+    try {
+      console.log(`Generating ${templateId} report...`);
+      
+      const response = await fetch('/api/reports/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          template: templateId,
+          dateRange,
+          project: projectName,
+          format: 'sections',
+          userId: user?.id || 'anonymous'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate report: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Report generated:', result);
+      
+      if (result.sections && Array.isArray(result.sections)) {
+        setReportSections(result.sections);
+      } else {
+        throw new Error('Invalid report format received');
+      }
+      
+    } catch (error) {
+      console.error('Error generating report:', error);
+      setReportSections([
+        {
+          title: 'Error',
+          content: `Failed to generate report: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease check your OpenRouter API configuration and try again.`,
+          data: {}
+        }
+      ]);
+    } finally {
+      setIsGenerating(false);
     }
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [exportOpen]);
+  };
+
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    generateReport(templateId);
+  };
+
+  const handleExport = async (format: string) => {
+    if (!selectedTemplate) return;
+    
+    try {
+      if (format === 'share') {
+        // Copy share link to clipboard
+        const shareUrl = `${window.location.origin}/reports/shared/${selectedTemplate}?date=${dateRange.start}_${dateRange.end}`;
+        await navigator.clipboard.writeText(shareUrl);
+        alert('Share link copied to clipboard!');
+        return;
+      }
+      
+      // For other formats, call the export API
+      const response = await fetch(`/api/reports/export?id=${selectedTemplate}&format=${format}&start=${dateRange.start}&end=${dateRange.end}`, {
+        method: 'GET',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.statusText}`);
+      }
+      
+      // Download the file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `${selectedTemplate}-${dateRange.start}-${dateRange.end}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Click outside handler
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      // Handle any click outside logic if needed
+    }
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, []);
 
   return (
-    <div className="min-h-screen font-sans" style={{ background: '#0E1E36' }}>
+    <div className="min-h-screen bg-[#0E1E36] font-sans">
       {/* Sticky Nav Tabs - Standardized */}
       <nav className="sticky top-0 z-40 flex px-8 py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
         {/* Left: Branding */}
@@ -239,128 +379,114 @@ export default function Reports() {
         <div className="flex gap-12 items-center">
           <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
             Dashboard
-            {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-              </span>
-            )}
           </Link>
           <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
             Reports
-            {pathname && pathname.includes('reports') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-              </span>
-            )}
+            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+              <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+            </span>
           </Link>
           <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
             Settings
-            {pathname && pathname.includes('settings') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-              </span>
-            )}
           </Link>
         </div>
         {/* Right: User Info Pill */}
         <div className="flex items-center gap-4 min-w-[160px] justify-end">
-          {/* User info pill from localStorage */}
-          {(() => {
-            let user = null;
-            if (typeof window !== 'undefined') {
-              try {
-                user = JSON.parse(localStorage.getItem('complyze_user') || '{}');
-              } catch {}
-            }
-            if (user && user.email) {
-              return (
-                <div className="relative group">
-                  <span
-                    className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
-                    title={user.email}
-                    style={{ display: 'inline-block' }}
-                  >
-                    {user.full_name || user.email}
-                  </span>
-                  {/* Tooltip on hover */}
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block bg-[#222] text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
-                    {user.email}
-                  </div>
-                </div>
-              );
-            }
-            return null;
-          })()}
+          {user?.email && (
+            <div className="relative group">
+              <span
+                className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                title={user.email}
+                style={{ display: 'inline-block' }}
+              >
+                {user.full_name || user.email}
+              </span>
+            </div>
+          )}
         </div>
       </nav>
-      <main className="max-w-7xl mx-auto flex flex-row gap-10 py-12 px-4">
-        {/* Left Rail: Templates */}
-        <aside
-          className="w-80 flex-shrink-0 fixed left-0 top-[76px] z-30 h-[calc(100vh-76px)] overflow-y-auto border-r border-slate-200 px-6 py-6"
-          style={{ boxShadow: '2px 0 8px rgba(14,30,54,0.04)', background: 'rgba(255,255,255,0.95)' }}
-        >
-          <h2 className="text-lg font-bold mb-4 text-[#0E1E36]">Report Blueprints</h2>
-          {TEMPLATES.map(t => (
-            <TemplateCard
-              key={t.id}
-              template={{ ...t, frameworks: t.frameworks as (keyof typeof FRAMEWORK_COLORS)[] }}
-              selected={selected === t.id}
-              onClick={() => setSelected(t.id as TemplateId)}
-            />
-          ))}
-        </aside>
-        {/* Main Canvas */}
-        <section className="flex-1 min-w-0 ml-80">
-          {/* Export Button Row */}
-          <div className="flex w-full justify-end items-center mb-2 mt-2">
-            <div className="relative" ref={exportRef}>
-              <button
-                className="bg-[#6366F1] text-white px-6 py-2 rounded font-semibold shadow hover:bg-[#4F46E5] transition"
-                onClick={() => setExportOpen(v => !v)}
-              >
-                Export
-              </button>
-              {exportOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded shadow-lg z-50">
-                  <button className="w-full text-left px-4 py-3 hover:bg-slate-100" onClick={() => { setExportOpen(false); /* handle PDF export */ }}>PDF</button>
-                  <button className="w-full text-left px-4 py-3 hover:bg-slate-100" onClick={() => { setExportOpen(false); /* handle Word export */ }}>Word Doc</button>
-                  <button className="w-full text-left px-4 py-3 hover:bg-slate-100" onClick={() => { setExportOpen(false); /* handle JSON export */ }}>JSON Bundle</button>
-                  <button className="w-full text-left px-4 py-3 hover:bg-slate-100" onClick={() => { setExportOpen(false); /* handle Share Link */ }}>Copy Share Link</button>
+
+      {/* Main Content */}
+      <div className="flex h-[calc(100vh-120px)]">
+        {/* Left Sidebar - Templates */}
+        <div className="w-1/3 bg-slate-50 border-r border-slate-200 overflow-y-auto">
+          <div className="p-6">
+            <h2 className="text-xl font-bold mb-4 text-slate-800">Compliance Report Templates</h2>
+            
+            {/* Date Range Selector */}
+            <div className="mb-6 p-4 bg-white rounded-lg border">
+              <h3 className="font-semibold mb-3 text-slate-700">Report Configuration</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1">Project Name</label>
+                  <input
+                    type="text"
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    placeholder="Project name"
+                  />
                 </div>
-              )}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      value={dateRange.start}
+                      onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={dateRange.end}
+                      onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {/* Template Cards */}
+            {TEMPLATES.map((template) => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                selected={selectedTemplate === template.id}
+                onClick={() => handleTemplateSelect(template.id)}
+              />
+            ))}
           </div>
-          {/* Parameters Pane */}
-          <div className="bg-white rounded-xl shadow p-6 mb-2 border border-slate-100 flex flex-col md:flex-row md:items-center gap-4 sticky top-[76px] z-20">
-            <label className="font-medium text-[#1C2A3E]">Date Range</label>
-            <input type="text" className="border border-slate-200 rounded-md p-2 text-base w-48" placeholder="2025-05-01/2025-05-31" />
-            <label className="font-medium text-[#1C2A3E]">Environment</label>
-            <select className="border border-slate-200 rounded-md p-2 text-base">
-              <option>prod</option>
-              <option>dev</option>
-            </select>
-            <label className="font-medium text-[#1C2A3E]">Model</label>
-            <select className="border border-slate-200 rounded-md p-2 text-base">
-              <option>GPT-4o</option>
-              <option>Claude 3</option>
-              <option>Gemini</option>
-            </select>
-            <label className="font-medium text-[#1C2A3E]">Team</label>
-            <select className="border border-slate-200 rounded-md p-2 text-base">
-              <option>All</option>
-              <option>Red Team</option>
-              <option>Blue Team</option>
-            </select>
+        </div>
+
+        {/* Right Content - Preview */}
+        <div className="flex-1 bg-white overflow-y-auto">
+          <div className="p-8">
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold text-slate-800 mb-2">
+                {selectedTemplate ? 
+                  TEMPLATES.find(t => t.id === selectedTemplate)?.name || 'Report Preview' : 
+                  'AI-Powered Compliance Reports'
+                }
+              </h1>
+              <p className="text-slate-600">
+                {selectedTemplate ? 
+                  'Generated using real data from your Chrome extension and OpenRouter LLM' :
+                  'Select a template to generate a compliance report with real extension data'
+                }
+              </p>
+            </div>
+            
+            <PreviewAccordion sections={reportSections} isGenerating={isGenerating} />
           </div>
-          <div className="flex w-full justify-end mb-4 sticky top-[168px] z-20">
-            <button className="bg-[#FF6F3C] text-white font-bold text-lg px-8 py-3 rounded-lg shadow hover:bg-[#ff8a5c] transition">Search</button>
-          </div>
-          {/* Preview Panel */}
-          <div className="overflow-y-auto max-h-[calc(100vh-220px)]">
-            <PreviewAccordion sections={DUMMY_SECTIONS[selected]} />
-          </div>
-        </section>
-      </main>
+        </div>
+      </div>
+
+      {/* Export Bar */}
+      {selectedTemplate && <ExportBar onExport={handleExport} isGenerating={isGenerating} />}
     </div>
   );
 } 

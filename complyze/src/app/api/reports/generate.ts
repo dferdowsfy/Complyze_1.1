@@ -1,49 +1,114 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const DUMMY_REPORTS = {
-  'framework-coverage-matrix': {
-    html: '<h2>Framework Coverage Matrix</h2><p>Dummy HTML for Framework Coverage Matrix.</p>',
-    json: { controls: [{ id: 'SC-28', status: 'Met' }, { id: 'AC-3', status: 'Partially Met' }] },
-  },
-  'prompt-risk-audit': {
-    html: '<h2>Prompt Risk Audit</h2><p>Dummy HTML for Prompt Risk Audit.</p>',
-    json: { risks: [{ id: 1, level: 'high' }, { id: 2, level: 'medium' }] },
-  },
-  'redaction-effectiveness': {
-    html: '<h2>Redaction Effectiveness</h2><p>Dummy HTML for Redaction Effectiveness.</p>',
-    json: { redactionStats: { percentPII: 12, falsePos: 2, falseNeg: 1 } },
-  },
-  'fedramp-conmon-exec': {
-    html: '<h2>FedRAMP ConMon Exec Summary</h2><p>Dummy HTML for FedRAMP ConMon Exec Summary.</p>',
-    json: { conmon: { openPOAM: 2, coverage: 95 } },
-  },
-  'cost-usage-ledger': {
-    html: '<h2>Cost & Usage Ledger</h2><p>Dummy HTML for Cost & Usage Ledger.</p>',
-    json: { usage: { tokens: 1200000, cost: 24, budgetDelta: -6 } },
-  },
-  'ai-rmf-profile': {
-    html: '<h2>AI RMF Profile</h2><p>Dummy HTML for AI RMF Profile.</p>',
-    json: { rmf: { GOVERN: {}, MAP: {}, MEASURE: {}, MANAGE: {} } },
-  },
-  'owasp-llm-findings': {
-    html: '<h2>OWASP LLM Top-10 Findings</h2><p>Dummy HTML for OWASP LLM Top-10 Findings.</p>',
-    json: { owasp: { LLM01: 3, LLM02: 1 } },
-  },
-  'soc2-evidence-pack': {
-    html: '<h2>SOC 2 Evidence Pack</h2><p>Dummy HTML for SOC 2 Evidence Pack.</p>',
-    json: { soc2: { sampled: 10, mapped: 8 } },
-  },
-};
+import { openRouterService } from '@/lib/openRouterService';
+import { reportDataService } from '@/lib/reportDataService';
 
 export async function POST(req: NextRequest) {
-  const { template, dateRange, project, format } = await req.json();
-  const data = DUMMY_REPORTS[template] || DUMMY_REPORTS['framework-coverage-matrix'];
-  return NextResponse.json({
-    html: data.html,
-    json: data.json,
-    template,
-    dateRange,
-    project,
-    format,
-  });
+  try {
+    const { template, dateRange, project, format, userId } = await req.json();
+    
+    console.log(`Generating ${template} report with OpenRouter LLM...`);
+    
+    // Validate template
+    const validTemplates = [
+      'framework-coverage-matrix',
+      'prompt-risk-audit', 
+      'redaction-effectiveness',
+      'fedramp-conmon-exec',
+      'cost-usage-ledger',
+      'ai-rmf-profile',
+      'owasp-llm-findings',
+      'soc2-evidence-pack'
+    ];
+    
+    if (!validTemplates.includes(template)) {
+      return NextResponse.json({ 
+        error: 'Invalid template', 
+        validTemplates 
+      }, { status: 400 });
+    }
+
+    // Aggregate real data from extension and database
+    const reportData = await reportDataService.aggregateReportData(
+      template, 
+      dateRange, 
+      userId
+    );
+
+    console.log(`Data aggregated: ${reportData.promptLogs.length} prompts, ${Object.keys(reportData.riskAnalysis.riskTypes).length} risk types`);
+
+    // Generate report using OpenRouter LLM
+    const sections = await openRouterService.generateReport({
+      template,
+      data: reportData,
+      dateRange,
+      project: project || 'Complyze AI Compliance'
+    });
+
+    console.log(`Report generated with ${sections.length} sections`);
+
+    // Format response based on requested format
+    let response: any = {
+      template,
+      dateRange,
+      project: project || 'Complyze AI Compliance',
+      generatedAt: new Date().toISOString(),
+      dataSource: {
+        promptCount: reportData.promptLogs.length,
+        dateRange: reportData.additionalMetrics.reportPeriod,
+        riskBreakdown: reportData.riskAnalysis.riskCounts
+      },
+      sections
+    };
+
+    if (format === 'html') {
+      response.html = sections.map(section => 
+        `<div class="report-section">
+          <h2>${section.title}</h2>
+          <div class="content">${section.content.replace(/\n/g, '<br>')}</div>
+        </div>`
+      ).join('\n');
+    }
+
+    if (format === 'markdown') {
+      response.markdown = sections.map(section => 
+        `## ${section.title}\n\n${section.content}\n\n`
+      ).join('');
+    }
+
+    if (format === 'json') {
+      response.json = {
+        metadata: {
+          template,
+          generatedAt: new Date().toISOString(),
+          dataSource: response.dataSource
+        },
+        sections: sections.map(section => ({
+          title: section.title,
+          content: section.content,
+          data: section.data
+        })),
+        rawData: reportData
+      };
+    }
+
+    return NextResponse.json(response, { status: 200 });
+
+  } catch (error: any) {
+    console.error('Report generation error:', error);
+    
+    // Return fallback response with error details
+    return NextResponse.json({
+      error: 'Report generation failed',
+      details: error.message,
+      fallback: true,
+      template: 'unknown',
+      sections: [
+        {
+          title: 'Error',
+          content: `Report generation failed: ${error.message}\n\nPlease check your OpenRouter API configuration and try again.`,
+          data: {}
+        }
+      ]
+    }, { status: 500 });
+  }
 } 
