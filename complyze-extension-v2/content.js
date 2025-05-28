@@ -548,7 +548,7 @@ class PromptWatcher {
     }
   }
 
-  // NEW: Show real-time warning overlay
+  // NEW: Show real-time warning overlay with side panel
   showRealTimeWarning(promptElement, analysis, isServerAnalysis = false) {
     this.clearRealTimeWarnings(promptElement);
     
@@ -591,7 +591,7 @@ class PromptWatcher {
             Send Anyway
           </button>
           <button id="complyze-fix" style="background: rgba(255,255,255,0.9); border: none; color: #dc2626; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 600;">
-            Fix Issues
+            View Safe Version
           </button>
         </div>
       </div>
@@ -718,17 +718,250 @@ class PromptWatcher {
     });
   }
 
-  // NEW: Show fix suggestions
+  // NEW: Show fix suggestions with side panel
   showFixSuggestions(promptElement, analysis) {
-    // This would show a modal with suggestions to fix the prompt
-    // For now, we'll just clear the warning and let user edit
-    this.clearRealTimeWarnings(promptElement);
-    
-    // Focus back on the prompt element
-    promptElement.focus();
-    
-    // Could add more sophisticated fix suggestions here
-    console.log('Complyze: Fix suggestions would be shown here for:', analysis);
+    // Create side panel with safe prompt version
+    this.createSafePromptPanel(promptElement, analysis);
+  }
+
+  // NEW: Create side panel with safe prompt
+  createSafePromptPanel(promptElement, analysis) {
+    // Remove existing panel if any
+    const existingPanel = document.querySelector('#complyze-safe-prompt-panel');
+    if (existingPanel) existingPanel.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'complyze-safe-prompt-panel';
+    panel.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 400px;
+      max-height: 80vh;
+      background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+      border: 2px solid #3b82f6;
+      border-radius: 12px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      z-index: 1000000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: white;
+      animation: slideInRight 0.3s ease-out;
+      overflow: hidden;
+    `;
+
+    const originalPrompt = this.getPromptText(promptElement);
+    const safePrompt = analysis.redacted_prompt || this.generateSafePrompt(originalPrompt, analysis);
+
+    panel.innerHTML = `
+      <div style="padding: 20px; border-bottom: 1px solid rgba(59, 130, 246, 0.3);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #3b82f6;">
+            🛡️ Safe Prompt Version
+          </h3>
+          <button id="complyze-close-panel" style="background: none; border: none; color: #9ca3af; font-size: 20px; cursor: pointer; padding: 4px;">
+            ×
+          </button>
+        </div>
+        <p style="margin: 0; font-size: 14px; color: #9ca3af; line-height: 1.4;">
+          We've created a safer version of your prompt by removing sensitive information.
+        </p>
+      </div>
+
+      <div style="padding: 20px; max-height: 50vh; overflow-y: auto;">
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 12px; font-weight: 600; color: #3b82f6; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+            Safe Prompt (Ready to Use)
+          </label>
+          <textarea id="complyze-safe-text" style="
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            font-family: inherit;
+          " readonly>${safePrompt}</textarea>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+          <button id="complyze-copy-safe" style="
+            flex: 1;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">
+            📋 Copy Safe Version
+          </button>
+          <button id="complyze-use-safe" style="
+            flex: 1;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">
+            ✅ Use This Version
+          </button>
+        </div>
+
+        ${analysis.detectedPII && analysis.detectedPII.length > 0 ? `
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+          <div style="font-size: 12px; font-weight: 600; color: #ef4444; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
+            Removed Sensitive Data
+          </div>
+          <div style="font-size: 13px; color: #fca5a5;">
+            ${analysis.detectedPII.map(pii => `• ${pii.replace('_', ' ')}`).join('<br>')}
+          </div>
+        </div>
+        ` : ''}
+
+        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 12px;">
+          <div style="font-size: 12px; font-weight: 600; color: #3b82f6; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
+            💡 How to Use
+          </div>
+          <div style="font-size: 13px; color: #93c5fd; line-height: 1.4;">
+            1. Click "Use This Version" to replace your current prompt<br>
+            2. Or copy the safe version and paste it manually<br>
+            3. The submit button will be re-enabled automatically
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add animation styles
+    if (!document.querySelector('#complyze-panel-styles')) {
+      const style = document.createElement('style');
+      style.id = 'complyze-panel-styles';
+      style.textContent = `
+        @keyframes slideInRight {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        #complyze-copy-safe:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        #complyze-use-safe:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    document.body.appendChild(panel);
+
+    // Add event listeners
+    panel.querySelector('#complyze-close-panel').addEventListener('click', () => {
+      panel.remove();
+    });
+
+    panel.querySelector('#complyze-copy-safe').addEventListener('click', async () => {
+      const safeText = panel.querySelector('#complyze-safe-text').value;
+      try {
+        await navigator.clipboard.writeText(safeText);
+        const button = panel.querySelector('#complyze-copy-safe');
+        const originalText = button.textContent;
+        button.textContent = '✅ Copied!';
+        button.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+        }, 2000);
+      } catch (err) {
+        console.error('Failed to copy text:', err);
+      }
+    });
+
+    panel.querySelector('#complyze-use-safe').addEventListener('click', () => {
+      const safeText = panel.querySelector('#complyze-safe-text').value;
+      
+      // Replace the text in the prompt element
+      if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+        promptElement.value = safeText;
+        promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+      } else if (promptElement.contentEditable === 'true') {
+        promptElement.textContent = safeText;
+        promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // Clear warnings and re-enable submission
+      this.clearRealTimeWarnings(promptElement);
+      this.preventSubmission = false;
+      this.blockSubmitButtons(false);
+
+      // Close panel
+      panel.remove();
+
+      // Focus back on the prompt element
+      promptElement.focus();
+      
+      // Move cursor to end
+      if (promptElement.setSelectionRange) {
+        promptElement.setSelectionRange(safeText.length, safeText.length);
+      }
+    });
+
+    // Close panel when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!panel.contains(e.target) && !e.target.closest('#complyze-realtime-warning')) {
+        panel.remove();
+      }
+    }, { once: true });
+  }
+
+  // NEW: Generate safe prompt by removing PII
+  generateSafePrompt(originalPrompt, analysis) {
+    let safePrompt = originalPrompt;
+
+    // Remove common PII patterns
+    const piiPatterns = {
+      email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+      phone: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g,
+      ssn: /\b\d{3}-?\d{2}-?\d{4}\b/g,
+      creditCard: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
+      apiKey: /\b[A-Za-z0-9]{32,}\b/g
+    };
+
+    const replacements = {
+      email: '[EMAIL_REMOVED]',
+      phone: '[PHONE_REMOVED]',
+      ssn: '[SSN_REMOVED]',
+      creditCard: '[CREDIT_CARD_REMOVED]',
+      apiKey: '[API_KEY_REMOVED]'
+    };
+
+    for (const [type, pattern] of Object.entries(piiPatterns)) {
+      safePrompt = safePrompt.replace(pattern, replacements[type]);
+    }
+
+    // Remove sensitive keywords
+    const sensitiveKeywords = [
+      { pattern: /password\s*[:=]\s*\S+/gi, replacement: 'password: [REDACTED]' },
+      { pattern: /secret\s*[:=]\s*\S+/gi, replacement: 'secret: [REDACTED]' },
+      { pattern: /token\s*[:=]\s*\S+/gi, replacement: 'token: [REDACTED]' },
+      { pattern: /key\s*[:=]\s*\S+/gi, replacement: 'key: [REDACTED]' }
+    ];
+
+    sensitiveKeywords.forEach(({ pattern, replacement }) => {
+      safePrompt = safePrompt.replace(pattern, replacement);
+    });
+
+    return safePrompt;
   }
 }
 
@@ -796,7 +1029,7 @@ window.complyzeTest = function(testPrompt = "Hello, my name is John Doe and my e
     platform: window.location.hostname,
     url: window.location.href,
     timestamp: new Date().toISOString()
-  };
+    };
   
   console.log('Complyze: Sending test prompt to background script:', promptData);
   
@@ -856,10 +1089,49 @@ window.complyzeForcePrompt = function() {
   }
 };
 
+// NEW: Test the safe prompt panel
+window.complyzeTestSafePanel = function() {
+  console.log('Complyze: Testing safe prompt panel...');
+  
+  const platform = promptWatcher.getCurrentPlatform();
+  if (!platform) {
+    console.log('Complyze: No platform detected');
+    return;
+  }
+  
+  const selectors = promptWatcher.platformSelectors[platform];
+  const promptElement = document.querySelector(selectors.promptInput);
+  
+  if (!promptElement) {
+    console.log('Complyze: No prompt element found');
+    return;
+  }
+  
+  // Set test content with PII
+  const testContent = "My email is john.doe@example.com and my SSN is 123-45-6789. Please help me with my password: MySecret123!";
+  
+  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+    promptElement.value = testContent;
+  } else if (promptElement.contentEditable === 'true') {
+    promptElement.textContent = testContent;
+  }
+  
+  // Trigger analysis
+  const mockAnalysis = {
+    risk_level: 'high',
+    detectedPII: ['email', 'ssn', 'sensitive_keywords'],
+    redacted_prompt: null // Will use generateSafePrompt
+  };
+  
+  promptWatcher.createSafePromptPanel(promptElement, mockAnalysis);
+  console.log('Complyze: Safe prompt panel should now be visible');
+};
+
 console.log('Complyze: Test functions available:');
 console.log('- complyzeTest() - Send test prompt');
 console.log('- complyzeDebug() - Show debug info');
 console.log('- complyzeForcePrompt() - Force capture current prompt');
+console.log('- complyzeTestSafePanel() - Test safe prompt panel');
 
 // Authentication sync functionality
 class AuthSync {
