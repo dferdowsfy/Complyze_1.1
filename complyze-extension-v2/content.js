@@ -6,6 +6,7 @@ class PromptWatcher {
     this.isLoggedIn = false;
     this.lastPrompt = '';
     this.processedPrompts = new Set();
+    this.safePrompts = new Set(); // Track safe prompts to avoid re-analysis
     this.lastClearTime = null;
     this.isAnalyzing = false;
     this.preventSubmission = false;
@@ -571,6 +572,14 @@ class PromptWatcher {
   async performRealTimeAnalysis(promptText, promptElement) {
     if (this.isAnalyzing) return;
     
+    // Check if this is a known safe prompt (to avoid re-analyzing safe versions)
+    const promptHash = this.createSafeHash(promptText);
+    if (this.safePrompts.has(promptHash)) {
+      console.log('Complyze: Skipping analysis for known safe prompt');
+      this.clearRealTimeWarnings(promptElement);
+      return;
+    }
+    
     try {
       this.isAnalyzing = true;
       console.log('Complyze: Performing real-time analysis on:', promptText.substring(0, 50) + '...');
@@ -598,6 +607,8 @@ class PromptWatcher {
       } else if (fullAnalysis && fullAnalysis.risk_level === 'medium') {
         this.showRealTimeInfo(promptElement, fullAnalysis);
       } else {
+        // If analysis shows low risk, mark as safe
+        this.safePrompts.add(promptHash);
         this.clearRealTimeWarnings(promptElement);
       }
       
@@ -805,11 +816,15 @@ class PromptWatcher {
     const warningId = 'complyze-realtime-warning';
     const warning = document.createElement('div');
     warning.id = warningId;
+    
+    // Get the position of the prompt element
+    const rect = promptElement.getBoundingClientRect();
+    
     warning.style.cssText = `
-      position: absolute;
-      top: -60px;
-      left: 0;
-      right: 0;
+      position: fixed;
+      top: ${rect.top - 70}px;
+      left: ${rect.left}px;
+      width: ${rect.width}px;
       background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
       color: white;
       padding: 12px;
@@ -820,10 +835,10 @@ class PromptWatcher {
       z-index: 999999;
       animation: slideDown 0.3s ease-out;
       border: 1px solid rgba(255, 255, 255, 0.2);
+      pointer-events: auto;
     `;
     
     const riskLevel = analysis.risk_level || 'high';
-    const riskColor = riskLevel === 'critical' ? '#7f1d1d' : '#dc2626';
     
     warning.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -860,30 +875,43 @@ class PromptWatcher {
       document.head.appendChild(style);
     }
     
-    // Position relative to prompt element
-    const rect = promptElement.getBoundingClientRect();
-    const container = promptElement.closest('form, div') || promptElement.parentElement;
+    // Append to body instead of container to avoid text interference
+    document.body.appendChild(warning);
     
-    if (container) {
-      container.style.position = 'relative';
-      container.appendChild(warning);
-      
-      // Add event listeners
-      warning.querySelector('#complyze-ignore').addEventListener('click', () => {
-        this.clearRealTimeWarnings(promptElement);
-        this.preventSubmission = false;
-      });
-      
-      warning.querySelector('#complyze-fix').addEventListener('click', () => {
-        this.showFixSuggestions(promptElement, analysis);
-      });
-      
-      // Set prevention flag for high-risk content
-      if (riskLevel === 'high' || riskLevel === 'critical') {
-        this.preventSubmission = true;
-        this.blockSubmitButtons(true);
-      }
+    // Add event listeners
+    warning.querySelector('#complyze-ignore').addEventListener('click', () => {
+      this.clearRealTimeWarnings(promptElement);
+      this.preventSubmission = false;
+    });
+    
+    warning.querySelector('#complyze-fix').addEventListener('click', () => {
+      this.showFixSuggestions(promptElement, analysis);
+    });
+    
+    // Set prevention flag for high-risk content
+    if (riskLevel === 'high' || riskLevel === 'critical') {
+      this.preventSubmission = true;
+      this.blockSubmitButtons(true);
     }
+    
+    // Update position on scroll/resize
+    const updatePosition = () => {
+      const newRect = promptElement.getBoundingClientRect();
+      warning.style.top = `${newRect.top - 70}px`;
+      warning.style.left = `${newRect.left}px`;
+      warning.style.width = `${newRect.width}px`;
+    };
+    
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+    
+    // Clean up listeners when warning is removed
+    const originalRemove = warning.remove;
+    warning.remove = function() {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+      originalRemove.call(this);
+    };
   }
 
   // NEW: Show informational overlay for medium risk
@@ -1160,6 +1188,10 @@ class PromptWatcher {
         console.log('Complyze: Use safe version clicked');
         const safeText = panel.querySelector('#complyze-safe-text').value;
         
+        // Mark this safe prompt to avoid re-analysis
+        const safeHash = this.createSafeHash(safeText);
+        this.safePrompts.add(safeHash);
+        
         // Replace the text in the prompt element
         if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
           promptElement.value = safeText;
@@ -1292,11 +1324,15 @@ class PromptWatcher {
     const loadingId = 'complyze-loading-indicator';
     const loading = document.createElement('div');
     loading.id = loadingId;
+    
+    // Get the position of the prompt element
+    const rect = promptElement.getBoundingClientRect();
+    
     loading.style.cssText = `
-      position: absolute;
-      top: -45px;
-      left: 0;
-      right: 0;
+      position: fixed;
+      top: ${rect.top - 50}px;
+      left: ${rect.left}px;
+      width: ${rect.width}px;
       background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
       color: white;
       padding: 8px 12px;
@@ -1307,6 +1343,7 @@ class PromptWatcher {
       z-index: 999998;
       animation: slideDown 0.3s ease-out;
       border: 1px solid rgba(255, 255, 255, 0.2);
+      pointer-events: none;
     `;
     
     loading.innerHTML = `
@@ -1336,13 +1373,27 @@ class PromptWatcher {
       document.head.appendChild(style);
     }
     
-    // Position relative to prompt element
-    const container = promptElement.closest('form, div') || promptElement.parentElement;
+    // Append to body instead of container to avoid text interference
+    document.body.appendChild(loading);
     
-    if (container) {
-      container.style.position = 'relative';
-      container.appendChild(loading);
-    }
+    // Update position on scroll/resize
+    const updatePosition = () => {
+      const newRect = promptElement.getBoundingClientRect();
+      loading.style.top = `${newRect.top - 50}px`;
+      loading.style.left = `${newRect.left}px`;
+      loading.style.width = `${newRect.width}px`;
+    };
+    
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+    
+    // Clean up listeners when loading is removed
+    const originalRemove = loading.remove;
+    loading.remove = function() {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+      originalRemove.call(this);
+    };
   }
 
   // NEW: Hide loading indicator
