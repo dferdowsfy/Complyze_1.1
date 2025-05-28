@@ -117,6 +117,7 @@ class ComplyzeBackground {
         // Verify token is still valid
         const isValid = await this.verifyToken();
         if (!isValid) {
+          console.log('Complyze: Token verification failed, clearing auth');
           await this.clearAuth();
         } else {
           console.log('Complyze: Extension auth initialized successfully');
@@ -147,11 +148,19 @@ class ComplyzeBackground {
       if (response.ok) {
         const data = await response.json();
         return data.authenticated;
+      } else if (response.status === 401) {
+        // Only clear auth if we get a definitive 401 (unauthorized)
+        console.log('Complyze: Token is invalid (401), clearing auth');
+        return false;
+      } else {
+        // For other errors (network issues, server down), assume token is still valid
+        console.log('Complyze: Token verification failed with status', response.status, 'but keeping auth');
+        return true;
       }
-      return false;
     } catch (error) {
-      console.error('Complyze: Token verification failed:', error);
-      return false;
+      // Network errors - assume token is still valid to avoid unnecessary logouts
+      console.log('Complyze: Token verification network error, keeping auth:', error.message);
+      return true;
     }
   }
 

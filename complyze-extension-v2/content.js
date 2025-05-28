@@ -6,6 +6,7 @@ class PromptWatcher {
     this.isLoggedIn = false;
     this.lastPrompt = '';
     this.processedPrompts = new Set();
+    this.lastClearTime = null;
     this.isAnalyzing = false;
     this.preventSubmission = false;
     this.realTimeAnalysisEnabled = true;
@@ -21,14 +22,14 @@ class PromptWatcher {
         loginCheck: '[data-testid="profile-button"], .avatar, button[data-testid="profile-button"], [data-headlessui-state], button[aria-haspopup="menu"]'
       },
       'claude.ai': {
-        promptInput: 'div[contenteditable="true"], textarea[placeholder*="Talk to Claude"]',
-        submitButton: 'button[aria-label="Send Message"], button:has(svg[data-icon="send"])',
-        loginCheck: '[data-testid="user-menu"], .user-avatar'
+        promptInput: 'div[contenteditable="true"], textarea[placeholder*="Talk to Claude"], div[data-testid="composer-input"], div[role="textbox"]',
+        submitButton: 'button[aria-label="Send Message"], button:has(svg[data-icon="send"]), button[data-testid="send-button"], button:has(svg), button[type="submit"]',
+        loginCheck: '[data-testid="user-menu"], .user-avatar, button[aria-label*="User"], [data-testid="profile-button"]'
       },
       'gemini.google.com': {
-        promptInput: 'rich-textarea div[contenteditable="true"], textarea[aria-label*="Enter a prompt"]',
-        submitButton: 'button[aria-label="Send message"], button[data-test-id="send-button"]',
-        loginCheck: '.gb_d, [data-ogsr-up]'
+        promptInput: 'rich-textarea div[contenteditable="true"], textarea[aria-label*="Enter a prompt"], div[contenteditable="true"], textarea[placeholder*="Enter a prompt"], div[role="textbox"]',
+        submitButton: 'button[aria-label="Send message"], button[data-test-id="send-button"], button:has(svg), button[type="submit"], button[aria-label*="Send"]',
+        loginCheck: '.gb_d, [data-ogsr-up], .gb_A, button[aria-label*="Google Account"]'
       },
       'complyze.co': {
         promptInput: 'textarea, input[type="text"], div[contenteditable="true"], [role="textbox"]',
@@ -54,12 +55,12 @@ class PromptWatcher {
     // Monitor input changes to detect when text is cleared (indicating send)
     this.monitorInputChanges();
     
-    // Enhanced debugging for ChatGPT
-    this.enhancedChatGPTDebugging();
+    // Enhanced debugging for all platforms
+    this.enhancedPlatformDebugging();
   }
   
-  enhancedChatGPTDebugging() {
-    console.log('Complyze: Setting up enhanced ChatGPT debugging');
+  enhancedPlatformDebugging() {
+    console.log('Complyze: Setting up enhanced platform debugging');
     
     // Log all input events
     document.addEventListener('input', (e) => {
@@ -86,6 +87,16 @@ class PromptWatcher {
               // Check if this looks like a new message
               if (node.textContent && node.textContent.length > 10) {
                 console.log('Complyze: New content added to page:', node.textContent.substring(0, 100));
+                
+                // If we have a last prompt and new content was added, process it
+                if (this.lastPrompt && this.lastPrompt.length > 10) {
+                  console.log('Complyze: Detected message submission via DOM change');
+                  const platform = this.getCurrentPlatform();
+                  if (platform) {
+                    const selectors = this.platformSelectors[platform];
+                    setTimeout(() => this.handlePromptSubmission(selectors), 500);
+                  }
+                }
               }
             }
           });
@@ -191,6 +202,23 @@ class PromptWatcher {
       return element.innerText || element.textContent;
     }
     return '';
+  }
+
+  // NEW: Safe hash function that handles Unicode characters
+  createSafeHash(text) {
+    try {
+      // Try btoa first for ASCII text
+      return btoa(text).substring(0, 20);
+    } catch (error) {
+      // Fallback for Unicode text: create a simple hash
+      let hash = 0;
+      for (let i = 0; i < text.length; i++) {
+        const char = text.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+      }
+      return Math.abs(hash).toString(36).substring(0, 20);
+    }
   }
 
   setupPromptWatching() {
@@ -338,18 +366,26 @@ class PromptWatcher {
     }
     
     // Check if we've already processed this exact prompt
-    const promptHash = btoa(userPrompt).substring(0, 20); // Simple hash for deduplication
+    // Use a safer hash function that handles Unicode characters
+    const promptHash = this.createSafeHash(userPrompt);
+    
+    // For subsequent messages, be less strict about deduplication
+    // Clear processed prompts if we have too many or if enough time has passed
+    const now = Date.now();
+    if (!this.lastClearTime) this.lastClearTime = now;
+    
+    if (this.processedPrompts.size > 10 || (now - this.lastClearTime) > 30000) { // Clear every 30 seconds
+      console.log('Complyze: Clearing processed prompts cache');
+      this.processedPrompts.clear();
+      this.lastClearTime = now;
+    }
+    
     if (this.processedPrompts.has(promptHash)) {
-      console.log('Complyze: Prompt already processed, skipping');
+      console.log('Complyze: Prompt already processed recently, skipping');
       return;
     }
     
     this.processedPrompts.add(promptHash);
-    // Keep only last 50 processed prompts to prevent memory issues
-    if (this.processedPrompts.size > 50) {
-      const firstItem = this.processedPrompts.values().next().value;
-      this.processedPrompts.delete(firstItem);
-    }
     
     console.log('Complyze: Capturing prompt for analysis:', userPrompt.substring(0, 100) + '...');
     
