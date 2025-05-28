@@ -351,37 +351,6 @@ function FlaggedPromptsPanel() {
     }
   };
 
-  const clearTestData = async () => {
-    try {
-      setClearing(true);
-      console.log('Complyze Dashboard: Clearing test data...');
-      
-      const response = await fetch('/api/test-db', { method: 'DELETE' });
-      console.log('Complyze Dashboard: Clear response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Complyze Dashboard: Clear error:', errorText);
-        throw new Error(`Failed to clear test data: ${response.status} ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      console.log('Complyze Dashboard: Clear result:', result);
-      
-      // Refresh the list after clearing
-      await fetchFlaggedPrompts();
-      
-      // Show success message (you could use a toast library here)
-      console.log('Complyze Dashboard: Test data cleared successfully');
-      
-    } catch (error) {
-      console.error('Failed to clear test data:', error);
-      setError('Failed to clear test data: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      setClearing(false);
-    }
-  };
-
   const createTestData = async () => {
     try {
       console.log('Complyze Dashboard: Creating test data...');
@@ -489,13 +458,6 @@ function FlaggedPromptsPanel() {
             className="text-sm text-green-600 hover:text-green-800 transition-colors"
           >
             Create Test Data
-          </button>
-          <button 
-            onClick={clearTestData}
-            className="text-sm text-red-600 hover:text-red-800 transition-colors"
-            disabled={clearing}
-          >
-            {clearing ? 'Clearing...' : 'Clear Test Data'}
           </button>
           <button 
             onClick={fetchFlaggedPrompts}
