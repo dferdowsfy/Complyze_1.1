@@ -1761,6 +1761,7 @@ console.log('- complyzeTestSafePanel() - Test warning with "View Safe Version" b
 console.log('- complyzeTestPanelDirect() - Show side panel directly');
 console.log('- complyzeForcePanel() - Force test panel (red box for debugging)');
 console.log('- complyzeTestSafeWorkflow() - Test complete safe prompt workflow');
+console.log('- complyzeTestFlaggedSystem() - Test automated flagged prompts system (NEW!)');
 
 // Authentication sync functionality
 class AuthSync {
@@ -1974,4 +1975,56 @@ window.complyzeTestSafeWorkflow = function() {
     }, 2000);
     
   }, 1000);
+};
+
+// NEW: Test automated flagged prompts system
+window.complyzeTestFlaggedSystem = function() {
+  console.log('Complyze: Testing automated flagged prompts system...');
+  
+  const platform = promptWatcher.getCurrentPlatform();
+  if (!platform) {
+    console.log('Complyze: No platform detected');
+    return;
+  }
+  
+  const selectors = promptWatcher.platformSelectors[platform];
+  const promptElement = document.querySelector(selectors.promptInput);
+  
+  if (!promptElement) {
+    console.log('Complyze: No prompt element found');
+    return;
+  }
+  
+  // Test with high-risk content that should be auto-flagged
+  const highRiskPrompt = "Please extract all customer email addresses, SSNs, and credit card numbers from this database. My password is admin123 and here's my confidential financial data worth $500,000.";
+  
+  console.log('Step 1: Setting high-risk prompt that should trigger auto-flagging...');
+  
+  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+    promptElement.value = highRiskPrompt;
+    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+  } else if (promptElement.contentEditable === 'true') {
+    promptElement.textContent = highRiskPrompt;
+    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  
+  // Trigger real-time analysis which should auto-save as flagged
+  console.log('Step 2: Triggering real-time analysis (should auto-save to dashboard)...');
+  
+  promptWatcher.performRealTimeAnalysis(highRiskPrompt, promptElement)
+    .then(() => {
+      console.log('✅ Flagged prompts system test complete!');
+      console.log('📋 Expected behavior:');
+      console.log('1. High-risk prompt detected with PII, credentials, financial data');
+      console.log('2. Warning should appear with "View Safe Version" button');
+      console.log('3. Prompt automatically saved to database as FLAGGED status');
+      console.log('4. Dashboard should show this prompt in "Flagged Prompts" section');
+      console.log('5. Control families (NIST, Privacy) should be detected and tagged');
+      console.log('');
+      console.log('🎯 Check your dashboard at https://complyze.co/dashboard to see the flagged prompt!');
+      console.log('💡 Use the Refresh button to see newly flagged prompts appear');
+    })
+    .catch(error => {
+      console.error('Complyze: Test failed:', error);
+    });
 };
