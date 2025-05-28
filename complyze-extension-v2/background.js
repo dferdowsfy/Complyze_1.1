@@ -538,51 +538,68 @@ class ComplyzeBackground {
 
   async syncFromWebsite() {
     try {
-      // Get all tabs with the dashboard URL
-      const tabs = await chrome.tabs.query({ url: `${this.dashboardUrl}*` });
+      // Check both production and local dashboard URLs for auth data
+      const urlsToCheck = [
+        'https://complyze.co/dashboard*',
+        `${this.dashboardUrl}*`
+      ];
       
-      if (tabs.length > 0) {
-        // Try to get auth data from the dashboard tab
-        const results = await chrome.scripting.executeScript({
-          target: { tabId: tabs[0].id },
-          func: () => {
-            const token = localStorage.getItem('complyze_token');
-            const user = localStorage.getItem('complyze_user');
-            return { token, user };
-          }
-        });
-
-        if (results && results[0] && results[0].result) {
-          const { token, user } = results[0].result;
-          if (token && user) {
-            console.log('Complyze: Found website auth, syncing to extension...');
-            this.accessToken = token;
-            this.user = JSON.parse(user);
+      for (const urlPattern of urlsToCheck) {
+        try {
+          // Get all tabs with the dashboard URL
+          const tabs = await chrome.tabs.query({ url: urlPattern });
+          
+          if (tabs.length > 0) {
+            console.log(`Complyze: Checking auth from ${urlPattern}...`);
             
-            // Store in extension storage
-            await chrome.storage.local.set({
-              accessToken: token,
-              user: this.user
+            // Try to get auth data from the dashboard tab
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: tabs[0].id },
+              func: () => {
+                const token = localStorage.getItem('complyze_token');
+                const user = localStorage.getItem('complyze_user');
+                return { token, user };
+              }
             });
 
-            // Verify token is still valid
-            const isValid = await this.verifyToken();
-            if (!isValid) {
-              await this.clearAuth();
-              // Also clear website auth
-              await chrome.scripting.executeScript({
-                target: { tabId: tabs[0].id },
-                func: () => {
-                  localStorage.removeItem('complyze_token');
-                  localStorage.removeItem('complyze_user');
+            if (results && results[0] && results[0].result) {
+              const { token, user } = results[0].result;
+              if (token && user) {
+                console.log(`Complyze: Found website auth from ${urlPattern}, syncing to extension...`);
+                this.accessToken = token;
+                this.user = JSON.parse(user);
+                
+                // Store in extension storage
+                await chrome.storage.local.set({
+                  accessToken: token,
+                  user: this.user
+                });
+
+                // Verify token is still valid
+                const isValid = await this.verifyToken();
+                if (!isValid) {
+                  await this.clearAuth();
+                  // Also clear website auth
+                  await chrome.scripting.executeScript({
+                    target: { tabId: tabs[0].id },
+                    func: () => {
+                      localStorage.removeItem('complyze_token');
+                      localStorage.removeItem('complyze_user');
+                    }
+                  });
+                } else {
+                  console.log(`Complyze: Website auth synced successfully from ${urlPattern}`);
+                  return; // Exit early if we found valid auth
                 }
-              });
-            } else {
-              console.log('Complyze: Website auth synced successfully');
+              }
             }
           }
+        } catch (error) {
+          console.log(`Complyze: Could not sync from ${urlPattern}:`, error.message);
         }
       }
+      
+      console.log('Complyze: No valid auth found in any dashboard tabs');
     } catch (error) {
       console.log('Complyze: Could not sync from website (tab may not be open):', error.message);
     }
@@ -590,20 +607,32 @@ class ComplyzeBackground {
 
   async syncToWebsite(token, user) {
     try {
-      // Get all tabs with the dashboard URL
-      const tabs = await chrome.tabs.query({ url: `${this.dashboardUrl}*` });
+      // Sync auth to both production and local dashboard tabs
+      const urlsToSync = [
+        'https://complyze.co/dashboard*',
+        `${this.dashboardUrl}*`
+      ];
       
-      for (const tab of tabs) {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: (token, user) => {
-            localStorage.setItem('complyze_token', token);
-            localStorage.setItem('complyze_user', JSON.stringify(user));
-          },
-          args: [token, user]
-        });
+      for (const urlPattern of urlsToSync) {
+        try {
+          // Get all tabs with the dashboard URL
+          const tabs = await chrome.tabs.query({ url: urlPattern });
+          
+          for (const tab of tabs) {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: (token, user) => {
+                localStorage.setItem('complyze_token', token);
+                localStorage.setItem('complyze_user', JSON.stringify(user));
+              },
+              args: [token, user]
+            });
+            console.log(`Complyze: Auth synced to ${urlPattern} tab`);
+          }
+        } catch (error) {
+          console.log(`Complyze: Could not sync to ${urlPattern} tabs:`, error.message);
+        }
       }
-      console.log('Complyze: Auth synced to website tabs');
     } catch (error) {
       console.log('Complyze: Could not sync to website tabs:', error.message);
     }
@@ -705,8 +734,14 @@ class ComplyzeBackground {
         }
       };
 
-      // Send to ingest API - it will now handle flagged status directly
-      const response = await fetch(`${this.apiBase}/prompts/ingest`, {
+      // ALWAYS use production API for saving flagged prompts
+      // This ensures flagged prompts appear in the production dashboard
+      const productionApiBase = 'https://complyze.co/api';
+      
+      console.log('Complyze: Sending flagged prompt to production API:', productionApiBase);
+      
+      // Send to production ingest API
+      const response = await fetch(`${productionApiBase}/prompts/ingest`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.accessToken}`,
@@ -717,7 +752,7 @@ class ComplyzeBackground {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Complyze: Flagged prompt saved with ID:', result.logId);
+        console.log('Complyze: Flagged prompt saved to production with ID:', result.logId);
         console.log('Complyze: Final status:', result.status);
         console.log('Complyze: Risk level:', result.risk_level);
         
@@ -727,10 +762,10 @@ class ComplyzeBackground {
         return result.logId;
       } else {
         const errorData = await response.json();
-        console.error('Complyze: Failed to save flagged prompt:', response.statusText, errorData);
+        console.error('Complyze: Failed to save flagged prompt to production:', response.statusText, errorData);
       }
     } catch (error) {
-      console.error('Complyze: Error saving flagged prompt:', error);
+      console.error('Complyze: Error saving flagged prompt to production:', error);
     }
   }
 }
