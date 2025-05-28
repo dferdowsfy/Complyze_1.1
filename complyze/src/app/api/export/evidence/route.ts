@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { data: promptLog, error: dbError } = await supabase
-        .from('PromptLog')
+        .from('prompt_logs')
         .select('*') // Select all columns for the full export
         .eq('id', promptId)
         .single(); // Expects a single record or null
