@@ -1,6 +1,6 @@
 [build]
   base = "complyze"
-  command = "npm run build"
+  command = "npm install && npm run build"
   publish = ".next"
 
 [build.environment]
@@ -11,8 +11,10 @@
   package = "@netlify/plugin-nextjs"
 
 # Environment variables (you'll need to set these in Netlify dashboard)
+# The following are examples - set the actual values in Netlify dashboard
 [context.production.environment]
   NEXT_PUBLIC_SITE_URL = "https://your-domain.netlify.app"
+  NODE_ENV = "production"
 
 # Redirects for SPA behavior
 [[redirects]]

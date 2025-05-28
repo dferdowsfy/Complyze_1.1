@@ -1,0 +1,39 @@
+# Complyze Environment Variables for Netlify
+# Copy these key-value pairs to your Netlify dashboard under Site settings > Environment variables
+
+# =============================================================================
+# SUPABASE CONFIGURATION
+# =============================================================================
+NEXT_PUBLIC_SUPABASE_URL=https://likskioavtpnskrfxbqa.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxpa3NraW9hdnRwbnNrcmZ4YnFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczMjI2OTIsImV4cCI6MjA2Mjg5ODY5Mn0.vRzRh_wotQ1UFVk3fVOlAhU8bWucx4oOwkQA6939jtg
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxpa3NraW9hdnRwbnNrcmZ4YnFhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzMyMjY5MiwiZXhwIjoyMDYyODk4NjkyfQ.O_qkgrEHKI5QOG9UidDtieEb-kEzu-3su9Ge2XdXPSw
+
+# =============================================================================
+# OPENROUTER API CONFIGURATION
+# =============================================================================
+OPENROUTER_API_KEY=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
+
+# =============================================================================
+# NEXT.JS CONFIGURATION
+# =============================================================================
+NEXT_PUBLIC_SITE_URL=https://your-domain.netlify.app
+NODE_ENV=production
+
+# =============================================================================
+# INSTRUCTIONS FOR NETLIFY DEPLOYMENT
+# =============================================================================
+# 1. Go to your Netlify dashboard
+# 2. Select your site
+# 3. Go to Site settings > Environment variables
+# 4. Add each of the above variables as separate entries
+# 5. Make sure to update NEXT_PUBLIC_SITE_URL with your actual Netlify domain
+# 6. Deploy your site
+
+# =============================================================================
+# SECURITY NOTES
+# =============================================================================
+# - These are the actual credentials from your codebase
+# - Consider rotating the OpenRouter API key for security
+# - The Supabase keys are already exposed in your frontend code
+# - NEXT_PUBLIC_ variables will be visible in the browser
+# - SUPABASE_SERVICE_ROLE_KEY should be kept secure (server-side only) 

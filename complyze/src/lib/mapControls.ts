@@ -141,7 +141,7 @@ export function mapControls(
 }
 
 // OpenRouter API integration for LLM-based control mapping
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "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";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODEL = "perplexity/sonar-pro";
 
