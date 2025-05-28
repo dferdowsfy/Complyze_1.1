@@ -217,4 +217,40 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    console.log('Clearing test flagged prompts...');
+
+    // Delete all flagged prompts that were created by the test endpoint
+    const { data: deletedPrompts, error: deleteError } = await supabase
+      .from('prompt_logs')
+      .delete()
+      .eq('status', 'flagged')
+      .in('platform', ['chatgpt', 'claude', 'gemini'])
+      .contains('metadata', { source: 'chrome_extension_realtime' })
+      .select();
+
+    if (deleteError) {
+      console.error('Error deleting test prompts:', deleteError);
+      return NextResponse.json({ 
+        error: 'Failed to delete test prompts', 
+        details: deleteError.message 
+      }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Test flagged prompts cleared successfully',
+      deleted: deletedPrompts?.length || 0
+    });
+
+  } catch (error) {
+    console.error('Error clearing test prompts:', error);
+    return NextResponse.json(
+      { error: 'Failed to clear test prompts', details: error },
+      { status: 500 }
+    );
+  }
 } 

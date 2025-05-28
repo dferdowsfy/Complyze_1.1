@@ -299,28 +299,81 @@ function FlaggedPromptsPanel() {
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
       <div className="flex items-center justify-between mb-2">
         <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
-        <button 
-          onClick={fetchFlaggedPrompts}
-          className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={async () => {
+              try {
+                const response = await fetch('/api/test-db', { method: 'DELETE' });
+                if (response.ok) {
+                  await fetchFlaggedPrompts();
+                }
+              } catch (error) {
+                console.error('Failed to clear test data:', error);
+              }
+            }}
+            className="text-sm text-red-600 hover:text-red-800 transition-colors"
+          >
+            Clear Test Data
+          </button>
+          <button 
+            onClick={fetchFlaggedPrompts}
+            className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
       {flaggedPrompts.map((row, i) => (
-        <div key={row.id || i} className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 py-3 last:border-b-0">
+        <div key={row.id || i} className="flex flex-col md:flex-row md:items-start justify-between border-b border-gray-100 py-4 last:border-b-0">
           <div className="flex-1">
-            <div className="font-semibold text-base text-[#0E1E36] mb-1">{row.summary}</div>
-            <div className="flex flex-wrap gap-1 mb-1">
+            <div className="font-semibold text-base text-[#0E1E36] mb-2">{row.summary}</div>
+            
+            {/* Framework Tags */}
+            <div className="flex flex-wrap gap-1 mb-2">
               {row.frameworks?.map(fw => <FrameworkTag key={fw} fw={fw} />)}
             </div>
+            
+            {/* Platform and LLM Provider Info */}
+            <div className="flex items-center gap-3 mb-2">
+              {row.platform && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-medium text-gray-500">Platform:</span>
+                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold text-white ${
+                    row.platform === 'chatgpt' ? 'bg-green-600' :
+                    row.platform === 'claude' ? 'bg-orange-600' :
+                    row.platform === 'gemini' ? 'bg-blue-600' :
+                    'bg-gray-600'
+                  }`}>
+                    {row.platform === 'chatgpt' ? 'ChatGPT' :
+                     row.platform === 'claude' ? 'Claude' :
+                     row.platform === 'gemini' ? 'Gemini' :
+                     row.platform.toUpperCase()}
+                  </span>
+                </div>
+              )}
+              
+              {/* LLM Provider Badge */}
+              {row.platform && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-medium text-gray-500">LLM:</span>
+                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold text-white ${
+                    row.platform === 'chatgpt' ? 'bg-green-500' :
+                    row.platform === 'claude' ? 'bg-orange-500' :
+                    row.platform === 'gemini' ? 'bg-blue-500' :
+                    'bg-gray-500'
+                  }`}>
+                    {row.platform === 'chatgpt' ? 'OpenAI GPT-4' :
+                     row.platform === 'claude' ? 'Anthropic Claude' :
+                     row.platform === 'gemini' ? 'Google Gemini' :
+                     'Unknown LLM'}
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            {/* Metadata Row */}
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <span>{row.date}</span>
-              {row.platform && (
-                <>
-                  <span>•</span>
-                  <span className="capitalize">{row.platform}</span>
-                </>
-              )}
               {row.piiTypes && row.piiTypes.length > 0 && (
                 <>
                   <span>•</span>
@@ -329,17 +382,27 @@ function FlaggedPromptsPanel() {
                   </span>
                 </>
               )}
+              {row.url && (
+                <>
+                  <span>•</span>
+                  <span className="text-blue-600 font-medium truncate max-w-[200px]" title={row.url}>
+                    {row.url}
+                  </span>
+                </>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-2 md:mt-0">
-            <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
+          
+          {/* Risk and Status Badges */}
+          <div className="flex flex-col gap-2 mt-3 md:mt-0 md:ml-4">
+            <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold text-center ${
               row.risk === 'High' ? 'bg-red-100 text-red-700' : 
               row.risk === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 
               'bg-green-100 text-green-700'
             }`}>
               {row.risk} Risk
             </span>
-            <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+            <span className={`inline-block px-2 py-1 rounded text-xs font-medium text-center ${
               row.status === 'flagged' ? 'bg-yellow-100 text-yellow-800' :
               row.status === 'blocked' ? 'bg-red-100 text-red-800' :
               'bg-gray-100 text-gray-800'
