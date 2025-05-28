@@ -1079,43 +1079,30 @@ export default function ComplyzeDashboard() {
           <div className="font-bold text-lg text-[#0E1E36]">Prompt Optimizer</div>
           <button className="text-gray-400 hover:text-gray-700 text-2xl" onClick={() => setOptimizerOpen(false)} aria-label="Close">×</button>
         </div>
-        {/* Tab Switcher */}
-        <div className="flex gap-2 px-6 pt-4 pb-2 border-b border-gray-100">
-          <button className={`px-4 py-2 rounded-t-lg font-semibold text-base transition border-b-2 ${optimizerTab === 'optimize' ? 'border-orange-500 text-[#FF6F3C] bg-orange-50' : 'border-transparent text-gray-700 bg-transparent'}`} onClick={() => setOptimizerTab('optimize')}>Optimize</button>
-          <button className={`px-4 py-2 rounded-t-lg font-semibold text-base transition border-b-2 ${optimizerTab === 'history' ? 'border-orange-500 text-[#FF6F3C] bg-orange-50' : 'border-transparent text-gray-700 bg-transparent'}`} onClick={() => setOptimizerTab('history')}>History</button>
-          <button className={`px-4 py-2 rounded-t-lg font-semibold text-base transition border-b-2 ${optimizerTab === 'analysis' ? 'border-orange-500 text-[#FF6F3C] bg-orange-50' : 'border-transparent text-gray-700 bg-transparent'}`} onClick={() => setOptimizerTab('analysis')}>Analysis</button>
-        </div>
-        {/* Tab Content */}
+        {/* Remove Tab Switcher and only show Optimize content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          {optimizerTab === 'optimize' && (
-            <>
-              <PromptOptimizerPanel onOptimize={handleOptimize} />
-              {/* Optimized Output */}
-              {enhancedPrompt && (
-                <div className="mt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-700 font-semibold text-sm">✅ Low Risk</span>
-                  </div>
-                  <div className="relative">
-                    <textarea
-                      className="w-full bg-gray-100 rounded-lg p-3 text-base font-mono text-gray-800 resize-none border border-gray-200"
-                      value={enhancedPrompt}
-                      readOnly
-                      rows={4}
-                    />
-                    <button
-                      className="absolute top-2 right-2 px-3 py-1 bg-orange-500 text-white rounded font-semibold text-xs hover:bg-orange-600 transition"
-                      onClick={handleCopy}
-                    >
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          {optimizerTab !== 'optimize' && (
-            <div className="text-gray-400 text-center py-12">Coming soon…</div>
+          <PromptOptimizerPanel onOptimize={handleOptimize} />
+          {/* Optimized Output */}
+          {enhancedPrompt && (
+            <div className="mt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-700 font-semibold text-sm">✅ Low Risk</span>
+              </div>
+              <div className="relative">
+                <textarea
+                  className="w-full bg-gray-100 rounded-lg p-3 text-base font-mono text-gray-800 resize-none border border-gray-200"
+                  value={enhancedPrompt}
+                  readOnly
+                  rows={4}
+                />
+                <button
+                  className="absolute top-2 right-2 px-3 py-1 bg-orange-500 text-white rounded font-semibold text-xs hover:bg-orange-600 transition"
+                  onClick={handleCopy}
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
