@@ -496,7 +496,7 @@ export default function Settings() {
         </div>
 
         {/* Save Button */}
-        <div className="flex justify-center">
+        <div className="flex justify-center mb-6">
           <button
             onClick={saveSettings}
             disabled={saving}
@@ -510,6 +510,19 @@ export default function Settings() {
             ) : (
               'Save Changes'
             )}
+          </button>
+        </div>
+        {/* Logout Button (Settings only) */}
+        <div className="flex justify-center mb-12">
+          <button
+            onClick={() => {
+              localStorage.removeItem('complyze_token');
+              localStorage.removeItem('complyze_user');
+              window.location.href = '/';
+            }}
+            className="px-6 py-2 bg-gray-200 text-[#E53935] rounded-lg font-semibold text-base hover:bg-red-100 transition border border-gray-300 shadow-sm"
+          >
+            Logout
           </button>
         </div>
 

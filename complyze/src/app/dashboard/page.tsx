@@ -1119,18 +1119,11 @@ export default function ComplyzeDashboard() {
             )}
           </Link>
         </div>
-        {/* Right: User Info and Logout */}
+        {/* Right: User Info (no logout) */}
         <div className="flex items-center gap-4 min-w-[120px] justify-end">
           <span className="text-white text-lg truncate max-w-[100px]" title={user?.full_name || user?.email || 'User'}>
             {user?.full_name || user?.email || 'User'}
           </span>
-          <button
-            onClick={logout}
-            className="bg-[#FF6F3C] text-white px-3 py-1 rounded font-semibold text-base hover:bg-[#e65d2d] transition"
-            style={{ fontSize: '1rem', padding: '6px 16px', minWidth: 0 }}
-          >
-            Logout
-          </button>
         </div>
       </nav>
       {/* Notification Bar */}
