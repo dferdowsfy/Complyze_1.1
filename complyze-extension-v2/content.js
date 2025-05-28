@@ -544,7 +544,23 @@ class PromptWatcher {
       if (!promptElement) return;
       
       const promptText = this.getPromptText(promptElement).trim();
-      if (!promptText || promptText.length < 10) return; // Only analyze substantial text
+      if (!promptText || promptText.length < 10) {
+        // ENHANCED: Clear warnings for short/empty text and mark as safe
+        this.clearRealTimeWarnings(promptElement);
+        this.preventSubmission = false;
+        this.blockSubmitButtons(false);
+        return;
+      }
+      
+      // ENHANCED: Quick check if this is already a known safe prompt
+      const promptHash = this.createSafeHash(promptText);
+      if (this.safePrompts.has(promptHash)) {
+        console.log('Complyze: Input matches known safe prompt, clearing warnings');
+        this.clearRealTimeWarnings(promptElement);
+        this.preventSubmission = false;
+        this.blockSubmitButtons(false);
+        return;
+      }
       
       // Debounce analysis - wait for user to stop typing
       clearTimeout(analysisTimeout);
@@ -562,6 +578,16 @@ class PromptWatcher {
       setTimeout(async () => {
         const promptText = this.getPromptText(promptElement).trim();
         if (promptText && promptText.length > 10) {
+          // ENHANCED: Quick check if this is already a known safe prompt
+          const promptHash = this.createSafeHash(promptText);
+          if (this.safePrompts.has(promptHash)) {
+            console.log('Complyze: Pasted text matches known safe prompt, clearing warnings');
+            this.clearRealTimeWarnings(promptElement);
+            this.preventSubmission = false;
+            this.blockSubmitButtons(false);
+            return;
+          }
+          
           await this.performRealTimeAnalysis(promptText, promptElement);
         }
       }, 100);
@@ -572,11 +598,13 @@ class PromptWatcher {
   async performRealTimeAnalysis(promptText, promptElement) {
     if (this.isAnalyzing) return;
     
-    // Check if this is a known safe prompt (to avoid re-analyzing safe versions)
+    // ENHANCED: Check if this is a known safe prompt (to avoid re-analyzing safe versions)
     const promptHash = this.createSafeHash(promptText);
     if (this.safePrompts.has(promptHash)) {
       console.log('Complyze: Skipping analysis for known safe prompt');
       this.clearRealTimeWarnings(promptElement);
+      this.preventSubmission = false;
+      this.blockSubmitButtons(false);
       return;
     }
     
@@ -607,9 +635,12 @@ class PromptWatcher {
       } else if (fullAnalysis && fullAnalysis.risk_level === 'medium') {
         this.showRealTimeInfo(promptElement, fullAnalysis);
       } else {
-        // If analysis shows low risk, mark as safe
+        // ENHANCED: If analysis shows low risk, mark as safe and clear any warnings
         this.safePrompts.add(promptHash);
         this.clearRealTimeWarnings(promptElement);
+        this.preventSubmission = false;
+        this.blockSubmitButtons(false);
+        console.log('Complyze: Prompt marked as safe, hash:', promptHash);
       }
       
     } catch (error) {
@@ -1188,23 +1219,29 @@ class PromptWatcher {
         console.log('Complyze: Use safe version clicked');
         const safeText = panel.querySelector('#complyze-safe-text').value;
         
-        // Mark this safe prompt to avoid re-analysis
+        // ENHANCED: Mark this safe prompt to avoid re-analysis
         const safeHash = this.createSafeHash(safeText);
         this.safePrompts.add(safeHash);
+        console.log('Complyze: Marked safe prompt hash:', safeHash);
         
         // Replace the text in the prompt element
         if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
           promptElement.value = safeText;
           promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+          promptElement.dispatchEvent(new Event('change', { bubbles: true }));
         } else if (promptElement.contentEditable === 'true') {
           promptElement.textContent = safeText;
           promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+          promptElement.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        // Clear warnings and re-enable submission
+        // ENHANCED: Clear warnings and re-enable submission immediately
         this.clearRealTimeWarnings(promptElement);
         this.preventSubmission = false;
         this.blockSubmitButtons(false);
+        
+        // ENHANCED: Force clear any existing warnings and show success indicator
+        this.showSafePromptConfirmation(promptElement);
 
         // Close panel
         panel.remove();
@@ -1215,9 +1252,17 @@ class PromptWatcher {
         // Move cursor to end
         if (promptElement.setSelectionRange) {
           promptElement.setSelectionRange(safeText.length, safeText.length);
+        } else if (promptElement.contentEditable === 'true') {
+          // For contenteditable elements, set cursor to end
+          const range = document.createRange();
+          const selection = window.getSelection();
+          range.selectNodeContents(promptElement);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
         }
         
-        console.log('Complyze: Safe text applied and panel closed');
+        console.log('Complyze: Safe text applied, warnings cleared, and panel closed');
       });
 
       // Close panel when clicking outside
@@ -1402,6 +1447,68 @@ class PromptWatcher {
     if (existingLoading) {
       existingLoading.remove();
     }
+  }
+
+  // NEW: Show confirmation that safe prompt was applied
+  showSafePromptConfirmation(promptElement) {
+    // Remove any existing confirmations
+    const existingConfirmation = document.querySelector('#complyze-safe-confirmation');
+    if (existingConfirmation) existingConfirmation.remove();
+    
+    const confirmationId = 'complyze-safe-confirmation';
+    const confirmation = document.createElement('div');
+    confirmation.id = confirmationId;
+    
+    // Get the position of the prompt element
+    const rect = promptElement.getBoundingClientRect();
+    
+    confirmation.style.cssText = `
+      position: fixed;
+      top: ${rect.top - 60}px;
+      left: ${rect.left}px;
+      width: ${rect.width}px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+      z-index: 999999;
+      animation: slideDown 0.3s ease-out;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      pointer-events: none;
+    `;
+    
+    confirmation.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 16px;">✅</span>
+        <span>Safe prompt applied - ready to send!</span>
+      </div>
+    `;
+    
+    // Append to body
+    document.body.appendChild(confirmation);
+    
+    // Update position on scroll/resize
+    const updatePosition = () => {
+      const newRect = promptElement.getBoundingClientRect();
+      confirmation.style.top = `${newRect.top - 60}px`;
+      confirmation.style.left = `${newRect.left}px`;
+      confirmation.style.width = `${newRect.width}px`;
+    };
+    
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+      if (confirmation.parentNode) {
+        window.removeEventListener('scroll', updatePosition);
+        window.removeEventListener('resize', updatePosition);
+        confirmation.remove();
+      }
+    }, 3000);
   }
 }
 
@@ -1646,6 +1753,7 @@ console.log('- complyzeForcePrompt() - Force capture current prompt');
 console.log('- complyzeTestSafePanel() - Test warning with "View Safe Version" button');
 console.log('- complyzeTestPanelDirect() - Show side panel directly');
 console.log('- complyzeForcePanel() - Force test panel (red box for debugging)');
+console.log('- complyzeTestSafeWorkflow() - Test complete safe prompt workflow');
 
 // Authentication sync functionality
 class AuthSync {
@@ -1783,4 +1891,80 @@ window.complyzeTestLoading = function() {
     }, 500);
     
   }, 2000);
+};
+
+// NEW: Test safe prompt workflow (warning -> safe version -> no warning)
+window.complyzeTestSafeWorkflow = function() {
+  console.log('Complyze: Testing complete safe prompt workflow...');
+  
+  const platform = promptWatcher.getCurrentPlatform();
+  if (!platform) {
+    console.log('Complyze: No platform detected');
+    return;
+  }
+  
+  const selectors = promptWatcher.platformSelectors[platform];
+  const promptElement = document.querySelector(selectors.promptInput);
+  
+  if (!promptElement) {
+    console.log('Complyze: No prompt element found');
+    return;
+  }
+  
+  // Step 1: Set risky content
+  const riskyContent = "My email is john.doe@company.com, SSN is 123-45-6789, and API key is sk-1234567890abcdef";
+  console.log('Step 1: Setting risky content...');
+  
+  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+    promptElement.value = riskyContent;
+    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+  } else if (promptElement.contentEditable === 'true') {
+    promptElement.textContent = riskyContent;
+    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  
+  // Step 2: Trigger analysis (should show warning)
+  setTimeout(() => {
+    console.log('Step 2: Triggering analysis (should show warning)...');
+    promptWatcher.performRealTimeAnalysis(riskyContent, promptElement);
+    
+    // Step 3: Generate and apply safe version
+    setTimeout(() => {
+      console.log('Step 3: Generating safe version...');
+      const safeContent = promptWatcher.generateSafePrompt(riskyContent, {
+        detectedPII: ['email', 'ssn', 'api_key']
+      });
+      
+      console.log('Safe content generated:', safeContent);
+      
+      // Apply safe content
+      if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+        promptElement.value = safeContent;
+        promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+      } else if (promptElement.contentEditable === 'true') {
+        promptElement.textContent = safeContent;
+        promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      
+      // Mark as safe and clear warnings
+      const safeHash = promptWatcher.createSafeHash(safeContent);
+      promptWatcher.safePrompts.add(safeHash);
+      promptWatcher.clearRealTimeWarnings(promptElement);
+      promptWatcher.showSafePromptConfirmation(promptElement);
+      
+      // Step 4: Test that safe content doesn't trigger warning
+      setTimeout(() => {
+        console.log('Step 4: Testing that safe content does not trigger warning...');
+        promptWatcher.performRealTimeAnalysis(safeContent, promptElement);
+        
+        console.log('✅ Safe workflow test complete! Check that:');
+        console.log('1. Initial risky content showed warning');
+        console.log('2. Safe content was generated with redacted PII');
+        console.log('3. Safe content does not show warning');
+        console.log('4. Green confirmation message appeared');
+      }, 1000);
+      
+    }, 2000);
+    
+  }, 1000);
 };
