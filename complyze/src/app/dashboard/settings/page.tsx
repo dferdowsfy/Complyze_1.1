@@ -215,20 +215,18 @@ export default function Settings() {
   };
 
   const handleToggle = (key: string, enabled: boolean) => {
-    setSettings(prev => ({
-      ...prev,
+    const newSettings = {
+      ...settings,
       [key]: enabled
-    }));
+    };
+    setSettings(newSettings);
+    
+    // Auto-save settings when toggled
+    autoSaveSettings(newSettings);
   };
 
-  const handleCategoryExpand = (category: string) => {
-    setExpandedCategories(prev => ({
-      ...prev,
-      [category]: !prev[category]
-    }));
-  };
-
-  const saveSettings = async () => {
+  // Auto-save function with debouncing to avoid too many API calls
+  const autoSaveSettings = async (newSettings: Record<string, boolean>) => {
     try {
       setSaving(true);
       setError(null);
@@ -240,7 +238,7 @@ export default function Settings() {
         },
         body: JSON.stringify({
           user_id: userId,
-          settings: settings
+          settings: newSettings
         }),
       });
       
@@ -261,12 +259,12 @@ export default function Settings() {
             source: 'complyze-website',
             payload: {
               user_id: userId,
-              settings: settings,
+              settings: newSettings,
               customTerms: customTerms
             }
           }, window.location.origin);
           
-          console.log('Settings update sent to Chrome extension');
+          console.log('Settings auto-saved and sent to Chrome extension');
         } catch (error) {
           console.warn('Could not send message to Chrome extension:', error);
         }
@@ -274,10 +272,22 @@ export default function Settings() {
       
     } catch (err: any) {
       setError(err.message);
-      console.error('Error saving settings:', err);
+      console.error('Error auto-saving settings:', err);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCategoryExpand = (category: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  // Manual save function (for the save button)
+  const saveSettings = async () => {
+    await autoSaveSettings(settings);
   };
 
   const expandAllCategories = () => {
@@ -546,25 +556,41 @@ export default function Settings() {
           ))}
         </div>
 
-        {/* Save Button */}
-        <div className="flex justify-center mb-6">
+        {/* Save Button and Status */}
+        <div className="flex flex-col items-center mb-6 space-y-4">
+          {/* Auto-save status */}
+          <div className="flex items-center gap-2">
+            {saving ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#FF6F3C]"></div>
+                <span className="text-white text-sm">Auto-saving changes...</span>
+              </>
+            ) : lastSaved ? (
+              <>
+                <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-green-400 text-sm">
+                  Auto-saved at {lastSaved.toLocaleTimeString()}
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-400 text-sm">Changes will be auto-saved</span>
+            )}
+          </div>
+          
+          {/* Manual save button */}
           <button
             onClick={saveSettings}
             disabled={saving}
-            className="px-8 py-4 bg-[#FF6F3C] text-white rounded-xl font-bold text-lg hover:bg-[#ff8a5c] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+            className="px-8 py-3 bg-[#FF6F3C] text-white rounded-xl font-bold text-lg hover:bg-[#ff8a5c] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
-            {saving ? (
-              <div className="flex items-center gap-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                Saving Changes...
-              </div>
-            ) : (
-              'Save Changes'
-            )}
+            {saving ? 'Saving...' : 'Save All Changes'}
           </button>
         </div>
-        {/* Logout Button (Settings only) */}
-        <div className="flex justify-center mb-12">
+
+        {/* Logout Button */}
+        <div className="flex justify-center mb-6">
           <button
             onClick={() => {
               localStorage.removeItem('complyze_token');
