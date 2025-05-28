@@ -11,6 +11,8 @@ class PromptWatcher {
     this.isAnalyzing = false;
     this.preventSubmission = false;
     this.realTimeAnalysisEnabled = true;
+    this.redactionSettings = {}; // Store redaction settings
+    this.customRedactionTerms = '';
     this.platformSelectors = {
       'chat.openai.com': {
         promptInput: '#prompt-textarea, div[contenteditable="true"], textarea[placeholder*="Message"], [data-id] div[contenteditable="true"], div[data-testid="composer-text-input"], textarea[data-testid="prompt-textarea"], div[role="textbox"]',
@@ -61,6 +63,38 @@ class PromptWatcher {
     
     // Check for extension context invalidation
     this.setupContextValidationCheck();
+    
+    // Listen for settings updates from the website
+    this.listenForSettingsUpdates();
+    
+    // Use MutationObserver to watch for new input elements (for follow-up messages)
+    this.watchForNewInputElements();
+    
+    // Listen for settings updates from background script
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === 'redaction_settings_updated') {
+        console.log('Complyze: Received redaction settings update from background');
+        this.redactionSettings = message.payload.settings || {};
+        this.customRedactionTerms = message.payload.customTerms || '';
+      }
+    });
+    
+    // Load existing settings from storage
+    this.loadRedactionSettings();
+  }
+  
+  // NEW: Load redaction settings from storage
+  async loadRedactionSettings() {
+    try {
+      const result = await chrome.storage.local.get(['redactionSettings', 'customRedactionTerms']);
+      if (result.redactionSettings) {
+        this.redactionSettings = result.redactionSettings;
+        this.customRedactionTerms = result.customRedactionTerms || '';
+        console.log('Complyze: Loaded redaction settings from storage');
+      }
+    } catch (error) {
+      console.error('Complyze: Failed to load redaction settings:', error);
+    }
   }
   
   // NEW: Setup context validation check
@@ -536,62 +570,48 @@ class PromptWatcher {
     if (!platform) return;
     
     const selectors = this.platformSelectors[platform];
-    let analysisTimeout;
     
-    // Monitor text input in real-time
-    document.addEventListener('input', async (e) => {
-      const promptElement = e.target.closest(selectors.promptInput);
-      if (!promptElement) return;
-      
-      const promptText = this.getPromptText(promptElement).trim();
-      if (!promptText || promptText.length < 10) {
-        // ENHANCED: Clear warnings for short/empty text and mark as safe
-        this.clearRealTimeWarnings(promptElement);
-        this.preventSubmission = false;
-        this.blockSubmitButtons(false);
-        return;
-      }
-      
-      // ENHANCED: Quick check if this is already a known safe prompt
-      const promptHash = this.createSafeHash(promptText);
-      if (this.safePrompts.has(promptHash)) {
-        console.log('Complyze: Input matches known safe prompt, clearing warnings');
-        this.clearRealTimeWarnings(promptElement);
-        this.preventSubmission = false;
-        this.blockSubmitButtons(false);
-        return;
-      }
-      
-      // Debounce analysis - wait for user to stop typing
-      clearTimeout(analysisTimeout);
-      analysisTimeout = setTimeout(async () => {
-        await this.performRealTimeAnalysis(promptText, promptElement);
-      }, 1000); // Analyze 1 second after user stops typing
-    });
+    // Find all existing input elements and attach listeners
+    const existingInputs = document.querySelectorAll(selectors.promptInput);
+    if (existingInputs.length > 0) {
+      console.log('Complyze: Found existing input elements:', existingInputs.length);
+      this.attachRealTimeAnalysisToElements(existingInputs);
+    }
     
-    // Monitor paste events for immediate analysis
-    document.addEventListener('paste', async (e) => {
-      const promptElement = e.target.closest(selectors.promptInput);
-      if (!promptElement) return;
-      
-      // Wait a bit for paste to complete
-      setTimeout(async () => {
-        const promptText = this.getPromptText(promptElement).trim();
-        if (promptText && promptText.length > 10) {
-          // ENHANCED: Quick check if this is already a known safe prompt
-          const promptHash = this.createSafeHash(promptText);
-          if (this.safePrompts.has(promptHash)) {
-            console.log('Complyze: Pasted text matches known safe prompt, clearing warnings');
-            this.clearRealTimeWarnings(promptElement);
-            this.preventSubmission = false;
-            this.blockSubmitButtons(false);
-            return;
+    // Also set up global event listeners for submit prevention
+    this.setupSubmitPrevention();
+  }
+  
+  // NEW: Setup submit prevention listeners
+  setupSubmitPrevention() {
+    // Prevent Enter key submission if high risk detected
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && this.preventSubmission) {
+        console.log('Complyze: Preventing Enter key submission due to security risk');
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        return false;
+      }
+    }, true); // Use capture phase to intercept early
+    
+    // Prevent button click submission if high risk detected
+    document.addEventListener('click', (e) => {
+      if (this.preventSubmission) {
+        const platform = this.getCurrentPlatform();
+        if (platform) {
+          const selectors = this.platformSelectors[platform];
+          const submitButton = e.target.closest(selectors.submitButton);
+          if (submitButton) {
+            console.log('Complyze: Preventing button click submission due to security risk');
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
           }
-          
-          await this.performRealTimeAnalysis(promptText, promptElement);
         }
-      }, 100);
-    });
+      }
+    }, true); // Use capture phase to intercept early
   }
 
   // NEW: Perform real-time analysis without sending the prompt
@@ -1446,74 +1466,59 @@ class PromptWatcher {
   generateSafePrompt(originalPrompt, analysis) {
     let safePrompt = originalPrompt;
 
-    // ✅ Core PII/PHI/PCI Redaction Patterns
+    // Map redaction keys to settings keys
+    const patternToSettingsKey = {
+      email: 'PII.Email',
+      phone: 'PII.Phone Number',
+      fullName: 'PII.Name',
+      ssn: 'PII.SSN',
+      passport: 'PII.Passport Number',
+      ipAddress: 'PII.IP Address',
+      apiKey: 'Credentials & Secrets.API Keys',
+      oauthSecret: 'Credentials & Secrets.OAuth Tokens',
+      sshKey: 'Credentials & Secrets.SSH Keys',
+      internalUrl: 'Company Internal.Internal URLs',
+      projectName: 'Company Internal.Project Codenames',
+      codeNames: 'Company Internal.Internal Tools',
+      cidrRange: 'Company Internal.System IP Ranges',
+      // Add more mappings as needed
+    };
+
+    // Core PII/PHI/PCI Redaction Patterns
     const coreReplacements = {
-      // Personal Identifiers
       email: { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replacement: '[EMAIL_REDACTED]' },
       phone: { pattern: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g, replacement: '[PHONE_REDACTED]' },
       fullName: { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, replacement: '[NAME_REDACTED]' },
-      
-      // Financial Data
       ssn: { pattern: /\b\d{3}-?\d{2}-?\d{4}\b/g, replacement: '[SSN_REDACTED]' },
-      creditCard: { pattern: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b/g, replacement: '[CREDIT_CARD_REDACTED]' },
-      bankAccount: { pattern: /\b\d{8,17}\b/g, replacement: '[BANK_ACCOUNT_REDACTED]' },
-      routingNumber: { pattern: /\b[0-9]{9}\b/g, replacement: '[ROUTING_NUMBER_REDACTED]' },
-      
-      // Government IDs
-      driverLicense: { pattern: /\b[A-Z]{1,2}\d{6,8}\b/g, replacement: '[DRIVER_LICENSE_REDACTED]' },
       passport: { pattern: /\b[A-Z]{1,2}\d{6,9}\b/g, replacement: '[PASSPORT_REDACTED]' },
-      
-      // Health Information
-      healthInfo: { pattern: /\b(?:diagnosis|treatment|prescription|medical|health|patient|doctor|hospital|clinic)\b/gi, replacement: '[HEALTH_INFO_REDACTED]' },
-      insurancePolicy: { pattern: /\b[A-Z]{2,4}\d{6,12}\b/g, replacement: '[INSURANCE_POLICY_REDACTED]' },
-      
-      // Network/Device
-      ipAddress: { pattern: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, replacement: '[IP_ADDRESS_REDACTED]' },
-      macAddress: { pattern: /\b[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}\b/g, replacement: '[MAC_ADDRESS_REDACTED]' }
+      ipAddress: { pattern: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, replacement: '[IP_ADDRESS_REDACTED]' }
     };
-
-    // 🏢 Enterprise-Specific Company Data
+    // Enterprise-Specific Company Data
     const enterprisePatterns = {
-      // Technical Assets
       apiKey: { pattern: /\b(?:sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,}|[a-zA-Z0-9]{32,})\b/g, replacement: '[API_KEY_REDACTED]' },
-      jwtToken: { pattern: /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g, replacement: '[JWT_TOKEN_REDACTED]' },
       oauthSecret: { pattern: /\b(?:client_secret|oauth_token|access_token|refresh_token)[\s:=]+[a-zA-Z0-9_-]+/gi, replacement: '[OAUTH_SECRET_REDACTED]' },
       sshKey: { pattern: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g, replacement: '[SSH_KEY_REDACTED]' },
-      
-      // Internal URLs and Services
       internalUrl: { pattern: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g, replacement: '[INTERNAL_URL_REDACTED]' },
-      internalService: { pattern: /\b(?:ServiceNow|Snowflake|Redshift|Databricks|Splunk|Tableau)\s+(?:instance|database|server)/gi, replacement: '[INTERNAL_SERVICE_REDACTED]' },
-      
-      // Project and Code Names
       projectName: { pattern: /\b(?:Project|Operation|Initiative)\s+[A-Z][a-zA-Z]+\b/g, replacement: '[PROJECT_NAME_REDACTED]' },
       codeNames: { pattern: /\b[A-Z][a-zA-Z]+(?:DB|API|Service|Platform)\b/g, replacement: '[CODE_NAMES_REDACTED]' },
-      
-      // Financial and Strategic
-      revenueData: { pattern: /\$[\d,]+(?:\.\d{2})?\s*(?:million|billion|M|B|revenue|profit|loss)/gi, replacement: '[REVENUE_DATA_REDACTED]' },
-      financialProjections: { pattern: /\b(?:Q[1-4]|FY\d{2,4})\s+(?:revenue|earnings|profit|forecast)/gi, replacement: '[FINANCIAL_PROJECTIONS_REDACTED]' },
-      
-      // IP Ranges and Network
-      cidrRange: { pattern: /\b(?:10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\/\d{1,2}\b/g, replacement: '[CIDR_RANGE_REDACTED]' },
-      
-      // Regulatory and Compliance
-      exportControl: { pattern: /\b(?:ITAR|EAR|export.controlled|dual.use)\b/gi, replacement: '[EXPORT_CONTROL_REDACTED]' },
-      cui: { pattern: /\b(?:CUI|Controlled Unclassified Information)\b/gi, replacement: '[CUI_REDACTED]' },
-      whistleblower: { pattern: /\b(?:whistleblower|insider.threat|investigation|compliance.violation)\b/gi, replacement: '[WHISTLEBLOWER_REDACTED]' }
+      cidrRange: { pattern: /\b(?:10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\/\d{1,2}\b/g, replacement: '[CIDR_RANGE_REDACTED]' }
     };
+    // Add more patterns as needed
 
-    // Sensitive Keywords (Context-Aware)
-    const sensitiveKeywords = {
-      credentials: { pattern: /\b(?:password|secret|token|key|credential|auth|login)\s*[:=]\s*\S+/gi, replacement: '[CREDENTIALS_REDACTED]' },
-      confidential: { pattern: /\b(?:confidential|private|internal.only|restricted|classified)\b/gi, replacement: '[CONFIDENTIAL_REDACTED]' },
-      security: { pattern: /\b(?:vulnerability|exploit|backdoor|zero.day|penetration.test)\b/gi, replacement: '[SECURITY_REDACTED]' },
-      legal: { pattern: /\b(?:attorney.client|privileged|litigation|settlement|NDA)\b/gi, replacement: '[LEGAL_REDACTED]' }
-    };
+    // Merge all patterns
+    const allPatterns = { ...coreReplacements, ...enterprisePatterns };
 
-    // Check all patterns
-    const allPatterns = { ...coreReplacements, ...enterprisePatterns, ...sensitiveKeywords };
-    
     for (const [type, config] of Object.entries(allPatterns)) {
-      safePrompt = safePrompt.replace(config.pattern, config.replacement);
+      const settingsKey = patternToSettingsKey[type];
+      // Default to enabled if not specified
+      const enabled = this.redactionSettings && settingsKey ? this.redactionSettings[settingsKey] !== false : true;
+      if (enabled) {
+        // Redact as usual
+        safePrompt = safePrompt.replace(config.pattern, config.replacement);
+      } else {
+        // If disabled, wrap in asterisks for visibility
+        safePrompt = safePrompt.replace(config.pattern, (match) => `*${match}*`);
+      }
     }
 
     return safePrompt;
@@ -1667,6 +1672,136 @@ class PromptWatcher {
         confirmation.remove();
       }
     }, 3000);
+  }
+
+  // NEW: Listen for settings updates from the website
+  listenForSettingsUpdates() {
+    window.addEventListener('message', async (event) => {
+      // Only accept messages from the same origin
+      if (event.origin !== window.location.origin) return;
+      
+      // Check if it's a Complyze settings update message
+      if (event.data && event.data.type === 'COMPLYZE_UPDATE_REDACTION_SETTINGS' && 
+          event.data.source === 'complyze-website') {
+        console.log('Complyze: Received redaction settings update from website');
+        
+        try {
+          // Store the settings in Chrome storage
+          await chrome.storage.local.set({
+            redactionSettings: event.data.payload.settings,
+            customRedactionTerms: event.data.payload.customTerms,
+            redactionUserId: event.data.payload.user_id
+          });
+          
+          console.log('Complyze: Redaction settings saved to extension storage');
+          
+          // Send to background script for server-side storage if needed
+          chrome.runtime.sendMessage({
+            type: 'update_redaction_settings',
+            payload: event.data.payload
+          });
+        } catch (error) {
+          console.error('Complyze: Failed to save redaction settings:', error);
+        }
+      }
+    });
+  }
+
+  // NEW: Watch for new input elements that appear after page load (for follow-up messages)
+  watchForNewInputElements() {
+    const platform = this.getCurrentPlatform();
+    if (!platform) return;
+    
+    const selectors = this.platformSelectors[platform];
+    console.log('Complyze: Setting up MutationObserver to watch for new inputs');
+    
+    // Create a mutation observer to watch for new input elements
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // Check if the added node is an input element or contains one
+              const inputs = node.matches ? 
+                (node.matches(selectors.promptInput) ? [node] : node.querySelectorAll(selectors.promptInput)) :
+                [];
+              
+              if (inputs.length > 0) {
+                console.log('Complyze: New input element detected, reattaching listeners');
+                // Reattach real-time analysis to new inputs
+                this.attachRealTimeAnalysisToElements(inputs);
+              }
+            }
+          });
+        }
+      });
+    });
+    
+    // Start observing the document body for changes
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+    
+    console.log('Complyze: MutationObserver started');
+  }
+
+  // NEW: Attach real-time analysis to specific elements
+  attachRealTimeAnalysisToElements(elements) {
+    const platform = this.getCurrentPlatform();
+    if (!platform) return;
+    
+    const selectors = this.platformSelectors[platform];
+    let analysisTimeout;
+    
+    elements.forEach(element => {
+      // Check if we've already attached listeners to this element
+      if (element.dataset.complyzeAttached) return;
+      
+      // Mark element as having listeners attached
+      element.dataset.complyzeAttached = 'true';
+      
+      console.log('Complyze: Attaching real-time analysis to element:', element);
+      
+      // Add input event listener
+      element.addEventListener('input', async (e) => {
+        const promptText = this.getPromptText(element).trim();
+        if (!promptText || promptText.length < 10) {
+          this.clearRealTimeWarnings(element);
+          this.preventSubmission = false;
+          this.blockSubmitButtons(false);
+          return;
+        }
+        
+        // Check if this is a known safe prompt
+        const promptHash = this.createSafeHash(promptText);
+        if (this.safePrompts.has(promptHash)) {
+          this.clearRealTimeWarnings(element);
+          this.preventSubmission = false;
+          this.blockSubmitButtons(false);
+          return;
+        }
+        
+        // Debounce analysis
+        clearTimeout(analysisTimeout);
+        analysisTimeout = setTimeout(async () => {
+          await this.performRealTimeAnalysis(promptText, element);
+        }, 1000);
+      });
+      
+      // Add paste event listener
+      element.addEventListener('paste', async (e) => {
+        setTimeout(async () => {
+          const promptText = this.getPromptText(element).trim();
+          if (promptText && promptText.length > 10) {
+            const promptHash = this.createSafeHash(promptText);
+            if (!this.safePrompts.has(promptHash)) {
+              await this.performRealTimeAnalysis(promptText, element);
+            }
+          }
+        }, 100);
+      });
+    });
   }
 }
 
