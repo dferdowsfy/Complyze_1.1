@@ -75,7 +75,9 @@ class ComplyzeBackground {
 
   async detectServerPort() {
     const domains = [
-      'https://complyze.co',
+      'https://complyze.co',  // Production first - this is the real version
+      // Local development ports (only as fallback)
+      'http://localhost:3005',
       'http://localhost:3004',
       'http://localhost:3002',
       'http://localhost:3001',
@@ -84,27 +86,31 @@ class ComplyzeBackground {
     
     for (const domain of domains) {
       try {
-        console.log(`Complyze: Trying port ${domain}...`);
+        console.log(`Complyze: Trying ${domain}...`);
         const response = await fetch(`${domain}/api/test-db`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         });
         
         if (response.ok || response.status === 401) { // 401 means server is running but not authenticated
-          console.log(`Complyze: Found server on port ${domain}`);
+          console.log(`✅ Complyze: Connected to ${domain}`);
           this.apiBase = `${domain}/api`;
           this.dashboardUrl = `${domain}/dashboard`;
+          console.log(`🌐 Dashboard URL: ${this.dashboardUrl}`);
+          console.log(`📡 API Base: ${this.apiBase}`);
           return;
         }
       } catch (error) {
-        console.log(`Complyze: Port ${domain} not available:`, error.message);
+        console.log(`❌ Complyze: ${domain} not available:`, error.message);
       }
     }
     
-    // Fallback to default port
-    console.log('Complyze: No server found, using default port 3002');
-    this.apiBase = 'http://localhost:3002/api';
-    this.dashboardUrl = 'http://localhost:3002/dashboard';
+    // Fallback to production if all fail
+    console.log('Complyze: No server found, defaulting to production');
+    this.apiBase = 'https://complyze.co/api';
+    this.dashboardUrl = 'https://complyze.co/dashboard';
+    console.log(`🌐 Fallback Dashboard URL: ${this.dashboardUrl}`);
+    console.log(`📡 Fallback API Base: ${this.apiBase}`);
   }
 
   async initializeAuth() {
@@ -288,26 +294,40 @@ class ComplyzeBackground {
 
   async handleRealTimeAnalysis(promptData) {
     try {
-      console.log('Complyze: Handling real-time analysis request');
+      console.log('🔍 Complyze: Real-time analysis request received');
+      console.log('🎯 Current API endpoint:', this.apiBase);
+      console.log('📊 Current dashboard:', this.dashboardUrl);
       
       // Use the same analyze API but with special handling for real-time
       const analysisResult = await this.analyzePrompt(promptData.prompt);
       
       // ENHANCED: Auto-save high-risk prompts to dashboard as flagged
       if (analysisResult.risk_level === 'high' || analysisResult.risk_level === 'critical') {
-        console.log('Complyze: High-risk prompt detected, saving to dashboard as flagged');
+        console.log('⚠️  Complyze: High-risk prompt detected! Auto-flagging...');
+        console.log('📝 Risk Level:', analysisResult.risk_level);
+        console.log('🏷️  Detected Issues:', analysisResult.detectedPII || []);
+        
+        // Save to flagged prompts with proper data structure
         await this.saveFlaggedPrompt({
           prompt: promptData.prompt,
-          analysis: analysisResult,
+          analysis: {
+            risk_level: analysisResult.risk_level,
+            detectedPII: analysisResult.detectedPII || [],
+            risk_factors: analysisResult.risk_factors || [],
+            mapped_controls: analysisResult.mapped_controls || []
+          },
           platform: 'real-time-detection',
-          url: window.location?.href || 'unknown',
+          url: typeof window !== 'undefined' ? window.location?.href : 'unknown',
           timestamp: new Date().toISOString()
         });
+      } else {
+        console.log('✅ Complyze: Low-medium risk prompt, not flagging');
+        console.log('📝 Risk Level:', analysisResult.risk_level);
       }
       
       return analysisResult;
     } catch (error) {
-      console.error('Complyze: Real-time analysis failed:', error);
+      console.error('❌ Complyze: Real-time analysis failed:', error);
       return {
         risk_level: 'low',
         redacted_prompt: promptData.prompt,
@@ -706,42 +726,51 @@ class ComplyzeBackground {
   // NEW: Save flagged prompt to database
   async saveFlaggedPrompt(data) {
     try {
-      console.log('Complyze: Saving flagged prompt to database');
+      console.log('🚨 Complyze: FLAGGED PROMPT DETECTED - Saving to database');
+      console.log('🎯 Target API:', this.apiBase);
+      console.log('📊 Dashboard Location:', this.dashboardUrl);
       
       // Check authentication first
       const isAuthenticated = await this.checkUserAuth();
       if (!isAuthenticated) {
-        console.log('Complyze: User not authenticated, cannot save flagged prompt');
+        console.log('❌ Complyze: User not authenticated, cannot save flagged prompt');
+        console.log('💡 Please login at:', this.dashboardUrl);
         return;
       }
 
       // Prepare the flagged prompt data with all necessary fields
       const flaggedPromptData = {
         prompt: data.prompt,
-        platform: data.platform,
-        url: data.url,
-        timestamp: data.timestamp,
+        platform: data.platform || 'chrome_extension',
+        url: data.url || 'unknown',
+        timestamp: data.timestamp || new Date().toISOString(),
         source: 'chrome_extension_realtime',
-        status: 'flagged', // Set status directly
-        risk_level: data.analysis.risk_level || 'high', // Set risk level directly
+        status: 'flagged', // Explicitly set as flagged
+        risk_level: data.analysis?.risk_level || 'high', // Default to high if not specified
         analysis_metadata: {
-          detection_method: 'real-time',
-          detected_pii: data.analysis.detectedPII || [],
-          risk_factors: data.analysis.risk_factors || [],
-          mapped_controls: data.analysis.mapped_controls || [],
+          detection_method: 'real_time_analysis',
+          detected_pii: data.analysis?.detectedPII || [],
+          risk_factors: data.analysis?.risk_factors || [],
+          mapped_controls: data.analysis?.mapped_controls || [],
           flagged_at: new Date().toISOString(),
-          platform_detected: data.platform || 'unknown'
+          platform_detected: data.platform || 'unknown',
+          extension_version: 'v2.0',
+          auto_flagged: true,
+          api_endpoint: this.apiBase, // Track which API saved this
+          saved_from: this.apiBase.includes('complyze.co') ? 'production' : 'development'
         }
       };
 
-      // ALWAYS use production API for saving flagged prompts
-      // This ensures flagged prompts appear in the production dashboard
-      const productionApiBase = 'https://complyze.co/api';
+      console.log('📝 Complyze: Flagged prompt payload:', {
+        prompt_preview: flaggedPromptData.prompt.substring(0, 50) + '...',
+        platform: flaggedPromptData.platform,
+        risk_level: flaggedPromptData.risk_level,
+        detected_pii: flaggedPromptData.analysis_metadata.detected_pii,
+        target_environment: flaggedPromptData.analysis_metadata.saved_from
+      });
       
-      console.log('Complyze: Sending flagged prompt to production API:', productionApiBase);
-      
-      // Send to production ingest API
-      const response = await fetch(`${productionApiBase}/prompts/ingest`, {
+      // Send to the API endpoint
+      const response = await fetch(`${this.apiBase}/prompts/ingest`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.accessToken}`,
@@ -752,9 +781,23 @@ class ComplyzeBackground {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Complyze: Flagged prompt saved to production with ID:', result.logId);
-        console.log('Complyze: Final status:', result.status);
-        console.log('Complyze: Risk level:', result.risk_level);
+        const isProduction = this.apiBase.includes('complyze.co');
+        
+        console.log('🎉 SUCCESS! Flagged prompt saved to ' + (isProduction ? 'PRODUCTION' : 'LOCAL'));
+        console.log('📋 Details:', {
+          logId: result.logId,
+          status: result.status,
+          risk_level: result.risk_level,
+          environment: isProduction ? 'PRODUCTION' : 'LOCAL',
+          dashboard: this.dashboardUrl
+        });
+        
+        if (isProduction) {
+          console.log('🌐 VIEW YOUR FLAGGED PROMPT AT: https://complyze.co/dashboard');
+          console.log('🔄 Click the "Refresh" button in the Flagged Prompts section to see it appear');
+        } else {
+          console.log('🔧 VIEW YOUR FLAGGED PROMPT AT:', this.dashboardUrl);
+        }
         
         // Update local statistics
         await this.updateStats('flagged', data.platform);
@@ -762,10 +805,17 @@ class ComplyzeBackground {
         return result.logId;
       } else {
         const errorData = await response.json();
-        console.error('Complyze: Failed to save flagged prompt to production:', response.statusText, errorData);
+        console.error('❌ Complyze: Failed to save flagged prompt:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+          target_api: this.apiBase
+        });
       }
     } catch (error) {
-      console.error('Complyze: Error saving flagged prompt to production:', error);
+      console.error('❌ Complyze: Error saving flagged prompt:', error);
+      console.log('🔧 API Target:', this.apiBase);
+      console.log('📊 Dashboard:', this.dashboardUrl);
     }
   }
 }

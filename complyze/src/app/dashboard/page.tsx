@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { supabase } from '@/lib/supabaseClient';
 
 // Inline style helpers
 const COLORS = {
@@ -227,6 +228,8 @@ function FlaggedPromptsPanel() {
   const [flaggedPrompts, setFlaggedPrompts] = useState<FlaggedPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     fetchFlaggedPrompts();
@@ -234,11 +237,11 @@ function FlaggedPromptsPanel() {
 
   const fetchFlaggedPrompts = async () => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       setError(null);
       
       console.log('Complyze Dashboard: Fetching flagged prompts...');
-      const response = await fetch('/api/prompts/flagged?limit=10');
+      const response = await fetch('/api/prompts/flagged?limit=20');
       console.log('Complyze Dashboard: Response status:', response.status);
       
       if (!response.ok) {
@@ -259,10 +262,70 @@ function FlaggedPromptsPanel() {
       setFlaggedPrompts([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  if (loading) {
+  const clearTestData = async () => {
+    try {
+      setClearing(true);
+      console.log('Complyze Dashboard: Clearing test data...');
+      
+      const response = await fetch('/api/test-db', { method: 'DELETE' });
+      console.log('Complyze Dashboard: Clear response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Complyze Dashboard: Clear error:', errorText);
+        throw new Error(`Failed to clear test data: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Complyze Dashboard: Clear result:', result);
+      
+      // Refresh the list after clearing
+      await fetchFlaggedPrompts();
+      
+      // Show success message (you could use a toast library here)
+      console.log('Complyze Dashboard: Test data cleared successfully');
+      
+    } catch (error) {
+      console.error('Failed to clear test data:', error);
+      setError('Failed to clear test data: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const createTestData = async () => {
+    try {
+      console.log('Complyze Dashboard: Creating test data...');
+      
+      const response = await fetch('/api/test-db', { method: 'POST' });
+      console.log('Complyze Dashboard: Create test response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Complyze Dashboard: Create test error:', errorText);
+        throw new Error(`Failed to create test data: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Complyze Dashboard: Create test result:', result);
+      
+      // Refresh the list after creating test data
+      await fetchFlaggedPrompts();
+      
+      // Show success message
+      console.log('Complyze Dashboard: Test data created successfully');
+      
+    } catch (error) {
+      console.error('Failed to create test data:', error);
+      setError('Failed to create test data: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  if (loading && !refreshing) {
     return (
       <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
         <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
@@ -273,10 +336,27 @@ function FlaggedPromptsPanel() {
     );
   }
 
-  if (error) {
+  if (error && !refreshing) {
     return (
       <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={createTestData}
+              className="text-sm text-green-600 hover:text-green-800 transition-colors"
+            >
+              Create Test Data
+            </button>
+            <button 
+              onClick={fetchFlaggedPrompts}
+              className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+              disabled={refreshing}
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+        </div>
         <div className="flex items-center justify-center py-8">
           <div className="text-red-500">Error loading flagged prompts: {error}</div>
         </div>
@@ -284,10 +364,27 @@ function FlaggedPromptsPanel() {
     );
   }
 
-  if (flaggedPrompts.length === 0) {
+  if (flaggedPrompts.length === 0 && !refreshing) {
     return (
       <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={createTestData}
+              className="text-sm text-green-600 hover:text-green-800 transition-colors"
+            >
+              Create Test Data
+            </button>
+            <button 
+              onClick={fetchFlaggedPrompts}
+              className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+              disabled={refreshing}
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+        </div>
         <div className="flex items-center justify-center py-8">
           <div className="text-gray-500">No flagged prompts found. Your prompts are looking secure! 🛡️</div>
         </div>
@@ -298,28 +395,29 @@ function FlaggedPromptsPanel() {
   return (
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
       <div className="flex items-center justify-between mb-2">
-        <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
+        <div className="font-bold text-xl text-[#0E1E36]">
+          Flagged Prompts {refreshing && <span className="text-sm text-gray-500">(Refreshing...)</span>}
+        </div>
         <div className="flex items-center gap-2">
           <button 
-            onClick={async () => {
-              try {
-                const response = await fetch('/api/test-db', { method: 'DELETE' });
-                if (response.ok) {
-                  await fetchFlaggedPrompts();
-                }
-              } catch (error) {
-                console.error('Failed to clear test data:', error);
-              }
-            }}
-            className="text-sm text-red-600 hover:text-red-800 transition-colors"
+            onClick={createTestData}
+            className="text-sm text-green-600 hover:text-green-800 transition-colors"
           >
-            Clear Test Data
+            Create Test Data
+          </button>
+          <button 
+            onClick={clearTestData}
+            className="text-sm text-red-600 hover:text-red-800 transition-colors"
+            disabled={clearing}
+          >
+            {clearing ? 'Clearing...' : 'Clear Test Data'}
           </button>
           <button 
             onClick={fetchFlaggedPrompts}
             className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+            disabled={refreshing}
           >
-            Refresh
+            {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </div>
@@ -412,6 +510,216 @@ function FlaggedPromptsPanel() {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Prompt Integrity Score Card Component
+function PromptIntegrityScoreCard() {
+  const [integrityData, setIntegrityData] = useState({
+    avg_integrity: 0,
+    stable: 0,
+    suspicious: 0,
+    critical: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchIntegrityStats();
+  }, []);
+
+  const fetchIntegrityStats = async () => {
+    try {
+      // For now, using mock data since the RPC function might not exist yet
+      // Replace with: const { data } = await supabase.rpc('get_integrity_stats');
+      const mockData = {
+        avg_integrity: 78,
+        stable: 142,
+        suspicious: 28,
+        critical: 5
+      };
+      
+      setIntegrityData(mockData);
+    } catch (error) {
+      console.error('Error fetching integrity stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatus = (score: number) => {
+    if (score >= 80) return { text: 'Stable', color: '#10b981' };
+    if (score >= 60) return { text: 'Suspicious', color: '#f59e0b' };
+    return { text: 'Critical', color: '#ef4444' };
+  };
+
+  const status = getStatus(integrityData.avg_integrity);
+  const circumference = 2 * Math.PI * 45; // radius = 45
+  const strokeDashoffset = circumference - (integrityData.avg_integrity / 100) * circumference;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Integrity Score</h3>
+      
+      {loading ? (
+        <div className="flex justify-center items-center h-48">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      ) : (
+        <>
+          {/* Radial Gauge */}
+          <div className="relative flex justify-center items-center">
+            <svg width="120" height="120" className="transform -rotate-90">
+              {/* Background circle */}
+              <circle
+                cx="60"
+                cy="60"
+                r="45"
+                stroke="#e5e7eb"
+                strokeWidth="10"
+                fill="none"
+              />
+              {/* Progress circle */}
+              <circle
+                cx="60"
+                cy="60"
+                r="45"
+                stroke={status.color}
+                strokeWidth="10"
+                fill="none"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                className="transition-all duration-1000 ease-out"
+                strokeLinecap="round"
+              />
+            </svg>
+            <div className="absolute transform rotate-0 text-center">
+              <div className="text-3xl font-bold text-[#0E1E36]">{integrityData.avg_integrity}</div>
+              <div className="text-sm text-gray-500">/ 100</div>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className="text-center">
+            <span className="text-lg font-semibold" style={{ color: status.color }}>
+              {status.text}
+            </span>
+          </div>
+
+          {/* Counts */}
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="text-center p-2 rounded-lg bg-green-50">
+              <div className="text-2xl font-bold text-green-600">{integrityData.stable}</div>
+              <div className="text-xs text-gray-600">Stable</div>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-orange-50">
+              <div className="text-2xl font-bold text-orange-600">{integrityData.suspicious}</div>
+              <div className="text-xs text-gray-600">Suspicious</div>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-red-50">
+              <div className="text-2xl font-bold text-red-600">{integrityData.critical}</div>
+              <div className="text-xs text-gray-600">Critical</div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Risk Type Frequency Card Component
+function RiskTypeFrequencyCard() {
+  const [riskFrequency, setRiskFrequency] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+
+  const riskTypeColors: Record<string, string> = {
+    'PII Leakage': '#ef4444',
+    'Credential Exposure': '#f97316',
+    'Jailbreak Attempt': '#ec4899',
+    'Model Leakage': '#a855f7',
+    'Internal Asset Disclosure': '#3b82f6',
+    'Vague Prompt': '#eab308',
+    'Regulatory Trigger': '#22c55e',
+    'Other': '#6b7280'
+  };
+
+  useEffect(() => {
+    fetchRiskTypes();
+  }, []);
+
+  const fetchRiskTypes = async () => {
+    try {
+      // For now, using mock data
+      // Replace with: const { data } = await supabase.from('PromptLog').select('risk_types');
+      const mockData = [
+        { risk_types: ['PII Leakage', 'Credential Exposure'] },
+        { risk_types: ['PII Leakage'] },
+        { risk_types: ['Jailbreak Attempt'] },
+        { risk_types: ['Model Leakage', 'PII Leakage'] },
+        { risk_types: ['Vague Prompt'] },
+        { risk_types: ['Internal Asset Disclosure'] },
+        { risk_types: ['Regulatory Trigger'] },
+        { risk_types: ['PII Leakage'] },
+        { risk_types: ['Credential Exposure'] },
+        { risk_types: ['Vague Prompt', 'Other'] },
+      ];
+
+      // Aggregate risk types
+      const frequencyMap: Record<string, number> = {};
+      mockData.forEach(row => {
+        row.risk_types?.forEach(type => {
+          frequencyMap[type] = (frequencyMap[type] || 0) + 1;
+        });
+      });
+
+      setRiskFrequency(frequencyMap);
+    } catch (error) {
+      console.error('Error fetching risk types:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sort by frequency
+  const sortedRisks = Object.entries(riskFrequency).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <h3 className="font-bold text-xl text-[#0E1E36]">Risk Type Frequency</h3>
+      
+      {loading ? (
+        <div className="flex justify-center items-center h-48">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {sortedRisks.map(([riskType, count]) => {
+            const color = riskTypeColors[riskType] || riskTypeColors['Other'];
+            const size = count > 5 ? 'text-base px-4 py-2' : 'text-sm px-3 py-1.5';
+            
+            return (
+              <div
+                key={riskType}
+                className={`inline-flex items-center rounded-full font-medium ${size} transition-transform hover:scale-105`}
+                style={{
+                  backgroundColor: `${color}20`,
+                  color: color,
+                  border: `1px solid ${color}40`
+                }}
+              >
+                <span>{riskType}</span>
+                <span className="ml-2 font-bold">({count})</span>
+              </div>
+            );
+          })}
+          
+          {sortedRisks.length === 0 && (
+            <div className="text-gray-500 text-center w-full py-8">
+              No risk data available
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -726,33 +1034,12 @@ export default function ComplyzeDashboard() {
       </div>
       {/* Second Row: Compliance, Risk, Optimizer */}
       <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-        {/* Compliance Score Card */}
-        <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-          <div className="font-bold text-xl text-[#0E1E36] mb-2">Compliance Coverage Score</div>
-          <div className="text-base text-gray-700 mb-2">You're currently covering <span className="text-[#FF6F3C] font-bold">64%</span> of FedRAMP AI controls via prompt governance</div>
-          <div className="text-sm text-[#FF6F3C] font-semibold underline cursor-pointer">View what's missing →</div>
-        </div>
-        {/* Risk Pie Chart Card */}
-        <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 items-center" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-          <div className="font-bold text-xl text-[#0E1E36] mb-2">Risk Breakdown</div>
-          {/* Pie Chart Placeholder */}
-          <div className="w-40 h-40 flex items-center justify-center">
-            <svg width={180} height={180} viewBox="0 0 100 100">
-              {/* Pie chart segments would go here */}
-              <circle cx="50" cy="50" r="40" fill="#F1F5F9" />
-              <path d="M50,50 L50,10 A40,40 0 0,1 90,50 Z" fill="#FF6F3C" />
-              <path d="M50,50 L90,50 A40,40 0 0,1 50,90 Z" fill="#0E1E36" />
-              <path d="M50,50 L50,90 A40,40 0 0,1 10,50 Z" fill="#E53935" />
-              <path d="M50,50 L10,50 A40,40 0 0,1 50,10 Z" fill="#388E3C" />
-            </svg>
-          </div>
-          <div className="flex flex-wrap gap-4 justify-center mt-2 text-base">
-            <span className="flex items-center gap-2"><span className="w-4 h-4 rounded bg-[#FF6F3C] inline-block" /> Vague prompts</span>
-            <span className="flex items-center gap-2"><span className="w-4 h-4 rounded bg-[#0E1E36] inline-block" /> PII leakage</span>
-            <span className="flex items-center gap-2"><span className="w-4 h-4 rounded bg-[#E53935] inline-block" /> Jailbreak attempts</span>
-            <span className="flex items-center gap-2"><span className="w-4 h-4 rounded bg-[#388E3C] inline-block" /> Other</span>
-          </div>
-        </div>
+        {/* Prompt Integrity Score Card */}
+        <PromptIntegrityScoreCard />
+        
+        {/* Risk Type Frequency Card */}
+        <RiskTypeFrequencyCard />
+        
         {/* Prompt Optimizer Panel (hidden, now in drawer) */}
         <div className="hidden lg:block" />
       </div>

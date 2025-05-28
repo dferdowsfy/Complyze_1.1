@@ -1187,10 +1187,11 @@ class PromptWatcher {
   }
 
   // NEW: Show fix suggestions with side panel
-  showFixSuggestions(promptElement, analysis) {
-    // Create side panel with safe prompt version
-    this.createSafePromptPanel(promptElement, analysis);
-  }
+  // REMOVED: This was causing duplicate panels - the Fix button calls createSafePromptPanel directly
+  // showFixSuggestions(promptElement, analysis) {
+  //   // Create side panel with safe prompt version
+  //   this.createSafePromptPanel(promptElement, analysis);
+  // }
 
   // NEW: Create side panel with safe prompt
   createSafePromptPanel(promptElement, analysis) {
