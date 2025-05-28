@@ -1119,11 +1119,23 @@ export default function ComplyzeDashboard() {
             )}
           </Link>
         </div>
-        {/* Right: User Info (no logout) */}
-        <div className="flex items-center gap-4 min-w-[120px] justify-end">
-          <span className="text-white text-lg truncate max-w-[100px]" title={user?.full_name || user?.email || 'User'}>
-            {user?.full_name || user?.email || 'User'}
-          </span>
+        {/* Right: User Info Pill */}
+        <div className="flex items-center gap-4 min-w-[160px] justify-end">
+          {user?.email && (
+            <div className="relative group">
+              <span
+                className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                title={user.email}
+                style={{ display: 'inline-block' }}
+              >
+                {user.full_name || user.email}
+              </span>
+              {/* Tooltip on hover */}
+              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block bg-[#222] text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
+                {user.email}
+              </div>
+            </div>
+          )}
         </div>
       </nav>
       {/* Notification Bar */}

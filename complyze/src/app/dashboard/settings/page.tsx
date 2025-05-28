@@ -352,9 +352,35 @@ export default function Settings() {
               )}
             </Link>
           </div>
-          {/* Right: User Info and Logout */}
-          <div className="flex items-center gap-4 min-w-[220px] justify-end">
-            {/* No user info in loading state */}
+          {/* Right: User Info Pill */}
+          <div className="flex items-center gap-4 min-w-[160px] justify-end">
+            {/* User info pill from localStorage */}
+            {(() => {
+              let user = null;
+              if (typeof window !== 'undefined') {
+                try {
+                  user = JSON.parse(localStorage.getItem('complyze_user') || '{}');
+                } catch {}
+              }
+              if (user && user.email) {
+                return (
+                  <div className="relative group">
+                    <span
+                      className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                      title={user.email}
+                      style={{ display: 'inline-block' }}
+                    >
+                      {user.full_name || user.email}
+                    </span>
+                    {/* Tooltip on hover */}
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block bg-[#222] text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
+                      {user.email}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
         </nav>
         
@@ -405,9 +431,35 @@ export default function Settings() {
             )}
           </Link>
         </div>
-        {/* Right: User Info and Logout */}
-        <div className="flex items-center gap-4 min-w-[220px] justify-end">
-          {/* No user info in loading state */}
+        {/* Right: User Info Pill */}
+        <div className="flex items-center gap-4 min-w-[160px] justify-end">
+          {/* User info pill from localStorage */}
+          {(() => {
+            let user = null;
+            if (typeof window !== 'undefined') {
+              try {
+                user = JSON.parse(localStorage.getItem('complyze_user') || '{}');
+              } catch {}
+            }
+            if (user && user.email) {
+              return (
+                <div className="relative group">
+                  <span
+                    className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                    title={user.email}
+                    style={{ display: 'inline-block' }}
+                  >
+                    {user.full_name || user.email}
+                  </span>
+                  {/* Tooltip on hover */}
+                  <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block bg-[#222] text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
+                    {user.email}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
       </nav>
 
@@ -417,7 +469,6 @@ export default function Settings() {
           <h1 className="text-4xl font-bold text-white mb-2">Customize Your Redaction Policy</h1>
           <p className="text-lg text-white mb-6">
             Configure which types of sensitive information should be automatically redacted from your prompts.
-            Disabled items will be wrapped in asterisks (*) for visibility while maintaining privacy.
           </p>
           
           {/* Error Display */}

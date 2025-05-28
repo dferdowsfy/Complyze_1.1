@@ -262,9 +262,35 @@ export default function Reports() {
             )}
           </Link>
         </div>
-        {/* Right: Empty for now */}
-        <div className="flex items-center gap-4 min-w-[120px] justify-end">
-          {/* No user info/logout here */}
+        {/* Right: User Info Pill */}
+        <div className="flex items-center gap-4 min-w-[160px] justify-end">
+          {/* User info pill from localStorage */}
+          {(() => {
+            let user = null;
+            if (typeof window !== 'undefined') {
+              try {
+                user = JSON.parse(localStorage.getItem('complyze_user') || '{}');
+              } catch {}
+            }
+            if (user && user.email) {
+              return (
+                <div className="relative group">
+                  <span
+                    className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                    title={user.email}
+                    style={{ display: 'inline-block' }}
+                  >
+                    {user.full_name || user.email}
+                  </span>
+                  {/* Tooltip on hover */}
+                  <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block bg-[#222] text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
+                    {user.email}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
       </nav>
       <main className="max-w-7xl mx-auto flex flex-row gap-10 py-12 px-4">
