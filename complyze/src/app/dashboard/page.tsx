@@ -1118,23 +1118,16 @@ export default function ComplyzeDashboard() {
               </span>
             )}
           </Link>
-          <Link href="/dashboard/test-prevention" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
-            🛡️ Test Prevention
-            {pathname && pathname.includes('test-prevention') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-              </span>
-            )}
-          </Link>
         </div>
         {/* Right: User Info and Logout */}
-        <div className="flex items-center gap-4 min-w-[220px] justify-end">
-          <span className="text-white text-lg truncate max-w-[140px]" title={user?.full_name || user?.email || 'User'}>
+        <div className="flex items-center gap-4 min-w-[120px] justify-end">
+          <span className="text-white text-lg truncate max-w-[100px]" title={user?.full_name || user?.email || 'User'}>
             {user?.full_name || user?.email || 'User'}
           </span>
           <button
             onClick={logout}
-            className="bg-[#FF6F3C] text-white px-4 py-2 rounded-lg font-semibold hover:bg-[#e65d2d] transition"
+            className="bg-[#FF6F3C] text-white px-3 py-1 rounded font-semibold text-base hover:bg-[#e65d2d] transition"
+            style={{ fontSize: '1rem', padding: '6px 16px', minWidth: 0 }}
           >
             Logout
           </button>

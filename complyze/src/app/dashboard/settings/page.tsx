@@ -351,14 +351,6 @@ export default function Settings() {
                 </span>
               )}
             </Link>
-            <Link href="/dashboard/test-prevention" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
-              🛡️ Test Prevention
-              {pathname && pathname.includes('test-prevention') && (
-                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
-                  <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-                </span>
-              )}
-            </Link>
           </div>
           {/* Right: User Info and Logout */}
           <div className="flex items-center gap-4 min-w-[220px] justify-end">
