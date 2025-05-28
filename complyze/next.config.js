@@ -1,6 +1,5 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   /* config options here */
   eslint: {
     // Warning: This allows production builds to successfully complete even if
@@ -40,6 +39,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Ensure webpack resolves the @ alias properly
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': require('path').resolve(__dirname, 'src'),
+    };
+    return config;
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig; 
