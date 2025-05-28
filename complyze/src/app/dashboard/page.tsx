@@ -83,109 +83,194 @@ function RiskBadge({ level }: { level: 'High' | 'Medium' | 'Low' }) {
   );
 }
 
-const LLM_CARDS = [
-  {
-    model: "GPT-4o",
-    inputTokens: 1800000,
-    outputTokens: 600000,
-    inputCostPerMillion: 3.00,
-    outputCostPerMillion: 10.00,
-    dailySpend: 9.14,
-    budget: 500,
-    color: "#FF6F3C"
-  },
-  {
-    model: "Claude 3 Opus",
-    inputTokens: 1200000,
-    outputTokens: 300000,
-    inputCostPerMillion: 15.00,
-    outputCostPerMillion: 75.00,
-    dailySpend: 19.65,
-    budget: 500,
-    color: "#6366F1"
-  },
-  {
-    model: "Gemini 1.5 Flash",
-    inputTokens: 2400000,
-    outputTokens: 800000,
-    inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.40,
-    dailySpend: 1.84,
-    budget: 500,
-    color: "#06b6d4"
-  }
-];
-
-function formatNumber(n: number) { return n.toLocaleString(); }
-
-function LLMUsageCard({ d }: { d: typeof LLM_CARDS[0] }) {
-  const inputCost = (d.inputTokens / 1_000_000) * d.inputCostPerMillion;
-  const outputCost = (d.outputTokens / 1_000_000) * d.outputCostPerMillion;
-  const totalCost = inputCost + outputCost;
-  const monthly = d.dailySpend * 31;
-  const percentUsed = Math.min(100, ((monthly / d.budget) * 100));
+// Cost Summary Components
+function BudgetTrackerCard({ data }: { data: any }) {
+  const isOverBudget = data?.status === "Over Budget";
+  const indicatorColor = isOverBudget ? "#E53935" : "#388E3C";
+  const bgColor = isOverBudget ? "#FFEBEE" : "#E8F5E8";
+  
   return (
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">{d.model}</div>
+      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Budget Tracker</div>
       <div className="text-lg font-semibold text-gray-500 mb-2">
-        <span style={{ color: d.color, fontWeight: 800, fontSize: 22 }}>${d.dailySpend.toFixed(2)}</span> <span className="text-base">/day</span> &nbsp;|&nbsp;
-        <span style={{ color: d.color, fontWeight: 700, fontSize: 18 }}>${monthly.toFixed(2)}</span> <span className="text-base">/mo</span>
+        <span style={{ color: indicatorColor, fontWeight: 800, fontSize: 22 }}>${data?.total_spend?.toFixed(2) || '0.00'}</span> 
+        <span className="text-base"> / ${data?.budget?.toFixed(2) || '500.00'}</span>
       </div>
-      <div className="flex gap-4 text-base font-semibold text-gray-800">
-        <span>Input: <span style={{ color: '#6366F1', fontWeight: 700 }}>{formatNumber(d.inputTokens)}</span></span>
-        <span>Output: <span style={{ color: '#FF6F3C', fontWeight: 700 }}>{formatNumber(d.outputTokens)}</span></span>
+      <div className="flex items-center gap-2 mb-3">
+        <span style={{ color: indicatorColor, fontSize: 24 }}>{data?.indicator || '↓'}</span>
+        <span style={{ color: indicatorColor, fontWeight: 700 }}>
+          {Math.abs(data?.percent_delta || 0).toFixed(1)}% {data?.status || 'Under Budget'}
+        </span>
       </div>
-      <div className="text-base text-gray-700 font-medium">Total tokens: <span className="font-bold">{formatNumber(d.inputTokens + d.outputTokens)}</span></div>
-      <div className="text-base text-gray-700 font-medium">Cost: <span className="font-bold">${totalCost.toFixed(2)}</span> (input: ${inputCost.toFixed(2)}, output: ${outputCost.toFixed(2)})</div>
       <div className="mt-3 mb-1">
         <div className="text-sm text-gray-400 mb-1">Monthly Budget Usage</div>
-        <div className="bg-gray-100 rounded h-4 w-full relative">
-          <div style={{ width: `${percentUsed}%`, background: d.color }} className="h-4 rounded transition-all duration-300" />
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-[#0E1E36]">{percentUsed.toFixed(1)}%</div>
+        <div className="bg-gray-100 rounded h-4 w-full relative" style={{ backgroundColor: bgColor }}>
+          <div 
+            style={{ 
+              width: `${Math.min(100, Math.abs(data?.percent_delta || 0) + 100)}%`, 
+              background: indicatorColor 
+            }} 
+            className="h-4 rounded transition-all duration-300" 
+          />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-[#0E1E36]">
+            {((data?.total_spend || 0) / (data?.budget || 500) * 100).toFixed(1)}%
+          </div>
         </div>
       </div>
-      <div className="text-sm text-gray-500 font-medium">Budget: <span className="text-[#0E1E36] font-bold">${d.budget.toFixed(2)}</span></div>
-      <div className="text-sm text-indigo-600 font-semibold mt-2 underline cursor-pointer">See Details</div>
+      <div className="text-sm text-gray-500 font-medium">
+        Status: <span style={{ color: indicatorColor, fontWeight: 'bold' }}>{data?.status || 'Under Budget'}</span>
+      </div>
     </div>
   );
 }
 
-function PromptOptimizerPanel({ onOptimize }: { onOptimize: (data: any) => void }) {
-  const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState("GPT-4o");
-  const [optCost, setOptCost] = useState(false);
+function TopPromptsCard({ data }: { data: any[] }) {
   return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-5 min-w-[320px] max-w-[400px] sticky top-32" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-bold text-xl text-[#0E1E36] mb-1">Prompt Optimizer</div>
-      <textarea
-        className="border border-gray-200 rounded-lg p-3 text-base min-h-[80px] resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
-        placeholder="Paste or write your prompt..."
-        value={prompt}
-        onChange={e => setPrompt(e.target.value)}
-      />
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-semibold text-gray-700">Model</label>
-        <select
-          className="border border-gray-200 rounded-lg p-2 text-base focus:outline-none focus:ring-2 focus:ring-orange-400"
-          value={model}
-          onChange={e => setModel(e.target.value)}
-        >
-          <option value="GPT-4o">GPT-4o</option>
-          <option value="Claude 3 Opus">Claude 3 Opus</option>
-          <option value="Gemini 1.5 Flash">Gemini 1.5 Flash</option>
-        </select>
-        <label className="flex items-center gap-2 mt-2 text-sm font-medium">
-          <input type="checkbox" checked={optCost} onChange={e => setOptCost(e.target.checked)} className="accent-orange-500 w-4 h-4" />
-          Optimize for cost
-        </label>
+    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Top 5 Most Expensive Prompts</div>
+      <div className="flex flex-col gap-3 flex-1">
+        {data && data.length > 0 ? (
+          data.map((prompt, index) => (
+            <div key={index} className="border-l-4 border-[#FF6F3C] pl-3 py-2 bg-gray-50 rounded">
+              <div className="text-sm font-semibold text-gray-800 mb-1">
+                {prompt.prompt}
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-600">{prompt.model}</span>
+                <span className="text-sm font-bold text-[#FF6F3C]">${prompt.cost}</span>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+            <div className="text-center">
+              <div className="text-lg mb-2">📊</div>
+              <div>No prompts analyzed yet</div>
+              <div className="text-xs mt-1">Start using the extension to see cost data</div>
+            </div>
+          </div>
+        )}
       </div>
-      <button
-        className="w-full bg-[#FF6F3C] text-white font-bold text-lg py-3 rounded-lg shadow hover:bg-[#e65d2d] transition"
-        onClick={() => onOptimize({ prompt, model, optimizeForCost: optCost })}
-        disabled={!prompt.trim()}
-      >
-        Optimize
-      </button>
+    </div>
+  );
+}
+
+function MostUsedModelCard({ model }: { model: string }) {
+  const getModelColor = (modelName: string) => {
+    if (modelName.includes('GPT') || modelName.includes('OpenAI')) return '#10A37F';
+    if (modelName.includes('Claude') || modelName.includes('Anthropic')) return '#D97706';
+    if (modelName.includes('Gemini') || modelName.includes('Google')) return '#4285F4';
+    return '#6366F1';
+  };
+
+  const modelColor = getModelColor(model || '');
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Most Used Model</div>
+      <div className="flex-1 flex flex-col items-center justify-center">
+        <div 
+          className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
+          style={{ backgroundColor: `${modelColor}20`, border: `3px solid ${modelColor}` }}
+        >
+          <span className="text-2xl font-bold" style={{ color: modelColor }}>
+            {model && model !== 'No data' ? model.charAt(0) : '?'}
+          </span>
+        </div>
+        <div className="text-xl font-bold text-[#0E1E36] text-center">
+          {model || 'No data'}
+        </div>
+        <div className="text-sm text-gray-500 text-center mt-2">
+          {model && model !== 'No data' ? 'Based on prompt frequency' : 'Start using the extension to see data'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TotalSpendCard({ totalSpend }: { totalSpend: number }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Total Spend</div>
+      <div className="flex-1 flex flex-col items-center justify-center">
+        <div className="text-5xl font-bold text-[#FF6F3C] mb-2">
+          ${(totalSpend || 0).toFixed(2)}
+        </div>
+        <div className="text-lg text-gray-600 mb-4">This Month</div>
+        <div className="w-full bg-gray-100 rounded-full h-2">
+          <div 
+            className="bg-gradient-to-r from-[#FF6F3C] to-[#FF8A5C] h-2 rounded-full transition-all duration-500"
+            style={{ width: `${Math.min(100, (totalSpend || 0) / 5)}%` }}
+          />
+        </div>
+        <div className="text-xs text-gray-500 mt-2 text-center">
+          Cumulative monthly spend from all LLM interactions
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Cost Summary Panel Component
+function CostSummaryPanel() {
+  const [costData, setCostData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCostSummary();
+  }, []);
+
+  const fetchCostSummary = async () => {
+    try {
+      console.log('Fetching cost summary data from API...');
+      const response = await fetch('/api/analytics/cost-summary?user_id=test-user-123&budget=500');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch cost summary: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Cost summary received:', data);
+      
+      setCostData(data);
+    } catch (error) {
+      console.error('Error fetching cost summary:', error);
+      // Fallback to default values on error
+      setCostData({
+        budget_tracker: {
+          total_spend: 0.00,
+          budget: 500.00,
+          percent_delta: -100.0,
+          status: "Under Budget",
+          indicator: "↓"
+        },
+        top_prompts: [],
+        most_used_model: "No data",
+        total_spend: 0.00
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-md p-7 flex items-center justify-center min-h-[320px]">
+            <div className="text-gray-500">Loading...</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <BudgetTrackerCard data={costData?.budget_tracker} />
+      <TopPromptsCard data={costData?.top_prompts} />
+      <MostUsedModelCard model={costData?.most_used_model} />
+      <TotalSpendCard totalSpend={costData?.total_spend} />
     </div>
   );
 }
@@ -827,12 +912,12 @@ export default function ComplyzeDashboard() {
   // Helper to format numbers
   const formatNumber = (n: number) => n.toLocaleString();
 
-  // LLM Usage Cards Section
-  const LLMUsageCards = () => (
-    <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {LLM_CARDS.map((d) => <LLMUsageCard key={d.model} d={d} />)}
-    </div>
-  );
+  // LLM Usage Cards Section - REMOVED, replaced with CostSummaryPanel
+  // const LLMUsageCards = () => (
+  //   <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+  //     {LLM_CARDS.map((d) => <LLMUsageCard key={d.model} d={d} />)}
+  //   </div>
+  // );
 
   // Simulate API call for prompt enhancement
   const handleOptimize = async (data: any) => {
@@ -850,6 +935,46 @@ export default function ComplyzeDashboard() {
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
+
+  function PromptOptimizerPanel({ onOptimize }: { onOptimize: (data: any) => void }) {
+    const [prompt, setPrompt] = useState("");
+    const [model, setModel] = useState("GPT-4o");
+    const [optCost, setOptCost] = useState(false);
+    return (
+      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-5 min-w-[320px] max-w-[400px] sticky top-32" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+        <div className="font-bold text-xl text-[#0E1E36] mb-1">Prompt Optimizer</div>
+        <textarea
+          className="border border-gray-200 rounded-lg p-3 text-base min-h-[80px] resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+          placeholder="Paste or write your prompt..."
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+        />
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold text-gray-700">Model</label>
+          <select
+            className="border border-gray-200 rounded-lg p-2 text-base focus:outline-none focus:ring-2 focus:ring-orange-400"
+            value={model}
+            onChange={e => setModel(e.target.value)}
+          >
+            <option value="GPT-4o">GPT-4o</option>
+            <option value="Claude 3 Opus">Claude 3 Opus</option>
+            <option value="Gemini 1.5 Flash">Gemini 1.5 Flash</option>
+          </select>
+          <label className="flex items-center gap-2 mt-2 text-sm font-medium">
+            <input type="checkbox" checked={optCost} onChange={e => setOptCost(e.target.checked)} className="accent-orange-500 w-4 h-4" />
+            Optimize for cost
+          </label>
+        </div>
+        <button
+          className="w-full bg-[#FF6F3C] text-white font-bold text-lg py-3 rounded-lg shadow hover:bg-[#e65d2d] transition"
+          onClick={() => onOptimize({ prompt, model, optimizeForCost: optCost })}
+          disabled={!prompt.trim()}
+        >
+          Optimize
+        </button>
+      </div>
+    );
+  }
 
   // Pie chart math
   const total = riskBreakdown.reduce((a, b) => a + b.value, 0);
@@ -913,36 +1038,7 @@ export default function ComplyzeDashboard() {
         <div className="flex-1 overflow-y-auto px-6 py-6">
           {optimizerTab === 'optimize' && (
             <>
-              <textarea
-                className="border border-gray-200 rounded-lg p-3 text-base min-h-[80px] w-full resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4"
-                placeholder="Paste or write your prompt..."
-                value={prompt}
-                onChange={e => setPrompt(e.target.value)}
-              />
-              <div className="flex flex-col gap-2 mb-4">
-                <label className="text-sm font-semibold text-gray-700">Model</label>
-                <select
-                  className="border border-gray-200 rounded-lg p-2 text-base focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  value={"GPT-4o"}
-                  onChange={e => {}}
-                  disabled
-                >
-                  <option value="GPT-4o">GPT-4o</option>
-                  <option value="Claude 3 Opus">Claude 3 Opus</option>
-                  <option value="Gemini 1.5 Flash">Gemini 1.5 Flash</option>
-                </select>
-                <label className="flex items-center gap-2 mt-2 text-sm font-medium">
-                  <input type="checkbox" className="accent-orange-500 w-4 h-4" disabled />
-                  Optimize for cost
-                </label>
-              </div>
-              <button
-                className="w-full bg-[#FF6F3C] text-white font-bold text-lg py-3 rounded-lg shadow hover:bg-[#e65d2d] transition mb-4"
-                onClick={() => handleOptimize({ prompt, model: 'GPT-4o', optimizeForCost: false })}
-                disabled={!prompt.trim() || loading}
-              >
-                {loading ? 'Optimizing…' : 'Optimize'}
-              </button>
+              <PromptOptimizerPanel onOptimize={handleOptimize} />
               {/* Optimized Output */}
               {enhancedPrompt && (
                 <div className="mt-4">
@@ -1046,9 +1142,13 @@ export default function ComplyzeDashboard() {
       </div>
       {/* Main Grid */}
       <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Top: 3 LLM Cards */}
-        {LLM_CARDS.map((d) => <LLMUsageCard key={d.model} d={d} />)}
+        {/* Top: 3 LLM Cards - REPLACED WITH COST SUMMARY */}
+        {/* {LLM_CARDS.map((d) => <LLMUsageCard key={d.model} d={d} />)} */}
       </div>
+      
+      {/* Cost Summary Panel - NEW */}
+      <CostSummaryPanel />
+      
       {/* Second Row: Compliance, Risk, Optimizer */}
       <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
         {/* Prompt Integrity Score Card */}

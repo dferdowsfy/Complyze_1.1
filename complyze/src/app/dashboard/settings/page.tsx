@@ -253,15 +253,22 @@ export default function Settings() {
       setLastSaved(new Date());
       
       // Send update to Chrome extension
-      if (typeof window !== 'undefined' && (window as any).chrome?.runtime) {
+      if (typeof window !== 'undefined') {
         try {
-          (window as any).chrome.runtime.sendMessage({
-            action: 'updateRedactionPolicy',
-            user_id: userId,
-            settings: settings
-          });
-        } catch (chromeError) {
-          console.warn('Could not send message to Chrome extension:', chromeError);
+          // Use postMessage to communicate with the extension's content script
+          window.postMessage({
+            type: 'COMPLYZE_UPDATE_REDACTION_SETTINGS',
+            source: 'complyze-website',
+            payload: {
+              user_id: userId,
+              settings: settings,
+              customTerms: customTerms
+            }
+          }, window.location.origin);
+          
+          console.log('Settings update sent to Chrome extension');
+        } catch (error) {
+          console.warn('Could not send message to Chrome extension:', error);
         }
       }
       

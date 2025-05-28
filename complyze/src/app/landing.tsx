@@ -156,8 +156,8 @@ export default function Landing() {
     <div className="min-h-screen bg-[#0E1E36] font-sans text-white">
       {/* Top Navigation */}
       <nav className="flex justify-between items-center px-8 py-6">
-        <div className="text-2xl font-extrabold tracking-widest uppercase">COMPLYZE</div>
-        <div className="flex gap-8 text-base font-medium items-center">
+        <div className="text-2xl font-light tracking-widest uppercase">COMPLYZE</div>
+        <div className="flex gap-8 text-base font-normal items-center">
           <a 
             href="#process" 
             className="hover:underline cursor-pointer"
@@ -347,8 +347,8 @@ export default function Landing() {
 
       {/* Hero Section */}
       <section className="flex flex-col items-center justify-center text-center py-20 px-4">
-        <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">LLM risk is invisible—until it's inevitable.</h1>
-        <p className="text-lg md:text-2xl font-medium mb-10 max-w-2xl">Executives and regulators are asking: 'How are we using AI responsibly?' Complyze gives you an answer before you're scrambling for one.</p>
+        <h1 className="text-4xl md:text-6xl font-extralight mb-6 leading-tight">LLM risk is invisible—until it's inevitable.</h1>
+        <p className="text-lg md:text-2xl font-normal mb-10 max-w-2xl">Executives and regulators are asking: 'How are we using AI responsibly?' Complyze gives you an answer before you're scrambling for one.</p>
         {/* <a href="#how-it-works" className="bg-[#FF6F3C] text-white font-bold text-lg px-8 py-4 rounded-lg shadow-lg hover:bg-[#ff8a5c] transition">See how it works</a> */}
       </section>
 

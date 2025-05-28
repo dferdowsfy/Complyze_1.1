@@ -70,6 +70,12 @@ class ComplyzeBackground {
           .then(result => sendResponse(result));
         return true;
       }
+
+      if (message.type === 'update_redaction_settings') {
+        this.handleRedactionSettingsUpdate(message.payload)
+          .then(result => sendResponse(result));
+        return true;
+      }
     });
   }
 
@@ -297,6 +303,7 @@ class ComplyzeBackground {
       console.log('🔍 Complyze: Real-time analysis request received');
       console.log('🎯 Current API endpoint:', this.apiBase);
       console.log('📊 Current dashboard:', this.dashboardUrl);
+      console.log('🤖 Model detected:', promptData.model || 'Unknown');
       
       // Use the same analyze API but with special handling for real-time
       const analysisResult = await this.analyzePrompt(promptData.prompt);
@@ -306,8 +313,9 @@ class ComplyzeBackground {
         console.log('⚠️  Complyze: High-risk prompt detected! Auto-flagging...');
         console.log('📝 Risk Level:', analysisResult.risk_level);
         console.log('🏷️  Detected Issues:', analysisResult.detectedPII || []);
+        console.log('🤖 Model Used:', promptData.model || 'Unknown');
         
-        // Save to flagged prompts with proper data structure
+        // Save to flagged prompts with proper data structure including model info
         await this.saveFlaggedPrompt({
           prompt: promptData.prompt,
           analysis: {
@@ -316,13 +324,15 @@ class ComplyzeBackground {
             risk_factors: analysisResult.risk_factors || [],
             mapped_controls: analysisResult.mapped_controls || []
           },
-          platform: 'real-time-detection',
-          url: typeof window !== 'undefined' ? window.location?.href : 'unknown',
-          timestamp: new Date().toISOString()
+          platform: promptData.platform || 'real-time-detection',
+          model: promptData.model || 'Unknown',
+          url: promptData.url || (typeof window !== 'undefined' ? window.location?.href : 'unknown'),
+          timestamp: promptData.timestamp || new Date().toISOString()
         });
       } else {
         console.log('✅ Complyze: Low-medium risk prompt, not flagging');
         console.log('📝 Risk Level:', analysisResult.risk_level);
+        console.log('🤖 Model Used:', promptData.model || 'Unknown');
       }
       
       return analysisResult;
@@ -729,6 +739,7 @@ class ComplyzeBackground {
       console.log('🚨 Complyze: FLAGGED PROMPT DETECTED - Saving to database');
       console.log('🎯 Target API:', this.apiBase);
       console.log('📊 Dashboard Location:', this.dashboardUrl);
+      console.log('🤖 Model Information:', data.model || 'Unknown');
       
       // Check authentication first
       const isAuthenticated = await this.checkUserAuth();
@@ -738,7 +749,7 @@ class ComplyzeBackground {
         return;
       }
 
-      // Prepare the flagged prompt data with all necessary fields
+      // Prepare the flagged prompt data with all necessary fields including model info
       const flaggedPromptData = {
         prompt: data.prompt,
         platform: data.platform || 'chrome_extension',
@@ -754,6 +765,7 @@ class ComplyzeBackground {
           mapped_controls: data.analysis?.mapped_controls || [],
           flagged_at: new Date().toISOString(),
           platform_detected: data.platform || 'unknown',
+          model_used: data.model || 'Unknown', // Include model information
           extension_version: 'v2.0',
           auto_flagged: true,
           api_endpoint: this.apiBase, // Track which API saved this
@@ -764,6 +776,7 @@ class ComplyzeBackground {
       console.log('📝 Complyze: Flagged prompt payload:', {
         prompt_preview: flaggedPromptData.prompt.substring(0, 50) + '...',
         platform: flaggedPromptData.platform,
+        model: flaggedPromptData.analysis_metadata.model_used,
         risk_level: flaggedPromptData.risk_level,
         detected_pii: flaggedPromptData.analysis_metadata.detected_pii,
         target_environment: flaggedPromptData.analysis_metadata.saved_from
@@ -788,6 +801,7 @@ class ComplyzeBackground {
           logId: result.logId,
           status: result.status,
           risk_level: result.risk_level,
+          model: flaggedPromptData.analysis_metadata.model_used,
           environment: isProduction ? 'PRODUCTION' : 'LOCAL',
           dashboard: this.dashboardUrl
         });
@@ -816,6 +830,42 @@ class ComplyzeBackground {
       console.error('❌ Complyze: Error saving flagged prompt:', error);
       console.log('🔧 API Target:', this.apiBase);
       console.log('📊 Dashboard:', this.dashboardUrl);
+    }
+  }
+
+  async handleRedactionSettingsUpdate(payload) {
+    try {
+      console.log('Complyze: Updating redaction settings from website');
+      
+      // Store the settings in Chrome storage
+      await chrome.storage.local.set({
+        redactionSettings: payload.settings,
+        customRedactionTerms: payload.customTerms,
+        redactionUserId: payload.user_id,
+        lastSettingsUpdate: new Date().toISOString()
+      });
+      
+      console.log('Complyze: Redaction settings updated successfully');
+      
+      // Notify all tabs that settings have been updated
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.id) {
+          try {
+            chrome.tabs.sendMessage(tab.id, {
+              type: 'redaction_settings_updated',
+              payload: payload
+            });
+          } catch (error) {
+            // Tab might not have content script injected
+          }
+        }
+      }
+      
+      return { success: true, message: 'Settings updated successfully' };
+    } catch (error) {
+      console.error('Complyze: Failed to update redaction settings:', error);
+      return { success: false, error: error.message };
     }
   }
 }

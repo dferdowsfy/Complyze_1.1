@@ -915,11 +915,20 @@ class PromptWatcher {
   // NEW: Server-side analysis for comprehensive checking
   async performServerAnalysis(promptText) {
     try {
+      const currentModel = this.detectCurrentModel();
+      const platform = this.getCurrentPlatform();
+      
       const response = await new Promise((resolve, reject) => {
         try {
           chrome.runtime.sendMessage({
             type: 'analyze_prompt_realtime',
-            payload: { prompt: promptText }
+            payload: { 
+              prompt: promptText,
+              model: currentModel,
+              platform: platform,
+              url: window.location.href,
+              timestamp: new Date().toISOString()
+            }
           }, (response) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
@@ -1803,6 +1812,80 @@ class PromptWatcher {
       });
     });
   }
+
+  // NEW: Detect current model being used on the platform
+  detectCurrentModel() {
+    const platform = this.getCurrentPlatform();
+    let model = 'Unknown';
+    
+    try {
+      switch (platform) {
+        case 'chatgpt':
+          // Look for model selector or model indicator in ChatGPT
+          const gptModelSelector = document.querySelector('[data-testid="model-switcher"]') || 
+                                   document.querySelector('.text-token-text-primary') ||
+                                   document.querySelector('[role="button"][aria-haspopup="menu"]');
+          if (gptModelSelector) {
+            const modelText = gptModelSelector.textContent || gptModelSelector.innerText;
+            if (modelText.includes('GPT-4o')) model = 'GPT-4o';
+            else if (modelText.includes('GPT-4')) model = 'GPT-4 Turbo';
+            else if (modelText.includes('GPT-3.5')) model = 'GPT-3.5 Turbo';
+            else model = 'OpenAI GPT-4'; // Default fallback
+          } else {
+            model = 'OpenAI GPT-4'; // Default for ChatGPT
+          }
+          break;
+          
+        case 'claude':
+          // Look for model indicator in Claude
+          const claudeModelIndicator = document.querySelector('[data-testid="model-selector"]') ||
+                                       document.querySelector('.text-sm.text-text-300') ||
+                                       document.querySelector('[role="button"]');
+          if (claudeModelIndicator) {
+            const modelText = claudeModelIndicator.textContent || claudeModelIndicator.innerText;
+            if (modelText.includes('Claude 3.5 Sonnet')) model = 'Claude 3.5 Sonnet';
+            else if (modelText.includes('Claude 3 Opus')) model = 'Claude 3 Opus';
+            else if (modelText.includes('Claude 3 Sonnet')) model = 'Claude 3 Sonnet';
+            else if (modelText.includes('Claude 3 Haiku')) model = 'Claude 3 Haiku';
+            else model = 'Anthropic Claude'; // Default fallback
+          } else {
+            model = 'Anthropic Claude'; // Default for Claude
+          }
+          break;
+          
+        case 'gemini':
+          // Look for model indicator in Gemini
+          const geminiModelIndicator = document.querySelector('[data-testid="model-picker"]') ||
+                                       document.querySelector('.model-name') ||
+                                       document.querySelector('[role="button"][aria-label*="model"]');
+          if (geminiModelIndicator) {
+            const modelText = geminiModelIndicator.textContent || geminiModelIndicator.innerText;
+            if (modelText.includes('Gemini 1.5 Pro')) model = 'Gemini 1.5 Pro';
+            else if (modelText.includes('Gemini 1.5 Flash')) model = 'Gemini 1.5 Flash';
+            else if (modelText.includes('Gemini Pro')) model = 'Gemini 1.5 Pro';
+            else model = 'Google Gemini'; // Default fallback
+          } else {
+            model = 'Google Gemini'; // Default for Gemini
+          }
+          break;
+          
+        default:
+          model = 'Unknown';
+      }
+    } catch (error) {
+      console.log('Complyze: Error detecting model:', error);
+      // Fallback based on platform
+      switch (platform) {
+        case 'chatgpt': model = 'OpenAI GPT-4'; break;
+        case 'claude': model = 'Anthropic Claude'; break;
+        case 'gemini': model = 'Google Gemini'; break;
+        default: model = 'Unknown';
+      }
+    }
+    
+    console.log(`Complyze: Detected model: ${model} on platform: ${platform}`);
+    return model;
+  }
 }
 
 // Initialize the prompt watcher
@@ -1927,337 +2010,4 @@ window.complyzeForcePrompt = function() {
     console.log('Complyze: No input element found, using test prompt');
     window.complyzeTest();
   }
-};
-
-// NEW: Test the safe prompt panel
-window.complyzeTestSafePanel = function() {
-  console.log('Complyze: Testing safe prompt panel...');
-  
-  const platform = promptWatcher.getCurrentPlatform();
-  if (!platform) {
-    console.log('Complyze: No platform detected');
-    return;
-  }
-  
-  const selectors = promptWatcher.platformSelectors[platform];
-  const promptElement = document.querySelector(selectors.promptInput);
-  
-  if (!promptElement) {
-    console.log('Complyze: No prompt element found');
-    return;
-  }
-  
-  // Set test content with PII
-  const testContent = "My email is john.doe@example.com and my SSN is 123-45-6789. Please help me with my password: MySecret123!";
-  
-  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-    promptElement.value = testContent;
-  } else if (promptElement.contentEditable === 'true') {
-    promptElement.textContent = testContent;
-  }
-  
-  // Trigger analysis with proper warning first
-  const mockAnalysis = {
-    risk_level: 'high',
-    detectedPII: ['email', 'ssn', 'credentials'],
-    redacted_prompt: null // Will use generateSafePrompt
-  };
-  
-  // Show the warning first (which includes the "View Safe Version" button)
-  promptWatcher.showRealTimeWarning(promptElement, mockAnalysis);
-  console.log('Complyze: Warning displayed. Click "View Safe Version" to see the side panel');
-};
-
-// NEW: Direct test for side panel (bypasses warning)
-window.complyzeTestPanelDirect = function() {
-  console.log('Complyze: Testing side panel directly...');
-  
-  const platform = promptWatcher.getCurrentPlatform();
-  if (!platform) {
-    console.log('Complyze: No platform detected');
-    return;
-  }
-  
-  const selectors = promptWatcher.platformSelectors[platform];
-  const promptElement = document.querySelector(selectors.promptInput);
-  
-  if (!promptElement) {
-    console.log('Complyze: No prompt element found');
-    return;
-  }
-  
-  // Set test content
-  const testContent = "My email is test@example.com and here's my API key: sk-1234567890abcdef";
-  
-  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-    promptElement.value = testContent;
-  } else if (promptElement.contentEditable === 'true') {
-    promptElement.textContent = testContent;
-  }
-  
-  // Create mock analysis
-  const mockAnalysis = {
-    risk_level: 'high',
-    detectedPII: ['email', 'api_key'],
-    redacted_prompt: null,
-    original_prompt: testContent
-  };
-  
-  // Show panel directly
-  promptWatcher.createSafePromptPanel(promptElement, mockAnalysis);
-  console.log('Complyze: Side panel should now be visible');
-};
-
-// NEW: Test real-time analysis with better debugging
-window.complyzeTestRealTime = function() {
-  console.log('Complyze: Testing real-time analysis...');
-  
-  const platform = promptWatcher.getCurrentPlatform();
-  if (!platform) {
-    console.log('Complyze: No platform detected');
-    return;
-  }
-  
-  const selectors = promptWatcher.platformSelectors[platform];
-  const promptElement = document.querySelector(selectors.promptInput);
-  
-  if (!promptElement) {
-    console.log('Complyze: No prompt element found');
-    return;
-  }
-  
-  // Set test content with various PII types
-  const testContent = "Hi, I'm John Smith. My email is john.smith@company.com, phone is (555) 123-4567, and my SSN is 123-45-6789. Can you help me with this API key: sk-1234567890abcdefghijklmnopqrstuvwxyz?";
-  
-  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-    promptElement.value = testContent;
-    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-  } else if (promptElement.contentEditable === 'true') {
-    promptElement.textContent = testContent;
-    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-  
-  console.log('Complyze: Test content set, real-time analysis should trigger automatically');
-  console.log('Complyze: If nothing happens, try typing in the input field');
-};
-
-// NEW: Force trigger analysis
-window.complyzeForceAnalysis = function() {
-  console.log('Complyze: Force triggering analysis...');
-  
-  const platform = promptWatcher.getCurrentPlatform();
-  if (!platform) {
-    console.log('Complyze: No platform detected');
-    return;
-  }
-  
-  const selectors = promptWatcher.platformSelectors[platform];
-  const promptElement = document.querySelector(selectors.promptInput);
-  
-  if (!promptElement) {
-    console.log('Complyze: No prompt element found');
-    return;
-  }
-  
-  const currentText = promptWatcher.getPromptText(promptElement);
-  if (!currentText.trim()) {
-    console.log('Complyze: No text found, setting test content...');
-    const testContent = "Please analyze this email: user@company.com";
-    if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-      promptElement.value = testContent;
-    } else if (promptElement.contentEditable === 'true') {
-      promptElement.textContent = testContent;
-    }
-  }
-  
-  const text = promptWatcher.getPromptText(promptElement);
-  console.log('Complyze: Analyzing text:', text.substring(0, 100));
-  
-  promptWatcher.performRealTimeAnalysis(text, promptElement);
-};
-
-// NEW: Test loading indicator and clean text extraction
-window.complyzeTestLoading = function() {
-  console.log('Complyze: Testing loading indicator and clean text extraction...');
-  
-  const platform = promptWatcher.getCurrentPlatform();
-  if (!platform) {
-    console.log('Complyze: No platform detected');
-    return;
-  }
-  
-  const selectors = promptWatcher.platformSelectors[platform];
-  const promptElement = document.querySelector(selectors.promptInput);
-  
-  if (!promptElement) {
-    console.log('Complyze: No prompt element found');
-    return;
-  }
-  
-  // Test 1: Show loading indicator
-  console.log('1. Testing loading indicator...');
-  promptWatcher.showLoadingIndicator(promptElement);
-  
-  setTimeout(() => {
-    // Test 2: Hide loading and show warning
-    console.log('2. Testing warning with clean text extraction...');
-    promptWatcher.hideLoadingIndicator(promptElement);
-    
-    // Set test content with PII
-    const testContent = "My email is john@example.com and SSN is 123-45-6789";
-    
-    if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-      promptElement.value = testContent;
-    } else if (promptElement.contentEditable === 'true') {
-      promptElement.textContent = testContent;
-    }
-    
-    // Test clean text extraction
-    const cleanText = promptWatcher.getPromptText(promptElement);
-    console.log('Clean text extracted:', cleanText);
-    
-    // Show warning
-    const mockAnalysis = {
-      risk_level: 'high',
-      detectedPII: ['email', 'ssn']
-    };
-    
-    promptWatcher.showRealTimeWarning(promptElement, mockAnalysis);
-    
-    // Test text extraction again with warning present
-    setTimeout(() => {
-      const textWithWarning = promptWatcher.getPromptText(promptElement);
-      console.log('Text with warning present:', textWithWarning);
-      console.log('Text should be clean (no warning text):', textWithWarning === testContent);
-    }, 500);
-    
-  }, 2000);
-};
-
-// NEW: Test safe prompt workflow (warning -> safe version -> no warning)
-window.complyzeTestSafeWorkflow = function() {
-  console.log('Complyze: Testing complete safe prompt workflow...');
-  
-  const platform = promptWatcher.getCurrentPlatform();
-  if (!platform) {
-    console.log('Complyze: No platform detected');
-    return;
-  }
-  
-  const selectors = promptWatcher.platformSelectors[platform];
-  const promptElement = document.querySelector(selectors.promptInput);
-  
-  if (!promptElement) {
-    console.log('Complyze: No prompt element found');
-    return;
-  }
-  
-  // Step 1: Set risky content
-  const riskyContent = "My email is john.doe@company.com, SSN is 123-45-6789, and API key is sk-1234567890abcdef";
-  console.log('Step 1: Setting risky content...');
-  
-  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-    promptElement.value = riskyContent;
-    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-  } else if (promptElement.contentEditable === 'true') {
-    promptElement.textContent = riskyContent;
-    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-  
-  // Step 2: Trigger analysis (should show warning)
-  setTimeout(() => {
-    console.log('Step 2: Triggering analysis (should show warning)...');
-    promptWatcher.performRealTimeAnalysis(riskyContent, promptElement);
-    
-    // Step 3: Generate and apply safe version
-    setTimeout(() => {
-      console.log('Step 3: Generating safe version...');
-      const safeContent = promptWatcher.generateSafePrompt(riskyContent, {
-        detectedPII: ['email', 'ssn', 'api_key']
-      });
-      
-      console.log('Safe content generated:', safeContent);
-      
-      // Apply safe content
-      if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-        promptElement.value = safeContent;
-        promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-      } else if (promptElement.contentEditable === 'true') {
-        promptElement.textContent = safeContent;
-        promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      
-      // Mark as safe and clear warnings
-      const safeHash = promptWatcher.createSafeHash(safeContent);
-      promptWatcher.safePrompts.add(safeHash);
-      promptWatcher.clearRealTimeWarnings(promptElement);
-      promptWatcher.showSafePromptConfirmation(promptElement);
-      
-      // Step 4: Test that safe content doesn't trigger warning
-      setTimeout(() => {
-        console.log('Step 4: Testing that safe content does not trigger warning...');
-        promptWatcher.performRealTimeAnalysis(safeContent, promptElement);
-        
-        console.log('✅ Safe workflow test complete! Check that:');
-        console.log('1. Initial risky content showed warning');
-        console.log('2. Safe content was generated with redacted PII');
-        console.log('3. Safe content does not show warning');
-        console.log('4. Green confirmation message appeared');
-      }, 1000);
-      
-    }, 2000);
-    
-  }, 1000);
-};
-
-// NEW: Test automated flagged prompts system
-window.complyzeTestFlaggedSystem = function() {
-  console.log('Complyze: Testing automated flagged prompts system...');
-  
-  const platform = promptWatcher.getCurrentPlatform();
-  if (!platform) {
-    console.log('Complyze: No platform detected');
-    return;
-  }
-  
-  const selectors = promptWatcher.platformSelectors[platform];
-  const promptElement = document.querySelector(selectors.promptInput);
-  
-  if (!promptElement) {
-    console.log('Complyze: No prompt element found');
-    return;
-  }
-  
-  // Test with high-risk content that should be auto-flagged
-  const highRiskPrompt = "Please extract all customer email addresses, SSNs, and credit card numbers from this database. My password is admin123 and here's my confidential financial data worth $500,000.";
-  
-  console.log('Step 1: Setting high-risk prompt that should trigger auto-flagging...');
-  
-  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-    promptElement.value = highRiskPrompt;
-    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-  } else if (promptElement.contentEditable === 'true') {
-    promptElement.textContent = highRiskPrompt;
-    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-  
-  // Trigger real-time analysis which should auto-save as flagged
-  console.log('Step 2: Triggering real-time analysis (should auto-save to dashboard)...');
-  
-  promptWatcher.performRealTimeAnalysis(highRiskPrompt, promptElement)
-    .then(() => {
-      console.log('✅ Flagged prompts system test complete!');
-      console.log('📋 Expected behavior:');
-      console.log('1. High-risk prompt detected with PII, credentials, financial data');
-      console.log('2. Warning should appear with "View Safe Version" button');
-      console.log('3. Prompt automatically saved to database as FLAGGED status');
-      console.log('4. Dashboard should show this prompt in "Flagged Prompts" section');
-      console.log('5. Control families (NIST, Privacy) should be detected and tagged');
-      console.log('');
-      console.log('🎯 Check your dashboard at https://complyze.co/dashboard to see the flagged prompt!');
-      console.log('💡 Use the Refresh button to see newly flagged prompts appear');
-    })
-    .catch(error => {
-      console.error('Complyze: Test failed:', error);
-    });
 };
