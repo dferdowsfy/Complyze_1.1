@@ -1,6 +1,11 @@
 // Enhanced UI injection for Complyze analysis results
+// DISABLED: Using Chrome extension popup instead of injected modal
 class ComplyzeUI {
   constructor() {
+    // Disabled - using Chrome extension popup instead
+    console.log('Complyze: Injected UI disabled - using Chrome extension popup');
+    return;
+    
     this.dashboardUrl = null;
     this.getDashboardUrlFromBackground().then(() => {
       this.init();
