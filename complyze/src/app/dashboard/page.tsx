@@ -201,33 +201,20 @@ const FRAMEWORK_COLORS: Record<string, string> = {
   NSST: 'bg-purple-500',
 };
 
-// --- Mock Flagged Prompts Data ---
-const flaggedPrompts = [
-  {
-    summary: 'Generate an X-Ray analysis for $133,455',
-    frameworks: ['NIST', 'FedRAMP'],
-    date: '2 days ago',
-    risk: 'High',
-  },
-  {
-    summary: 'Load proprietary training data',
-    frameworks: ['SO', 'NIST AI RMF', 'SOC 2'],
-    date: '1 day ago',
-    risk: 'Medium',
-  },
-  {
-    summary: 'NIST AI RMP SOC',
-    frameworks: ['NIST AI RMP SOC', 'SOC 2', 'ISO 27001'],
-    date: '3 hours ago',
-    risk: 'High',
-  },
-  {
-    summary: 'Export flagged prompts to CSV',
-    frameworks: ['FedRAMP', 'ISO 27001'],
-    date: 'just now',
-    risk: 'Low',
-  },
-];
+// --- Flagged Prompt Interface ---
+interface FlaggedPrompt {
+  id: string;
+  summary: string;
+  frameworks: string[];
+  date: string;
+  risk: 'High' | 'Medium' | 'Low';
+  status: string;
+  platform?: string;
+  url?: string;
+  piiTypes?: string[];
+  mappedControls?: any[];
+  detectionTime: string;
+}
 
 function FrameworkTag({ fw }: { fw: string }) {
   const color = FRAMEWORK_COLORS[fw] || 'bg-gray-400';
@@ -237,20 +224,120 @@ function FrameworkTag({ fw }: { fw: string }) {
 }
 
 function FlaggedPromptsPanel() {
+  const [flaggedPrompts, setFlaggedPrompts] = useState<FlaggedPrompt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchFlaggedPrompts();
+  }, []);
+
+  const fetchFlaggedPrompts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/prompts/flagged?limit=10');
+      if (!response.ok) {
+        throw new Error('Failed to fetch flagged prompts');
+      }
+      
+      const data = await response.json();
+      setFlaggedPrompts(data.prompts || []);
+    } catch (err) {
+      console.error('Error fetching flagged prompts:', err);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      // Fall back to empty array on error
+      setFlaggedPrompts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+        <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
+        <div className="flex items-center justify-center py-8">
+          <div className="text-gray-500">Loading flagged prompts...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+        <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
+        <div className="flex items-center justify-center py-8">
+          <div className="text-red-500">Error loading flagged prompts: {error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (flaggedPrompts.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+        <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
+        <div className="flex items-center justify-center py-8">
+          <div className="text-gray-500">No flagged prompts found. Your prompts are looking secure! 🛡️</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
+        <button 
+          onClick={fetchFlaggedPrompts}
+          className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+        >
+          Refresh
+        </button>
+      </div>
       {flaggedPrompts.map((row, i) => (
-        <div key={i} className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 py-3 last:border-b-0">
+        <div key={row.id || i} className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 py-3 last:border-b-0">
           <div className="flex-1">
             <div className="font-semibold text-base text-[#0E1E36] mb-1">{row.summary}</div>
             <div className="flex flex-wrap gap-1 mb-1">
-              {row.frameworks.map(fw => <FrameworkTag key={fw} fw={fw} />)}
+              {row.frameworks?.map(fw => <FrameworkTag key={fw} fw={fw} />)}
             </div>
-            <div className="text-xs text-gray-400">{row.date}</div>
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span>{row.date}</span>
+              {row.platform && (
+                <>
+                  <span>•</span>
+                  <span className="capitalize">{row.platform}</span>
+                </>
+              )}
+              {row.piiTypes && row.piiTypes.length > 0 && (
+                <>
+                  <span>•</span>
+                  <span className="text-red-600 font-medium">
+                    PII: {row.piiTypes.join(', ')}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2 mt-2 md:mt-0">
-            <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${row.risk === 'High' ? 'bg-red-100 text-red-700' : row.risk === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{row.risk} Risk</span>
+            <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
+              row.risk === 'High' ? 'bg-red-100 text-red-700' : 
+              row.risk === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 
+              'bg-green-100 text-green-700'
+            }`}>
+              {row.risk} Risk
+            </span>
+            <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+              row.status === 'flagged' ? 'bg-yellow-100 text-yellow-800' :
+              row.status === 'blocked' ? 'bg-red-100 text-red-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {row.status?.toUpperCase()}
+            </span>
           </div>
         </div>
       ))}

@@ -829,6 +829,13 @@ class PromptWatcher {
         }
       });
       
+      // ENHANCED: Auto-save high-risk prompts as flagged
+      if (response && (response.risk_level === 'high' || response.risk_level === 'critical')) {
+        console.log('Complyze: High-risk prompt detected, will be saved as flagged');
+        // The background script will handle saving to database
+        // We just need to ensure the prompt gets flagged properly
+      }
+      
       return response;
     } catch (error) {
       console.error('Complyze: Server analysis failed (context may be invalidated):', error.message);

@@ -285,30 +285,32 @@ class ComplyzeBackground {
     }
   }
 
-  async handleRealTimeAnalysis(payload) {
+  async handleRealTimeAnalysis(promptData) {
     try {
-      console.log('Complyze: Handling real-time analysis for:', payload.prompt.substring(0, 50) + '...');
+      console.log('Complyze: Handling real-time analysis request');
       
-      // Check if user is authenticated
-      const isAuthenticated = await this.checkUserAuth();
-      if (!isAuthenticated) {
-        console.log('Complyze: User not authenticated for real-time analysis');
-        return { error: 'Authentication required' };
+      // Use the same analyze API but with special handling for real-time
+      const analysisResult = await this.analyzePrompt(promptData.prompt);
+      
+      // ENHANCED: Auto-save high-risk prompts to dashboard as flagged
+      if (analysisResult.risk_level === 'high' || analysisResult.risk_level === 'critical') {
+        console.log('Complyze: High-risk prompt detected, saving to dashboard as flagged');
+        await this.saveFlaggedPrompt({
+          prompt: promptData.prompt,
+          analysis: analysisResult,
+          platform: 'real-time-detection',
+          url: window.location?.href || 'unknown',
+          timestamp: new Date().toISOString()
+        });
       }
-
-      // Perform the analysis
-      const result = await this.analyzePrompt(payload.prompt);
-      console.log('Complyze: Real-time analysis result:', result);
       
-      return result;
+      return analysisResult;
     } catch (error) {
       console.error('Complyze: Real-time analysis failed:', error);
-      return { 
-        error: error.message,
-        risk_level: 'low', 
-        clarity_score: 0, 
-        quality_score: 0, 
-        control_tags: [] 
+      return {
+        risk_level: 'low',
+        redacted_prompt: promptData.prompt,
+        detectedPII: []
       };
     }
   }
@@ -668,6 +670,107 @@ class ComplyzeBackground {
       }
     } catch (error) {
       console.log('Complyze: Periodic auth sync error:', error.message);
+    }
+  }
+
+  // NEW: Save flagged prompt to database
+  async saveFlaggedPrompt(data) {
+    try {
+      console.log('Complyze: Saving flagged prompt to database');
+      
+      // Check authentication first
+      const isAuthenticated = await this.checkUserAuth();
+      if (!isAuthenticated) {
+        console.log('Complyze: User not authenticated, cannot save flagged prompt');
+        return;
+      }
+
+      // Prepare the flagged prompt data
+      const flaggedPromptData = {
+        prompt: data.prompt,
+        platform: data.platform,
+        url: data.url,
+        timestamp: data.timestamp,
+        source: 'chrome_extension_realtime',
+        risk_level: data.analysis.risk_level,
+        status: 'flagged', // Force status to flagged for high-risk prompts
+        analysis_metadata: {
+          detection_method: 'real-time',
+          detected_pii: data.analysis.detectedPII || [],
+          risk_factors: data.analysis.risk_factors || [],
+          mapped_controls: data.analysis.mapped_controls || []
+        }
+      };
+
+      // Send to ingest API with forced flagged status
+      const response = await fetch(`${this.apiBase}/prompts/ingest`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(flaggedPromptData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Complyze: Flagged prompt saved with ID:', result.logId);
+        
+        // If we have a logId, update it to flagged status immediately
+        if (result.logId) {
+          await this.updatePromptStatus(result.logId, 'flagged', data.analysis);
+        }
+        
+        // Update local statistics
+        await this.updateStats('flagged', data.platform);
+        
+        return result.logId;
+      } else {
+        console.error('Complyze: Failed to save flagged prompt:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Complyze: Error saving flagged prompt:', error);
+    }
+  }
+
+  // NEW: Update prompt status to flagged
+  async updatePromptStatus(promptId, status, analysis) {
+    try {
+      console.log('Complyze: Updating prompt status to:', status);
+      
+      const updateData = {
+        promptId: promptId,
+        status: status,
+        scores: {
+          clarity: analysis.clarity_score || 0,
+          quality: analysis.quality_score || 0
+        },
+        risk: analysis.risk_level || 'high',
+        mappedControls: analysis.mapped_controls || [],
+        suggestions: analysis.suggestions || [],
+        additionalMetadata: {
+          detection_method: 'real-time-prevention',
+          flagged_at: new Date().toISOString(),
+          platform_detected: analysis.platform || 'unknown'
+        }
+      };
+
+      const response = await fetch(`${this.apiBase}/prompts/finalize`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      if (response.ok) {
+        console.log('Complyze: Prompt status updated successfully');
+      } else {
+        console.error('Complyze: Failed to update prompt status:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Complyze: Error updating prompt status:', error);
     }
   }
 }
