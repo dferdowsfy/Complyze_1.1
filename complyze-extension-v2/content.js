@@ -199,7 +199,16 @@ class PromptWatcher {
     if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
       return element.value;
     } else if (element.contentEditable === 'true') {
-      return element.innerText || element.textContent;
+      // For contenteditable elements, we need to be more careful
+      // Clone the element to avoid modifying the original
+      const clone = element.cloneNode(true);
+      
+      // Remove any Complyze warning elements from the clone
+      const warnings = clone.querySelectorAll('#complyze-realtime-warning, #complyze-realtime-info, [id^="complyze-"]');
+      warnings.forEach(warning => warning.remove());
+      
+      // Get clean text content
+      return clone.innerText || clone.textContent || '';
     }
     return '';
   }
@@ -501,15 +510,23 @@ class PromptWatcher {
       this.isAnalyzing = true;
       console.log('Complyze: Performing real-time analysis on:', promptText.substring(0, 50) + '...');
       
+      // Show loading indicator
+      this.showLoadingIndicator(promptElement);
+      
       // Quick local analysis first (basic PII detection)
       const quickAnalysis = this.performQuickLocalAnalysis(promptText);
       
       if (quickAnalysis.hasHighRisk) {
+        this.hideLoadingIndicator(promptElement);
         this.showRealTimeWarning(promptElement, quickAnalysis);
+        return; // Don't proceed to server analysis if local analysis found high risk
       }
       
       // Then perform full server-side analysis
       const fullAnalysis = await this.performServerAnalysis(promptText);
+      
+      // Hide loading indicator
+      this.hideLoadingIndicator(promptElement);
       
       if (fullAnalysis && (fullAnalysis.risk_level === 'high' || fullAnalysis.risk_level === 'critical')) {
         this.showRealTimeWarning(promptElement, fullAnalysis, true);
@@ -521,6 +538,7 @@ class PromptWatcher {
       
     } catch (error) {
       console.error('Complyze: Real-time analysis failed:', error);
+      this.hideLoadingIndicator(promptElement);
     } finally {
       this.isAnalyzing = false;
     }
@@ -703,7 +721,11 @@ class PromptWatcher {
 
   // NEW: Show real-time warning overlay with side panel
   showRealTimeWarning(promptElement, analysis, isServerAnalysis = false) {
-    this.clearRealTimeWarnings(promptElement);
+    // Clear existing warnings but keep loading indicator briefly
+    const existingWarning = document.querySelector('#complyze-realtime-warning');
+    const existingInfo = document.querySelector('#complyze-realtime-info');
+    if (existingWarning) existingWarning.remove();
+    if (existingInfo) existingInfo.remove();
     
     const warningId = 'complyze-realtime-warning';
     const warning = document.createElement('div');
@@ -842,9 +864,11 @@ class PromptWatcher {
   clearRealTimeWarnings(promptElement) {
     const existingWarning = document.querySelector('#complyze-realtime-warning');
     const existingInfo = document.querySelector('#complyze-realtime-info');
+    const existingLoading = document.querySelector('#complyze-loading-indicator');
     
     if (existingWarning) existingWarning.remove();
     if (existingInfo) existingInfo.remove();
+    if (existingLoading) existingLoading.remove();
     
     this.preventSubmission = false;
     this.blockSubmitButtons(false);
@@ -1184,6 +1208,75 @@ class PromptWatcher {
 
     return safePrompt;
   }
+
+  // NEW: Show loading indicator
+  showLoadingIndicator(promptElement) {
+    // Remove any existing loading indicator
+    this.hideLoadingIndicator(promptElement);
+    
+    const loadingId = 'complyze-loading-indicator';
+    const loading = document.createElement('div');
+    loading.id = loadingId;
+    loading.style.cssText = `
+      position: absolute;
+      top: -45px;
+      left: 0;
+      right: 0;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+      z-index: 999998;
+      animation: slideDown 0.3s ease-out;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    `;
+    
+    loading.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="complyze-spinner" style="
+          width: 16px;
+          height: 16px;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          border-top: 2px solid white;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        "></div>
+        <span>🛡️ Complyze analyzing...</span>
+      </div>
+    `;
+    
+    // Add spinner animation styles if not already present
+    if (!document.querySelector('#complyze-spinner-styles')) {
+      const style = document.createElement('style');
+      style.id = 'complyze-spinner-styles';
+      style.textContent = `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Position relative to prompt element
+    const container = promptElement.closest('form, div') || promptElement.parentElement;
+    
+    if (container) {
+      container.style.position = 'relative';
+      container.appendChild(loading);
+    }
+  }
+
+  // NEW: Hide loading indicator
+  hideLoadingIndicator(promptElement) {
+    const existingLoading = document.querySelector('#complyze-loading-indicator');
+    if (existingLoading) {
+      existingLoading.remove();
+    }
+  }
 }
 
 // Initialize the prompt watcher
@@ -1507,3 +1600,61 @@ window.complyzeTogglePrevention = () => {
   console.log('Complyze: Prevention toggled to:', promptWatcher.preventSubmission);
   promptWatcher.blockSubmitButtons(promptWatcher.preventSubmission);
 }; 
+
+// NEW: Test loading indicator and clean text extraction
+window.complyzeTestLoading = function() {
+  console.log('Complyze: Testing loading indicator and clean text extraction...');
+  
+  const platform = promptWatcher.getCurrentPlatform();
+  if (!platform) {
+    console.log('Complyze: No platform detected');
+    return;
+  }
+  
+  const selectors = promptWatcher.platformSelectors[platform];
+  const promptElement = document.querySelector(selectors.promptInput);
+  
+  if (!promptElement) {
+    console.log('Complyze: No prompt element found');
+    return;
+  }
+  
+  // Test 1: Show loading indicator
+  console.log('1. Testing loading indicator...');
+  promptWatcher.showLoadingIndicator(promptElement);
+  
+  setTimeout(() => {
+    // Test 2: Hide loading and show warning
+    console.log('2. Testing warning with clean text extraction...');
+    promptWatcher.hideLoadingIndicator(promptElement);
+    
+    // Set test content with PII
+    const testContent = "My email is john@example.com and SSN is 123-45-6789";
+    
+    if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+      promptElement.value = testContent;
+    } else if (promptElement.contentEditable === 'true') {
+      promptElement.textContent = testContent;
+    }
+    
+    // Test clean text extraction
+    const cleanText = promptWatcher.getPromptText(promptElement);
+    console.log('Clean text extracted:', cleanText);
+    
+    // Show warning
+    const mockAnalysis = {
+      risk_level: 'high',
+      detectedPII: ['email', 'ssn']
+    };
+    
+    promptWatcher.showRealTimeWarning(promptElement, mockAnalysis);
+    
+    // Test text extraction again with warning present
+    setTimeout(() => {
+      const textWithWarning = promptWatcher.getPromptText(promptElement);
+      console.log('Text with warning present:', textWithWarning);
+      console.log('Text should be clean (no warning text):', textWithWarning === testContent);
+    }, 500);
+    
+  }, 2000);
+};
