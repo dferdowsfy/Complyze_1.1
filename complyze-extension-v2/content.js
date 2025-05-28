@@ -384,10 +384,10 @@ class PromptWatcher {
     
     // Check if extension is enabled (with error handling)
     try {
-      const settings = await chrome.storage.local.get(['extensionEnabled']);
-      if (settings.extensionEnabled === false) {
-        console.log('Complyze: Extension is disabled, skipping analysis');
-        return;
+    const settings = await chrome.storage.local.get(['extensionEnabled']);
+    if (settings.extensionEnabled === false) {
+      console.log('Complyze: Extension is disabled, skipping analysis');
+      return;
       }
     } catch (error) {
       console.log('Complyze: Could not access extension settings (context may be invalidated):', error.message);
@@ -462,15 +462,15 @@ class PromptWatcher {
     
     // Send to background script for processing (with error handling)
     try {
-      chrome.runtime.sendMessage({
-        type: 'analyze_prompt',
-        payload: {
-          prompt: userPrompt,
-          platform: this.getCurrentPlatform(),
-          url: window.location.href,
-          timestamp: new Date().toISOString()
-        }
-      });
+    chrome.runtime.sendMessage({
+      type: 'analyze_prompt',
+      payload: {
+        prompt: userPrompt,
+        platform: this.getCurrentPlatform(),
+        url: window.location.href,
+        timestamp: new Date().toISOString()
+      }
+    });
     } catch (error) {
       console.log('Complyze: Could not send message to background script (context may be invalidated):', error.message);
     }
@@ -1583,7 +1583,7 @@ window.complyzeTest = function(testPrompt = "Hello, my name is John Doe and my e
     platform: window.location.hostname,
     url: window.location.href,
     timestamp: new Date().toISOString()
-    };
+  };
   
   console.log('Complyze: Sending test prompt to background script:', promptData);
   

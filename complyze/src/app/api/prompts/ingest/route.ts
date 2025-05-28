@@ -10,7 +10,7 @@ interface IngestRequestBody {
   userId?: string;
   projectId?: string;
   source?: string;
-  status?: 'pending' | 'flagged' | 'blocked';
+  status?: 'pending' | 'flagged' | 'blocked' | 'approved';
   risk_level?: 'low' | 'medium' | 'high' | 'critical';
   analysis_metadata?: Record<string, any>;
 }
@@ -49,7 +49,7 @@ async function getUserFromRequest(request: NextRequest): Promise<{ userId: strin
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as IngestRequestBody;
-    const { prompt, platform, url, timestamp, source } = body;
+    const { prompt, platform, url, timestamp, source, status, risk_level, analysis_metadata } = body;
 
     if (!prompt) {
       return NextResponse.json({ error: 'Missing required field: prompt' }, { status: 400 });
@@ -100,7 +100,11 @@ export async function POST(req: NextRequest) {
     // 1. Run redaction
     const redactionOutput: RedactionResult = await comprehensiveRedact(prompt);
 
-    // 2. Log to Supabase (prompt_logs table)
+    // 2. Determine final status and risk level
+    const finalStatus = status || 'pending';
+    const finalRiskLevel = risk_level || (redactionOutput.redactionDetails.length > 0 ? 'medium' : 'low');
+
+    // 3. Log to Supabase (prompt_logs table)
     const logEntry = {
       original_prompt: prompt,
       redacted_prompt: redactionOutput.redactedText,
@@ -108,14 +112,15 @@ export async function POST(req: NextRequest) {
       project_id: projectId,
       platform: platform || null,
       url: url || null,
-      risk_level: body.risk_level || null,
       redaction_details: redactionOutput.redactionDetails,
-      status: body.status || 'pending' as const,
+      status: finalStatus,
+      risk_level: finalRiskLevel,
+      mapped_controls: analysis_metadata?.mapped_controls || [],
       metadata: {
         source: source || 'api',
         ingested_at: timestamp || new Date().toISOString(),
         redaction_count: redactionOutput.redactionDetails.length,
-        ...(body.analysis_metadata || {})
+        ...(analysis_metadata || {})
       }
     };
 
@@ -133,14 +138,15 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
-    // 3. Return redacted prompt and pending status
+    // 4. Return response with final status
     return NextResponse.json({
       message: 'Prompt ingested successfully',
       logId: loggedPrompt.id,
       redactedPrompt: redactionOutput.redactedText,
       piiDetected: redactionOutput.redactionDetails.map(detail => detail.type),
       redactionCount: redactionOutput.redactionDetails.length,
-      status: body.status || 'pending'
+      status: finalStatus,
+      risk_level: finalRiskLevel
     }, { status: 201 });
 
   } catch (error: any) {

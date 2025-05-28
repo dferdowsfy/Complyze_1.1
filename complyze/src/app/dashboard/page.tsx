@@ -227,29 +227,31 @@ function FlaggedPromptsPanel() {
   const [flaggedPrompts, setFlaggedPrompts] = useState<FlaggedPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  useEffect(() => {
+    fetchFlaggedPrompts();
+  }, []);
 
   const fetchFlaggedPrompts = async () => {
     try {
       setLoading(true);
       setError(null);
       
+      console.log('Complyze Dashboard: Fetching flagged prompts...');
       const response = await fetch('/api/prompts/flagged?limit=10');
+      console.log('Complyze Dashboard: Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch flagged prompts');
+        const errorText = await response.text();
+        console.error('Complyze Dashboard: API error:', errorText);
+        throw new Error(`Failed to fetch flagged prompts: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
-      const newPrompts = data.prompts || [];
+      console.log('Complyze Dashboard: API response:', data);
+      console.log('Complyze Dashboard: Number of flagged prompts:', data.prompts?.length || 0);
       
-      // Check if there are new prompts since last refresh
-      if (flaggedPrompts.length > 0 && newPrompts.length > flaggedPrompts.length) {
-        console.log('Complyze: New flagged prompts detected!');
-        // Could add a toast notification here if desired
-      }
-      
-      setFlaggedPrompts(newPrompts);
-      setLastRefresh(new Date());
+      setFlaggedPrompts(data.prompts || []);
     } catch (err) {
       console.error('Error fetching flagged prompts:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -259,18 +261,6 @@ function FlaggedPromptsPanel() {
       setLoading(false);
     }
   };
-
-  // Auto-refresh every 30 seconds to catch new flagged prompts from extension
-  useEffect(() => {
-    fetchFlaggedPrompts(); // Initial load
-    
-    const interval = setInterval(() => {
-      console.log('Complyze: Auto-refreshing flagged prompts...');
-      fetchFlaggedPrompts();
-    }, 30000); // 30 seconds
-    
-    return () => clearInterval(interval);
-  }, []);
 
   if (loading) {
     return (

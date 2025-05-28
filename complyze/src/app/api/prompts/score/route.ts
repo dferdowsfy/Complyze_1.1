@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     };
 
     const { data: updatedLog, error: dbError } = await supabase
-      .from('prompt_logs')
+      .from('PromptLog')
       .update(updateData)
       .eq('id', promptLogId)
       .select(); // Optionally get the updated row back

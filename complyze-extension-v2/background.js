@@ -685,14 +685,14 @@ class ComplyzeBackground {
         return;
       }
 
-      // Prepare the flagged prompt data with status set directly
+      // Prepare the flagged prompt data with all necessary fields
       const flaggedPromptData = {
         prompt: data.prompt,
         platform: data.platform,
         url: data.url,
         timestamp: data.timestamp,
         source: 'chrome_extension_realtime',
-        status: 'flagged', // Set status directly in ingest API
+        status: 'flagged', // Set status directly
         risk_level: data.analysis.risk_level || 'high', // Set risk level directly
         analysis_metadata: {
           detection_method: 'real-time',
@@ -704,9 +704,7 @@ class ComplyzeBackground {
         }
       };
 
-      console.log('Complyze: Sending flagged prompt data:', flaggedPromptData);
-
-      // Send to ingest API with flagged status
+      // Send to ingest API - it will now handle flagged status directly
       const response = await fetch(`${this.apiBase}/prompts/ingest`, {
         method: 'POST',
         headers: {
@@ -718,65 +716,20 @@ class ComplyzeBackground {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Complyze: Flagged prompt saved successfully:', result);
+        console.log('Complyze: Flagged prompt saved with ID:', result.logId);
+        console.log('Complyze: Final status:', result.status);
+        console.log('Complyze: Risk level:', result.risk_level);
         
         // Update local statistics
         await this.updateStats('flagged', data.platform);
         
         return result.logId;
       } else {
-        const errorText = await response.text();
-        console.error('Complyze: Failed to save flagged prompt:', response.status, errorText);
+        const errorData = await response.json();
+        console.error('Complyze: Failed to save flagged prompt:', response.statusText, errorData);
       }
     } catch (error) {
       console.error('Complyze: Error saving flagged prompt:', error);
-    }
-  }
-
-  // NEW: Update prompt status to flagged
-  async updatePromptStatus(promptId, status, analysis) {
-    try {
-      console.log('Complyze: Updating prompt status to:', status);
-      
-      const updateData = {
-        promptId: promptId,
-        status: status,
-        scores: {
-          clarity: analysis.clarity_score || 0,
-          quality: analysis.quality_score || 0
-        },
-        risk: analysis.risk_level || 'high',
-        mappedControls: analysis.mapped_controls || [],
-        suggestions: analysis.suggestions || [],
-        additionalMetadata: {
-          detection_method: 'real-time-prevention',
-          flagged_at: new Date().toISOString(),
-          platform_detected: analysis.platform || 'unknown',
-          detected_pii: analysis.detectedPII || [],
-          risk_factors: analysis.risk_factors || []
-        }
-      };
-
-      console.log('Complyze: Sending finalize request with data:', updateData);
-
-      const response = await fetch(`${this.apiBase}/prompts/finalize`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(updateData)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Complyze: Prompt status updated successfully:', result);
-      } else {
-        const errorText = await response.text();
-        console.error('Complyze: Failed to update prompt status:', response.status, errorText);
-      }
-    } catch (error) {
-      console.error('Complyze: Error updating prompt status:', error);
     }
   }
 }

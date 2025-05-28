@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     const projectId = searchParams.get('projectId');
 
     let query = supabase
-      .from('prompt_logs')
+      .from('PromptLog')
       .select('original_prompt, category, status, metadata');
 
     if (projectId) {

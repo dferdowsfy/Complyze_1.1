@@ -45,4 +45,176 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    console.log('Creating sample flagged prompts...');
+
+    // First, get or create a user
+    let { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id, email')
+      .limit(1);
+
+    let userId;
+    if (usersError || !users || users.length === 0) {
+      console.log('No users found, creating test user...');
+      // Create a test user
+      const { data: newUser, error: createUserError } = await supabase
+        .from('users')
+        .insert({
+          email: 'test@complyze.co',
+          full_name: 'Test User',
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (createUserError) {
+        return NextResponse.json({ 
+          error: 'Failed to create test user', 
+          details: createUserError.message 
+        }, { status: 500 });
+      }
+      userId = newUser.id;
+    } else {
+      userId = users[0].id;
+    }
+
+    // Get or create a project for this user
+    let { data: projects, error: projectsError } = await supabase
+      .from('projects')
+      .select('id, name')
+      .eq('user_id', userId)
+      .limit(1);
+
+    let projectId;
+    if (projectsError || !projects || projects.length === 0) {
+      console.log('No projects found, creating test project...');
+      // Create a test project
+      const { data: newProject, error: createProjectError } = await supabase
+        .from('projects')
+        .insert({
+          name: 'Test Project',
+          user_id: userId,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (createProjectError) {
+        return NextResponse.json({ 
+          error: 'Failed to create test project', 
+          details: createProjectError.message 
+        }, { status: 500 });
+      }
+      projectId = newProject.id;
+    } else {
+      projectId = projects[0].id;
+    }
+
+    console.log(`Using userId: ${userId}, projectId: ${projectId}`);
+
+    // Create sample flagged prompts
+    const samplePrompts = [
+      {
+        original_prompt: "Can you help me analyze this customer data? John Smith, email: john.smith@email.com, SSN: 123-45-6789",
+        redacted_prompt: "Can you help me analyze this customer data? [NAME], email: [EMAIL], SSN: [SSN]",
+        user_id: userId,
+        project_id: projectId,
+        platform: 'chatgpt',
+        url: 'https://chat.openai.com',
+        status: 'flagged',
+        risk_level: 'high',
+        redaction_details: [
+          { type: 'NAME', original: 'John Smith', redacted: '[NAME]' },
+          { type: 'EMAIL', original: 'john.smith@email.com', redacted: '[EMAIL]' },
+          { type: 'SSN', original: '123-45-6789', redacted: '[SSN]' }
+        ],
+        mapped_controls: [
+          { controlId: 'NIST-SC-28', description: 'Protection of Information at Rest' },
+          { controlId: 'Privacy-PII', description: 'PII Protection' }
+        ],
+        metadata: {
+          source: 'chrome_extension_realtime',
+          detection_method: 'real-time',
+          flagged_at: new Date().toISOString()
+        }
+      },
+      {
+        original_prompt: "Write a SQL query to get all user passwords from the database",
+        redacted_prompt: "Write a SQL query to get all user [SENSITIVE_DATA] from the database",
+        user_id: userId,
+        project_id: projectId,
+        platform: 'claude',
+        url: 'https://claude.ai',
+        status: 'flagged',
+        risk_level: 'high',
+        redaction_details: [
+          { type: 'SENSITIVE_DATA', original: 'passwords', redacted: '[SENSITIVE_DATA]' }
+        ],
+        mapped_controls: [
+          { controlId: 'OWASP-LLM-06', description: 'Sensitive Information Disclosure' },
+          { controlId: 'NIST-AC-3', description: 'Access Enforcement' }
+        ],
+        metadata: {
+          source: 'chrome_extension_realtime',
+          detection_method: 'real-time',
+          flagged_at: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
+        }
+      },
+      {
+        original_prompt: "My API key is sk-1234567890abcdef. Can you help me debug this code?",
+        redacted_prompt: "My API key is [API_KEY]. Can you help me debug this code?",
+        user_id: userId,
+        project_id: projectId,
+        platform: 'gemini',
+        url: 'https://gemini.google.com',
+        status: 'flagged',
+        risk_level: 'medium',
+        redaction_details: [
+          { type: 'API_KEY', original: 'sk-1234567890abcdef', redacted: '[API_KEY]' }
+        ],
+        mapped_controls: [
+          { controlId: 'NIST-IA-5', description: 'Authenticator Management' },
+          { controlId: 'Privacy-API', description: 'API Key Protection' }
+        ],
+        metadata: {
+          source: 'chrome_extension_realtime',
+          detection_method: 'real-time',
+          flagged_at: new Date(Date.now() - 7200000).toISOString() // 2 hours ago
+        }
+      }
+    ];
+
+    const { data: insertedPrompts, error: insertError } = await supabase
+      .from('prompt_logs')
+      .insert(samplePrompts)
+      .select();
+
+    if (insertError) {
+      console.error('Error inserting sample prompts:', insertError);
+      return NextResponse.json({ 
+        error: 'Failed to create sample prompts', 
+        details: insertError.message 
+      }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Sample flagged prompts created successfully',
+      created: insertedPrompts?.length || 0,
+      userId: userId,
+      projectId: projectId,
+      prompts: insertedPrompts
+    });
+
+  } catch (error) {
+    console.error('Error creating sample prompts:', error);
+    return NextResponse.json(
+      { error: 'Failed to create sample prompts', details: error },
+      { status: 500 }
+    );
+  }
 } 
