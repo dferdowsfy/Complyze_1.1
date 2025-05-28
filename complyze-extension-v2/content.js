@@ -490,44 +490,161 @@ class PromptWatcher {
     }
   }
 
-  // NEW: Quick local analysis for immediate feedback
+  // NEW: Comprehensive local analysis with all PII/PHI/PCI and enterprise patterns
   performQuickLocalAnalysis(text) {
-    const piiPatterns = {
-      email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-      phone: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g,
-      ssn: /\b\d{3}-?\d{2}-?\d{4}\b/g,
-      creditCard: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
-      apiKey: /\b[A-Za-z0-9]{32,}\b/g
-    };
-    
     const detectedPII = [];
     let hasHighRisk = false;
+    let hasCriticalRisk = false;
+
+    // ✅ Core PII/PHI/PCI (Standard Compliance)
+    const corePatterns = {
+      // Personal Identifiers
+      email: { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, risk: 'medium' },
+      phone: { pattern: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g, risk: 'medium' },
+      fullName: { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, risk: 'low' },
+      
+      // Financial Data
+      ssn: { pattern: /\b\d{3}-?\d{2}-?\d{4}\b/g, risk: 'critical' },
+      creditCard: { pattern: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b/g, risk: 'critical' },
+      bankAccount: { pattern: /\b\d{8,17}\b/g, risk: 'high' },
+      routingNumber: { pattern: /\b[0-9]{9}\b/g, risk: 'high' },
+      
+      // Government IDs
+      driverLicense: { pattern: /\b[A-Z]{1,2}\d{6,8}\b/g, risk: 'high' },
+      passport: { pattern: /\b[A-Z]{1,2}\d{6,9}\b/g, risk: 'high' },
+      
+      // Health Information
+      healthInfo: { pattern: /\b(?:diagnosis|treatment|prescription|medical|health|patient|doctor|hospital|clinic)\b/gi, risk: 'high' },
+      insurancePolicy: { pattern: /\b[A-Z]{2,4}\d{6,12}\b/g, risk: 'medium' },
+      
+      // Network/Device
+      ipAddress: { pattern: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, risk: 'medium' },
+      macAddress: { pattern: /\b[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}\b/g, risk: 'medium' }
+    };
+
+    // 🏢 Enterprise-Specific Company Data
+    const enterprisePatterns = {
+      // Technical Assets
+      apiKey: { pattern: /\b(?:sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,}|[a-zA-Z0-9]{32,})\b/g, risk: 'critical' },
+      jwtToken: { pattern: /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g, risk: 'critical' },
+      oauthSecret: { pattern: /\b(?:client_secret|oauth_token|access_token|refresh_token)[\s:=]+[a-zA-Z0-9_-]+/gi, risk: 'critical' },
+      sshKey: { pattern: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g, risk: 'critical' },
+      
+      // Internal URLs and Services
+      internalUrl: { pattern: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g, risk: 'high' },
+      internalService: { pattern: /\b(?:ServiceNow|Snowflake|Redshift|Databricks|Splunk|Tableau)\s+(?:instance|database|server)/gi, risk: 'medium' },
+      
+      // Project and Code Names
+      projectName: { pattern: /\b(?:Project|Operation|Initiative)\s+[A-Z][a-zA-Z]+\b/g, risk: 'medium' },
+      codeNames: { pattern: /\b[A-Z][a-zA-Z]+(?:DB|API|Service|Platform)\b/g, risk: 'medium' },
+      
+      // Financial and Strategic
+      revenueData: { pattern: /\$[\d,]+(?:\.\d{2})?\s*(?:million|billion|M|B|revenue|profit|loss)/gi, risk: 'high' },
+      financialProjections: { pattern: /\b(?:Q[1-4]|FY\d{2,4})\s+(?:revenue|earnings|profit|forecast)/gi, risk: 'high' },
+      
+      // IP Ranges and Network
+      cidrRange: { pattern: /\b(?:10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\/\d{1,2}\b/g, risk: 'medium' },
+      
+      // Regulatory and Compliance
+      exportControl: { pattern: /\b(?:ITAR|EAR|export.controlled|dual.use)\b/gi, risk: 'critical' },
+      cui: { pattern: /\b(?:CUI|Controlled Unclassified Information)\b/gi, risk: 'critical' },
+      whistleblower: { pattern: /\b(?:whistleblower|insider.threat|investigation|compliance.violation)\b/gi, risk: 'critical' }
+    };
+
+    // Sensitive Keywords (Context-Aware)
+    const sensitiveKeywords = {
+      credentials: { pattern: /\b(?:password|secret|token|key|credential|auth|login)\s*[:=]\s*\S+/gi, risk: 'critical' },
+      confidential: { pattern: /\b(?:confidential|private|internal.only|restricted|classified)\b/gi, risk: 'high' },
+      security: { pattern: /\b(?:vulnerability|exploit|backdoor|zero.day|penetration.test)\b/gi, risk: 'high' },
+      legal: { pattern: /\b(?:attorney.client|privileged|litigation|settlement|NDA)\b/gi, risk: 'high' }
+    };
+
+    // Check all patterns
+    const allPatterns = { ...corePatterns, ...enterprisePatterns, ...sensitiveKeywords };
     
-    for (const [type, pattern] of Object.entries(piiPatterns)) {
-      const matches = text.match(pattern);
+    for (const [type, config] of Object.entries(allPatterns)) {
+      const matches = text.match(config.pattern);
       if (matches) {
         detectedPII.push(type);
-        if (type === 'ssn' || type === 'creditCard' || type === 'apiKey') {
-          hasHighRisk = true;
+        
+        switch (config.risk) {
+          case 'critical':
+            hasCriticalRisk = true;
+            hasHighRisk = true;
+            break;
+          case 'high':
+            hasHighRisk = true;
+            break;
+          case 'medium':
+            // Medium risk doesn't set hasHighRisk
+            break;
         }
       }
     }
-    
-    // Check for sensitive keywords
-    const sensitiveKeywords = ['password', 'secret', 'confidential', 'private key', 'token', 'credentials'];
-    const hasSensitiveKeywords = sensitiveKeywords.some(keyword => 
-      text.toLowerCase().includes(keyword)
-    );
-    
-    if (hasSensitiveKeywords) {
-      hasHighRisk = true;
-      detectedPII.push('sensitive_keywords');
+
+    // Additional context-based analysis
+    const contextAnalysis = this.analyzeContext(text);
+    if (contextAnalysis.hasRisk) {
+      detectedPII.push(...contextAnalysis.risks);
+      if (contextAnalysis.level === 'critical') {
+        hasCriticalRisk = true;
+        hasHighRisk = true;
+      } else if (contextAnalysis.level === 'high') {
+        hasHighRisk = true;
+      }
     }
-    
+
     return {
       hasHighRisk,
+      hasCriticalRisk,
       detectedPII,
-      risk_level: hasHighRisk ? 'high' : (detectedPII.length > 0 ? 'medium' : 'low')
+      risk_level: hasCriticalRisk ? 'critical' : (hasHighRisk ? 'high' : (detectedPII.length > 0 ? 'medium' : 'low'))
+    };
+  }
+
+  // NEW: Context-aware analysis for complex patterns
+  analyzeContext(text) {
+    const risks = [];
+    let level = 'low';
+
+    // Check for company-specific contexts
+    const companyContexts = [
+      { pattern: /\b(?:Meta|Google|Microsoft|Amazon|Apple)\s+(?:internal|confidential|proprietary)/gi, risk: 'high' },
+      { pattern: /\b(?:board|executive|C-suite)\s+(?:meeting|decision|strategy)/gi, risk: 'high' },
+      { pattern: /\b(?:M&A|merger|acquisition|due.diligence)/gi, risk: 'critical' },
+      { pattern: /\b(?:layoffs|restructuring|downsizing)\s+(?:plan|strategy)/gi, risk: 'high' }
+    ];
+
+    // Check for AI/ML specific risks
+    const aiContexts = [
+      { pattern: /\b(?:model|weights|architecture|training.data)\s+(?:proprietary|internal)/gi, risk: 'high' },
+      { pattern: /\b(?:prompt|template|chain)\s+(?:engineering|optimization)/gi, risk: 'medium' },
+      { pattern: /\b(?:fine.tuned|custom.model|private.dataset)/gi, risk: 'high' }
+    ];
+
+    // Check for regulatory contexts
+    const regulatoryContexts = [
+      { pattern: /\b(?:GDPR|CCPA|HIPAA|SOX|FERPA)\s+(?:violation|compliance|audit)/gi, risk: 'critical' },
+      { pattern: /\b(?:data.breach|security.incident|privacy.violation)/gi, risk: 'critical' }
+    ];
+
+    const allContexts = [...companyContexts, ...aiContexts, ...regulatoryContexts];
+    
+    for (const context of allContexts) {
+      if (text.match(context.pattern)) {
+        risks.push(`context_${context.pattern.source.substring(0, 20)}`);
+        if (context.risk === 'critical' && level !== 'critical') {
+          level = 'critical';
+        } else if (context.risk === 'high' && level === 'low') {
+          level = 'high';
+        }
+      }
+    }
+
+    return {
+      hasRisk: risks.length > 0,
+      risks,
+      level
     };
   }
 
@@ -928,38 +1045,75 @@ class PromptWatcher {
   generateSafePrompt(originalPrompt, analysis) {
     let safePrompt = originalPrompt;
 
-    // Remove common PII patterns
-    const piiPatterns = {
-      email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-      phone: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g,
-      ssn: /\b\d{3}-?\d{2}-?\d{4}\b/g,
-      creditCard: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
-      apiKey: /\b[A-Za-z0-9]{32,}\b/g
+    // ✅ Core PII/PHI/PCI Redaction Patterns
+    const coreReplacements = {
+      // Personal Identifiers
+      email: { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replacement: '[EMAIL_REDACTED]' },
+      phone: { pattern: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g, replacement: '[PHONE_REDACTED]' },
+      fullName: { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, replacement: '[NAME_REDACTED]' },
+      
+      // Financial Data
+      ssn: { pattern: /\b\d{3}-?\d{2}-?\d{4}\b/g, replacement: '[SSN_REDACTED]' },
+      creditCard: { pattern: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b/g, replacement: '[CREDIT_CARD_REDACTED]' },
+      bankAccount: { pattern: /\b\d{8,17}\b/g, replacement: '[BANK_ACCOUNT_REDACTED]' },
+      routingNumber: { pattern: /\b[0-9]{9}\b/g, replacement: '[ROUTING_NUMBER_REDACTED]' },
+      
+      // Government IDs
+      driverLicense: { pattern: /\b[A-Z]{1,2}\d{6,8}\b/g, replacement: '[DRIVER_LICENSE_REDACTED]' },
+      passport: { pattern: /\b[A-Z]{1,2}\d{6,9}\b/g, replacement: '[PASSPORT_REDACTED]' },
+      
+      // Health Information
+      healthInfo: { pattern: /\b(?:diagnosis|treatment|prescription|medical|health|patient|doctor|hospital|clinic)\b/gi, replacement: '[HEALTH_INFO_REDACTED]' },
+      insurancePolicy: { pattern: /\b[A-Z]{2,4}\d{6,12}\b/g, replacement: '[INSURANCE_POLICY_REDACTED]' },
+      
+      // Network/Device
+      ipAddress: { pattern: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, replacement: '[IP_ADDRESS_REDACTED]' },
+      macAddress: { pattern: /\b[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}\b/g, replacement: '[MAC_ADDRESS_REDACTED]' }
     };
 
-    const replacements = {
-      email: '[EMAIL_REMOVED]',
-      phone: '[PHONE_REMOVED]',
-      ssn: '[SSN_REMOVED]',
-      creditCard: '[CREDIT_CARD_REMOVED]',
-      apiKey: '[API_KEY_REMOVED]'
+    // 🏢 Enterprise-Specific Company Data
+    const enterprisePatterns = {
+      // Technical Assets
+      apiKey: { pattern: /\b(?:sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,}|[a-zA-Z0-9]{32,})\b/g, replacement: '[API_KEY_REDACTED]' },
+      jwtToken: { pattern: /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g, replacement: '[JWT_TOKEN_REDACTED]' },
+      oauthSecret: { pattern: /\b(?:client_secret|oauth_token|access_token|refresh_token)[\s:=]+[a-zA-Z0-9_-]+/gi, replacement: '[OAUTH_SECRET_REDACTED]' },
+      sshKey: { pattern: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g, replacement: '[SSH_KEY_REDACTED]' },
+      
+      // Internal URLs and Services
+      internalUrl: { pattern: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g, replacement: '[INTERNAL_URL_REDACTED]' },
+      internalService: { pattern: /\b(?:ServiceNow|Snowflake|Redshift|Databricks|Splunk|Tableau)\s+(?:instance|database|server)/gi, replacement: '[INTERNAL_SERVICE_REDACTED]' },
+      
+      // Project and Code Names
+      projectName: { pattern: /\b(?:Project|Operation|Initiative)\s+[A-Z][a-zA-Z]+\b/g, replacement: '[PROJECT_NAME_REDACTED]' },
+      codeNames: { pattern: /\b[A-Z][a-zA-Z]+(?:DB|API|Service|Platform)\b/g, replacement: '[CODE_NAMES_REDACTED]' },
+      
+      // Financial and Strategic
+      revenueData: { pattern: /\$[\d,]+(?:\.\d{2})?\s*(?:million|billion|M|B|revenue|profit|loss)/gi, replacement: '[REVENUE_DATA_REDACTED]' },
+      financialProjections: { pattern: /\b(?:Q[1-4]|FY\d{2,4})\s+(?:revenue|earnings|profit|forecast)/gi, replacement: '[FINANCIAL_PROJECTIONS_REDACTED]' },
+      
+      // IP Ranges and Network
+      cidrRange: { pattern: /\b(?:10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\/\d{1,2}\b/g, replacement: '[CIDR_RANGE_REDACTED]' },
+      
+      // Regulatory and Compliance
+      exportControl: { pattern: /\b(?:ITAR|EAR|export.controlled|dual.use)\b/gi, replacement: '[EXPORT_CONTROL_REDACTED]' },
+      cui: { pattern: /\b(?:CUI|Controlled Unclassified Information)\b/gi, replacement: '[CUI_REDACTED]' },
+      whistleblower: { pattern: /\b(?:whistleblower|insider.threat|investigation|compliance.violation)\b/gi, replacement: '[WHISTLEBLOWER_REDACTED]' }
     };
 
-    for (const [type, pattern] of Object.entries(piiPatterns)) {
-      safePrompt = safePrompt.replace(pattern, replacements[type]);
+    // Sensitive Keywords (Context-Aware)
+    const sensitiveKeywords = {
+      credentials: { pattern: /\b(?:password|secret|token|key|credential|auth|login)\s*[:=]\s*\S+/gi, replacement: '[CREDENTIALS_REDACTED]' },
+      confidential: { pattern: /\b(?:confidential|private|internal.only|restricted|classified)\b/gi, replacement: '[CONFIDENTIAL_REDACTED]' },
+      security: { pattern: /\b(?:vulnerability|exploit|backdoor|zero.day|penetration.test)\b/gi, replacement: '[SECURITY_REDACTED]' },
+      legal: { pattern: /\b(?:attorney.client|privileged|litigation|settlement|NDA)\b/gi, replacement: '[LEGAL_REDACTED]' }
+    };
+
+    // Check all patterns
+    const allPatterns = { ...coreReplacements, ...enterprisePatterns, ...sensitiveKeywords };
+    
+    for (const [type, config] of Object.entries(allPatterns)) {
+      safePrompt = safePrompt.replace(config.pattern, config.replacement);
     }
-
-    // Remove sensitive keywords
-    const sensitiveKeywords = [
-      { pattern: /password\s*[:=]\s*\S+/gi, replacement: 'password: [REDACTED]' },
-      { pattern: /secret\s*[:=]\s*\S+/gi, replacement: 'secret: [REDACTED]' },
-      { pattern: /token\s*[:=]\s*\S+/gi, replacement: 'token: [REDACTED]' },
-      { pattern: /key\s*[:=]\s*\S+/gi, replacement: 'key: [REDACTED]' }
-    ];
-
-    sensitiveKeywords.forEach(({ pattern, replacement }) => {
-      safePrompt = safePrompt.replace(pattern, replacement);
-    });
 
     return safePrompt;
   }
