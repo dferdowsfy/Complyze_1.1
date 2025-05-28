@@ -596,59 +596,142 @@ class PromptWatcher {
 
   // NEW: Perform real-time analysis without sending the prompt
   async performRealTimeAnalysis(promptText, promptElement) {
-    if (this.isAnalyzing) return;
-    
-    // ENHANCED: Check if this is a known safe prompt (to avoid re-analyzing safe versions)
+    // Skip analysis for safe prompts
     const promptHash = this.createSafeHash(promptText);
     if (this.safePrompts.has(promptHash)) {
-      console.log('Complyze: Skipping analysis for known safe prompt');
-      this.clearRealTimeWarnings(promptElement);
-      this.preventSubmission = false;
-      this.blockSubmitButtons(false);
+      console.log('Complyze: Skipping analysis for safe prompt');
       return;
     }
+
+    console.log('Complyze: Starting real-time analysis for:', promptText.substring(0, 50) + '...');
+    
+    // Show loading indicator
+    this.showLoadingIndicator(promptElement);
     
     try {
-      this.isAnalyzing = true;
-      console.log('Complyze: Performing real-time analysis on:', promptText.substring(0, 50) + '...');
+      // First, perform quick local analysis
+      const localAnalysis = this.performQuickLocalAnalysis(promptText);
+      console.log('Complyze: Local analysis result:', localAnalysis);
       
-      // Show loading indicator
-      this.showLoadingIndicator(promptElement);
-      
-      // Quick local analysis first (basic PII detection)
-      const quickAnalysis = this.performQuickLocalAnalysis(promptText);
-      
-      if (quickAnalysis.hasHighRisk) {
+      // If local analysis finds issues, show warning immediately
+      if (localAnalysis.risk_level === 'high' || localAnalysis.risk_level === 'critical') {
         this.hideLoadingIndicator(promptElement);
-        this.showRealTimeWarning(promptElement, quickAnalysis);
-        return; // Don't proceed to server analysis if local analysis found high risk
+        this.showRealTimeWarning(promptElement, localAnalysis, false);
+        
+        // Still try server analysis in background for better results
+        this.performServerAnalysisBackground(promptText, promptElement, localAnalysis);
+        return;
       }
       
-      // Then perform full server-side analysis
-      const fullAnalysis = await this.performServerAnalysis(promptText);
-      
-      // Hide loading indicator
-      this.hideLoadingIndicator(promptElement);
-      
-      if (fullAnalysis && (fullAnalysis.risk_level === 'high' || fullAnalysis.risk_level === 'critical')) {
-        this.showRealTimeWarning(promptElement, fullAnalysis, true);
-      } else if (fullAnalysis && fullAnalysis.risk_level === 'medium') {
-        this.showRealTimeInfo(promptElement, fullAnalysis);
-      } else {
-        // ENHANCED: If analysis shows low risk, mark as safe and clear any warnings
-        this.safePrompts.add(promptHash);
-        this.clearRealTimeWarnings(promptElement);
-        this.preventSubmission = false;
-        this.blockSubmitButtons(false);
-        console.log('Complyze: Prompt marked as safe, hash:', promptHash);
+      // If local analysis is clean, try server analysis
+      try {
+        const serverAnalysis = await this.performServerAnalysis(promptText);
+        this.hideLoadingIndicator(promptElement);
+        
+        if (serverAnalysis && (serverAnalysis.risk_level === 'high' || serverAnalysis.risk_level === 'critical')) {
+          this.showRealTimeWarning(promptElement, serverAnalysis, true);
+        } else if (serverAnalysis && serverAnalysis.risk_level === 'medium') {
+          this.showRealTimeInfo(promptElement, serverAnalysis);
+        } else {
+          console.log('Complyze: No significant risks detected');
+        }
+      } catch (serverError) {
+        console.error('Complyze: Server analysis failed, falling back to local analysis:', serverError);
+        this.hideLoadingIndicator(promptElement);
+        
+        // If server fails but local found medium risk, show info
+        if (localAnalysis.risk_level === 'medium') {
+          this.showRealTimeInfo(promptElement, localAnalysis);
+        }
+        
+        // Create a fallback analysis with better error handling
+        const fallbackAnalysis = {
+          ...localAnalysis,
+          error: 'Server analysis unavailable - using local detection only',
+          detectedPII: localAnalysis.detectedPII || [],
+          risk_level: localAnalysis.risk_level || 'low'
+        };
+        
+        // If local found any PII, still show warning
+        if (fallbackAnalysis.detectedPII.length > 0) {
+          this.showRealTimeWarning(promptElement, fallbackAnalysis, false);
+        }
       }
-      
     } catch (error) {
       console.error('Complyze: Real-time analysis failed:', error);
       this.hideLoadingIndicator(promptElement);
-    } finally {
-      this.isAnalyzing = false;
+      
+      // Show a user-friendly error message but don't block the user
+      this.showAnalysisError(promptElement);
     }
+  }
+
+  // NEW: Background server analysis for better UX
+  async performServerAnalysisBackground(promptText, promptElement, fallbackAnalysis) {
+    try {
+      const serverAnalysis = await this.performServerAnalysis(promptText);
+      
+      // If server analysis provides better results, update the warning
+      if (serverAnalysis && serverAnalysis.detectedPII && serverAnalysis.detectedPII.length > fallbackAnalysis.detectedPII.length) {
+        console.log('Complyze: Server analysis found more issues, updating warning');
+        
+        // Remove old warning and show updated one
+        const existingWarning = document.querySelector('#complyze-realtime-warning');
+        if (existingWarning) {
+          existingWarning.remove();
+          this.showRealTimeWarning(promptElement, serverAnalysis, true);
+        }
+      }
+    } catch (error) {
+      console.log('Complyze: Background server analysis failed, keeping local results');
+    }
+  }
+
+  // NEW: Show analysis error message
+  showAnalysisError(promptElement) {
+    const errorId = 'complyze-analysis-error';
+    const error = document.createElement('div');
+    error.id = errorId;
+    
+    const rect = promptElement.getBoundingClientRect();
+    
+    error.style.cssText = `
+      position: fixed;
+      top: ${rect.top - 60}px;
+      left: ${rect.left}px;
+      width: ${rect.width}px;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+      z-index: 999999;
+      animation: slideDown 0.3s ease-out;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    `;
+    
+    error.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>⚠️</span>
+          <span>Complyze analysis temporarily unavailable</span>
+        </div>
+        <button id="complyze-error-dismiss" style="background: none; border: none; color: white; font-size: 16px; cursor: pointer;">×</button>
+      </div>
+    `;
+    
+    document.body.appendChild(error);
+    
+    error.querySelector('#complyze-error-dismiss').addEventListener('click', () => {
+      error.remove();
+    });
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      if (error.parentNode) error.remove();
+    }, 5000);
   }
 
   // NEW: Comprehensive local analysis with all PII/PHI/PCI and enterprise patterns
@@ -860,41 +943,65 @@ class PromptWatcher {
     
     warning.style.cssText = `
       position: fixed;
-      top: ${rect.top - 70}px;
+      top: ${rect.top - 80}px;
       left: ${rect.left}px;
       width: ${rect.width}px;
       background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
       color: white;
-      padding: 12px;
+      padding: 14px 16px;
       border-radius: 8px;
       font-size: 14px;
       font-weight: 600;
-      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
-      z-index: 999999;
+      box-shadow: 0 6px 20px rgba(220, 38, 38, 0.5);
+      z-index: 2147483647;
       animation: slideDown 0.3s ease-out;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.3);
       pointer-events: auto;
+      min-height: 60px;
     `;
     
     const riskLevel = analysis.risk_level || 'high';
+    const detectedPII = analysis.detectedPII || [];
     
     warning.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 18px;">⚠️</span>
-          <div>
-            <div style="font-weight: 700;">Security Risk Detected</div>
-            <div style="font-size: 12px; opacity: 0.9;">
-              ${analysis.detectedPII ? `PII found: ${analysis.detectedPII.join(', ')}` : 'High-risk content detected'}
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+          <span style="font-size: 20px;">🛡️</span>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; margin-bottom: 2px;">Security Risk Detected</div>
+            <div style="font-size: 12px; opacity: 0.95; line-height: 1.3;">
+              ${detectedPII.length > 0 ? `PII found: ${detectedPII.join(', ')}` : 'Sensitive content detected'}
+              ${analysis.error ? `<br><span style="opacity: 0.8;">${analysis.error}</span>` : ''}
             </div>
           </div>
         </div>
-        <div style="display: flex; gap: 8px;">
-          <button id="complyze-ignore" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">
-            Send Anyway
+        <div style="display: flex; flex-direction: column; gap: 6px; min-width: 140px;">
+          <button id="complyze-fix" style="
+            background: rgba(255,255,255,0.95); 
+            border: none; 
+            color: #dc2626; 
+            padding: 8px 12px; 
+            border-radius: 5px; 
+            font-size: 13px; 
+            cursor: pointer; 
+            font-weight: 700;
+            transition: all 0.2s;
+            width: 100%;
+          ">
+            🔒 View Safe Version
           </button>
-          <button id="complyze-fix" style="background: rgba(255,255,255,0.9); border: none; color: #dc2626; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 600;">
-            View Safe Version
+          <button id="complyze-ignore" style="
+            background: rgba(255,255,255,0.15); 
+            border: 1px solid rgba(255,255,255,0.3); 
+            color: white; 
+            padding: 6px 12px; 
+            border-radius: 5px; 
+            font-size: 12px; 
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+          ">
+            Send Anyway
           </button>
         </div>
       </div>
@@ -909,47 +1016,90 @@ class PromptWatcher {
           from { transform: translateY(-20px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
+        #complyze-fix:hover {
+          background: white !important;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        #complyze-ignore:hover {
+          background: rgba(255,255,255,0.25) !important;
+          border-color: rgba(255,255,255,0.5);
+        }
       `;
       document.head.appendChild(style);
     }
     
-    // Append to body instead of container to avoid text interference
+    // Append to body for maximum visibility
     document.body.appendChild(warning);
+    console.log('Complyze: Warning displayed, adding event listeners...');
     
-    // Add event listeners
-    warning.querySelector('#complyze-ignore').addEventListener('click', () => {
-      this.clearRealTimeWarnings(promptElement);
-      this.preventSubmission = false;
-    });
+    // Add event listeners with better error handling
+    const ignoreButton = warning.querySelector('#complyze-ignore');
+    const fixButton = warning.querySelector('#complyze-fix');
     
-    warning.querySelector('#complyze-fix').addEventListener('click', () => {
-      this.showFixSuggestions(promptElement, analysis);
-    });
+    if (ignoreButton) {
+      ignoreButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Complyze: Ignore button clicked');
+        this.clearRealTimeWarnings(promptElement);
+        this.preventSubmission = false;
+        this.blockSubmitButtons(false);
+      });
+    }
+    
+    if (fixButton) {
+      fixButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Complyze: Fix button clicked, creating safe prompt panel...');
+        
+        // Ensure we have the analysis data needed for the panel
+        const enhancedAnalysis = {
+          ...analysis,
+          detectedPII: detectedPII,
+          risk_level: riskLevel,
+          original_prompt: this.getPromptText(promptElement)
+        };
+        
+        this.createSafePromptPanel(promptElement, enhancedAnalysis);
+      });
+    }
     
     // Set prevention flag for high-risk content
     if (riskLevel === 'high' || riskLevel === 'critical') {
       this.preventSubmission = true;
       this.blockSubmitButtons(true);
+      console.log('Complyze: Blocking submission for high-risk content');
     }
     
-    // Update position on scroll/resize
+    // Update position on scroll/resize with better performance
+    let updateTimeout;
     const updatePosition = () => {
-      const newRect = promptElement.getBoundingClientRect();
-      warning.style.top = `${newRect.top - 70}px`;
-      warning.style.left = `${newRect.left}px`;
-      warning.style.width = `${newRect.width}px`;
+      clearTimeout(updateTimeout);
+      updateTimeout = setTimeout(() => {
+        if (warning.parentNode) {
+          const newRect = promptElement.getBoundingClientRect();
+          warning.style.top = `${newRect.top - 80}px`;
+          warning.style.left = `${newRect.left}px`;
+          warning.style.width = `${newRect.width}px`;
+        }
+      }, 10);
     };
     
-    window.addEventListener('scroll', updatePosition);
-    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, { passive: true });
+    window.addEventListener('resize', updatePosition, { passive: true });
     
     // Clean up listeners when warning is removed
     const originalRemove = warning.remove;
     warning.remove = function() {
       window.removeEventListener('scroll', updatePosition);
       window.removeEventListener('resize', updatePosition);
+      clearTimeout(updateTimeout);
       originalRemove.call(this);
     };
+    
+    console.log('Complyze: Warning created successfully with enhanced functionality');
   }
 
   // NEW: Show informational overlay for medium risk
@@ -1700,8 +1850,8 @@ window.complyzeTestPanelDirect = function() {
     return;
   }
   
-  // Set test content with PII
-  const testContent = "My email is john.doe@example.com and my SSN is 123-45-6789. API key: sk-1234567890abcdef. This is confidential information.";
+  // Set test content
+  const testContent = "My email is test@example.com and here's my API key: sk-1234567890abcdef";
   
   if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
     promptElement.value = testContent;
@@ -1709,139 +1859,86 @@ window.complyzeTestPanelDirect = function() {
     promptElement.textContent = testContent;
   }
   
-  // Create analysis with comprehensive PII detection
+  // Create mock analysis
   const mockAnalysis = {
-    risk_level: 'critical',
-    detectedPII: ['email', 'ssn', 'api_key', 'confidential'],
-    redacted_prompt: null // Will use generateSafePrompt
+    risk_level: 'high',
+    detectedPII: ['email', 'api_key'],
+    redacted_prompt: null,
+    original_prompt: testContent
   };
   
-  // Show the side panel directly
+  // Show panel directly
   promptWatcher.createSafePromptPanel(promptElement, mockAnalysis);
-  console.log('Complyze: Side panel should now be visible on the right side of the screen');
+  console.log('Complyze: Side panel should now be visible');
 };
 
-// NEW: Force side panel test (minimal version for debugging)
-window.complyzeForcePanel = function() {
-  console.log('Complyze: Force creating side panel...');
-  
-  // Create a simple test panel to verify basic functionality
-  const testPanel = document.createElement('div');
-  testPanel.id = 'complyze-test-panel';
-  testPanel.style.cssText = `
-    position: fixed !important;
-    top: 50px !important;
-    right: 50px !important;
-    width: 300px !important;
-    height: 200px !important;
-    background: red !important;
-    border: 3px solid yellow !important;
-    z-index: 2147483647 !important;
-    color: white !important;
-    padding: 20px !important;
-    font-size: 16px !important;
-    font-weight: bold !important;
-  `;
-  
-  testPanel.innerHTML = `
-    <div>🛡️ COMPLYZE TEST PANEL</div>
-    <div>If you see this, the panel system works!</div>
-    <button onclick="this.parentElement.remove()" style="margin-top: 10px; padding: 5px;">Close</button>
-  `;
-  
-  document.body.appendChild(testPanel);
-  console.log('Complyze: Test panel created. If you see a red panel, the system works!');
-};
-
-console.log('Complyze: Test functions available:');
-console.log('- complyzeTest() - Send test prompt');
-console.log('- complyzeDebug() - Show debug info');
-console.log('- complyzeForcePrompt() - Force capture current prompt');
-console.log('- complyzeTestSafePanel() - Test warning with "View Safe Version" button');
-console.log('- complyzeTestPanelDirect() - Show side panel directly');
-console.log('- complyzeForcePanel() - Force test panel (red box for debugging)');
-console.log('- complyzeTestSafeWorkflow() - Test complete safe prompt workflow');
-console.log('- complyzeTestFlaggedSystem() - Test automated flagged prompts system (NEW!)');
-
-// Authentication sync functionality
-class AuthSync {
-  constructor() {
-    this.lastToken = null;
-    this.lastUser = null;
-    this.init();
-  }
-
-  init() {
-    // Only run on dashboard pages
-    if (window.location.hostname === 'localhost' && (window.location.port === '3002' || window.location.port === '3001' || window.location.port === '3000')) {
-      this.checkAuthChanges();
-      // Check every 2 seconds for auth changes
-      setInterval(() => this.checkAuthChanges(), 2000);
-      console.log('Complyze: Auth sync initialized for dashboard on port', window.location.port);
-    }
-  }
-
-  checkAuthChanges() {
-    const currentToken = localStorage.getItem('complyze_token');
-    const currentUser = localStorage.getItem('complyze_user');
-
-    // Check if auth state changed
-    if (currentToken !== this.lastToken || currentUser !== this.lastUser) {
-      console.log('Complyze: Website auth state changed, syncing to extension...');
-      
-      if (currentToken && currentUser) {
-        // User logged in on website, sync to extension
-        chrome.runtime.sendMessage({
-          type: 'sync_auth_from_website',
-          token: currentToken,
-          user: JSON.parse(currentUser)
-        });
-      } else if (this.lastToken && !currentToken) {
-        // User logged out on website, sync to extension
-        chrome.runtime.sendMessage({
-          type: 'logout_from_website'
-        });
-      }
-
-      this.lastToken = currentToken;
-      this.lastUser = currentUser;
-    }
-  }
-}
-
-// Initialize auth sync
-const authSync = new AuthSync();
-
-// Enhanced debugging functions for real-time prevention
-window.complyzeTestRealTime = () => {
+// NEW: Test real-time analysis with better debugging
+window.complyzeTestRealTime = function() {
   console.log('Complyze: Testing real-time analysis...');
+  
   const platform = promptWatcher.getCurrentPlatform();
-  if (platform) {
-    const selectors = promptWatcher.platformSelectors[platform];
-    const promptElement = document.querySelector(selectors.promptInput);
-    if (promptElement) {
-      const testPrompt = "Please help me with my SSN 123-45-6789 and credit card 4532-1234-5678-9012";
-      
-      // Set the text in the input
-      if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-        promptElement.value = testPrompt;
-      } else {
-        promptElement.textContent = testPrompt;
-      }
-      
-      // Trigger real-time analysis
-      promptWatcher.performRealTimeAnalysis(testPrompt, promptElement);
-    } else {
-      console.log('Complyze: No prompt input found for testing');
-    }
+  if (!platform) {
+    console.log('Complyze: No platform detected');
+    return;
   }
+  
+  const selectors = promptWatcher.platformSelectors[platform];
+  const promptElement = document.querySelector(selectors.promptInput);
+  
+  if (!promptElement) {
+    console.log('Complyze: No prompt element found');
+    return;
+  }
+  
+  // Set test content with various PII types
+  const testContent = "Hi, I'm John Smith. My email is john.smith@company.com, phone is (555) 123-4567, and my SSN is 123-45-6789. Can you help me with this API key: sk-1234567890abcdefghijklmnopqrstuvwxyz?";
+  
+  if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+    promptElement.value = testContent;
+    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+  } else if (promptElement.contentEditable === 'true') {
+    promptElement.textContent = testContent;
+    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  
+  console.log('Complyze: Test content set, real-time analysis should trigger automatically');
+  console.log('Complyze: If nothing happens, try typing in the input field');
 };
 
-window.complyzeTogglePrevention = () => {
-  promptWatcher.preventSubmission = !promptWatcher.preventSubmission;
-  console.log('Complyze: Prevention toggled to:', promptWatcher.preventSubmission);
-  promptWatcher.blockSubmitButtons(promptWatcher.preventSubmission);
-}; 
+// NEW: Force trigger analysis
+window.complyzeForceAnalysis = function() {
+  console.log('Complyze: Force triggering analysis...');
+  
+  const platform = promptWatcher.getCurrentPlatform();
+  if (!platform) {
+    console.log('Complyze: No platform detected');
+    return;
+  }
+  
+  const selectors = promptWatcher.platformSelectors[platform];
+  const promptElement = document.querySelector(selectors.promptInput);
+  
+  if (!promptElement) {
+    console.log('Complyze: No prompt element found');
+    return;
+  }
+  
+  const currentText = promptWatcher.getPromptText(promptElement);
+  if (!currentText.trim()) {
+    console.log('Complyze: No text found, setting test content...');
+    const testContent = "Please analyze this email: user@company.com";
+    if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+      promptElement.value = testContent;
+    } else if (promptElement.contentEditable === 'true') {
+      promptElement.textContent = testContent;
+    }
+  }
+  
+  const text = promptWatcher.getPromptText(promptElement);
+  console.log('Complyze: Analyzing text:', text.substring(0, 100));
+  
+  promptWatcher.performRealTimeAnalysis(text, promptElement);
+};
 
 // NEW: Test loading indicator and clean text extraction
 window.complyzeTestLoading = function() {
