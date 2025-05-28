@@ -1062,8 +1062,8 @@ class PromptWatcher {
         position: fixed !important;
         top: 20px !important;
         right: 20px !important;
-        width: 400px !important;
-        max-height: 80vh !important;
+        width: 450px !important;
+        max-height: 85vh !important;
         background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
         border: 2px solid #3b82f6 !important;
         border-radius: 12px !important;
@@ -1088,7 +1088,7 @@ class PromptWatcher {
       <div style="padding: 20px; border-bottom: 1px solid rgba(59, 130, 246, 0.3);">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
           <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #3b82f6;">
-            🛡️ Safe Prompt Version
+            🛡️ Security Analysis Results
           </h3>
           <button id="complyze-close-panel" style="background: none; border: none; color: #9ca3af; font-size: 20px; cursor: pointer; padding: 4px;">
             ×

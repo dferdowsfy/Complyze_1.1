@@ -10,6 +10,9 @@ interface IngestRequestBody {
   userId?: string;
   projectId?: string;
   source?: string;
+  status?: 'pending' | 'flagged' | 'blocked';
+  risk_level?: 'low' | 'medium' | 'high' | 'critical';
+  analysis_metadata?: Record<string, any>;
 }
 
 async function getUserFromRequest(request: NextRequest): Promise<{ userId: string; projectId: string } | null> {
@@ -105,12 +108,14 @@ export async function POST(req: NextRequest) {
       project_id: projectId,
       platform: platform || null,
       url: url || null,
+      risk_level: body.risk_level || null,
       redaction_details: redactionOutput.redactionDetails,
-      status: 'pending' as const,
+      status: body.status || 'pending' as const,
       metadata: {
         source: source || 'api',
         ingested_at: timestamp || new Date().toISOString(),
-        redaction_count: redactionOutput.redactionDetails.length
+        redaction_count: redactionOutput.redactionDetails.length,
+        ...(body.analysis_metadata || {})
       }
     };
 
@@ -135,7 +140,7 @@ export async function POST(req: NextRequest) {
       redactedPrompt: redactionOutput.redactedText,
       piiDetected: redactionOutput.redactionDetails.map(detail => detail.type),
       redactionCount: redactionOutput.redactionDetails.length,
-      status: 'pending'
+      status: body.status || 'pending'
     }, { status: 201 });
 
   } catch (error: any) {

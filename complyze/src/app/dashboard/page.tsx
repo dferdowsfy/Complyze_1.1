@@ -227,10 +227,7 @@ function FlaggedPromptsPanel() {
   const [flaggedPrompts, setFlaggedPrompts] = useState<FlaggedPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchFlaggedPrompts();
-  }, []);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const fetchFlaggedPrompts = async () => {
     try {
@@ -243,7 +240,16 @@ function FlaggedPromptsPanel() {
       }
       
       const data = await response.json();
-      setFlaggedPrompts(data.prompts || []);
+      const newPrompts = data.prompts || [];
+      
+      // Check if there are new prompts since last refresh
+      if (flaggedPrompts.length > 0 && newPrompts.length > flaggedPrompts.length) {
+        console.log('Complyze: New flagged prompts detected!');
+        // Could add a toast notification here if desired
+      }
+      
+      setFlaggedPrompts(newPrompts);
+      setLastRefresh(new Date());
     } catch (err) {
       console.error('Error fetching flagged prompts:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -253,6 +259,18 @@ function FlaggedPromptsPanel() {
       setLoading(false);
     }
   };
+
+  // Auto-refresh every 30 seconds to catch new flagged prompts from extension
+  useEffect(() => {
+    fetchFlaggedPrompts(); // Initial load
+    
+    const interval = setInterval(() => {
+      console.log('Complyze: Auto-refreshing flagged prompts...');
+      fetchFlaggedPrompts();
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading) {
     return (
