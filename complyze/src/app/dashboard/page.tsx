@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 
 // Inline style helpers
 const COLORS = {
-  bg: "#FAF9F6",
+  bg: "#0E1E36",
   header: "#0E1E36",
   accent: "#FF6F3C",
   riskHigh: "#E53935",
@@ -15,8 +15,8 @@ const COLORS = {
   riskLow: "#388E3C",
   card: "#FFFFFF",
   border: "#E0E0E0",
-  text: "#2D3748",
-  textSecondary: "#6B7280",
+  text: "#FFFFFF",
+  textSecondary: "#B0B0B0",
   chartBg: "#F1F1F1",
 };
 
@@ -989,9 +989,9 @@ export default function ComplyzeDashboard() {
   }
 
   return (
-    <div className="min-h-screen font-sans" style={{ fontSize: 22, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen font-sans" style={{ fontSize: 22, background: COLORS.bg }}>
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-between items-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-between items-center" style={{ background: COLORS.bg }}>
         <div className="flex gap-12 items-center">
           <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
             Dashboard

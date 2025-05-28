@@ -311,9 +311,9 @@ export default function Settings() {
 
   if (loading) {
     return (
-      <div className="min-h-screen font-sans" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="min-h-screen font-sans" style={{ background: '#0E1E36' }}>
         {/* Navigation */}
-        <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-center items-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-center items-center" style={{ background: '#0E1E36' }}>
           <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
             Dashboard
           </Link>
@@ -332,7 +332,7 @@ export default function Settings() {
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#FF6F3C] mx-auto mb-4"></div>
-              <p className="text-[#1C2A3E] text-lg">Loading redaction settings...</p>
+              <p className="text-white text-lg">Loading redaction settings...</p>
             </div>
           </div>
         </main>
@@ -341,9 +341,9 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen font-sans" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen font-sans" style={{ background: '#0E1E36' }}>
       {/* Sticky Nav Tabs */}
-      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-center items-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <nav className="sticky top-0 z-40 flex gap-12 px-8 py-5 shadow-md justify-center items-center" style={{ background: '#0E1E36' }}>
         <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
           Dashboard
           {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
@@ -373,8 +373,8 @@ export default function Settings() {
       <main className="max-w-6xl mx-auto py-12 px-4">
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-[#1C2A3E] mb-2">Customize Your Redaction Policy</h1>
-          <p className="text-lg text-[#1C2A3E] mb-6">
+          <h1 className="text-4xl font-bold text-white mb-2">Customize Your Redaction Policy</h1>
+          <p className="text-lg text-white mb-6">
             Configure which types of sensitive information should be automatically redacted from your prompts.
             Disabled items will be wrapped in asterisks (*) for visibility while maintaining privacy.
           </p>

@@ -22,7 +22,7 @@ export default function TestPreventionPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-purple-800 p-8">
+    <div className="min-h-screen p-8" style={{ background: '#0E1E36' }}>
       <div className="max-w-4xl mx-auto">
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
           <h1 className="text-3xl font-bold text-white mb-2">

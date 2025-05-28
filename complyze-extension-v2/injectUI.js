@@ -348,10 +348,3 @@ class ComplyzeUI {
 
 // Initialize the UI
 new ComplyzeUI();
-
-// Test function to force show the UI (for debugging)
-setTimeout(() => {
-  console.log('Complyze: Testing UI display');
-  const testUI = new ComplyzeUI();
-  testUI.showAuthRequired('https://complyze.co/dashboard');
-}, 2000);
