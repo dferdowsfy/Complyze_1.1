@@ -22,9 +22,9 @@ class PromptWatcher {
         loginCheck: '[data-testid="profile-button"], .avatar, button[data-testid="profile-button"], [data-headlessui-state], button[aria-haspopup="menu"]'
       },
       'claude.ai': {
-        promptInput: 'div[contenteditable="true"], textarea[placeholder*="Talk to Claude"], div[data-testid="composer-input"], div[role="textbox"]',
-        submitButton: 'button[aria-label="Send Message"], button:has(svg[data-icon="send"]), button[data-testid="send-button"], button:has(svg), button[type="submit"]',
-        loginCheck: '[data-testid="user-menu"], .user-avatar, button[aria-label*="User"], [data-testid="profile-button"]'
+        promptInput: 'div[contenteditable="true"], textarea[placeholder*="Talk to Claude"], div[data-testid="composer-input"], div[role="textbox"], div[contenteditable="true"][data-testid], .ProseMirror, div[contenteditable="true"].ProseMirror',
+        submitButton: 'button[aria-label="Send Message"], button:has(svg[data-icon="send"]), button[data-testid="send-button"], button:has(svg), button[type="submit"], button[aria-label*="Send"], button:contains("Send")',
+        loginCheck: '[data-testid="user-menu"], .user-avatar, button[aria-label*="User"], [data-testid="profile-button"], button[aria-label*="Account"], .avatar'
       },
       'gemini.google.com': {
         promptInput: 'rich-textarea div[contenteditable="true"], textarea[aria-label*="Enter a prompt"], div[contenteditable="true"], textarea[placeholder*="Enter a prompt"], div[role="textbox"]',
@@ -57,6 +57,50 @@ class PromptWatcher {
     
     // Enhanced debugging for all platforms
     this.enhancedPlatformDebugging();
+    
+    // Check for extension context invalidation
+    this.setupContextValidationCheck();
+  }
+  
+  // NEW: Setup context validation check
+  setupContextValidationCheck() {
+    // Check every 30 seconds if extension context is still valid
+    setInterval(() => {
+      try {
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+          // Context is valid
+          return;
+        }
+      } catch (error) {
+        console.log('Complyze: Extension context invalidated, attempting to reinitialize...');
+        this.handleContextInvalidation();
+      }
+    }, 30000);
+  }
+  
+  // NEW: Handle context invalidation
+  handleContextInvalidation() {
+    console.log('Complyze: Handling context invalidation - clearing intervals and reinitializing...');
+    
+    // Clear any existing intervals/timeouts
+    this.isAnalyzing = false;
+    this.preventSubmission = false;
+    
+    // Clear any UI elements
+    const complyzeElements = document.querySelectorAll('[id^="complyze-"]');
+    complyzeElements.forEach(el => el.remove());
+    
+    // Try to reinitialize after a short delay
+    setTimeout(() => {
+      try {
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+          console.log('Complyze: Context restored, reinitializing...');
+          this.init();
+        }
+      } catch (error) {
+        console.log('Complyze: Context still invalid, will retry later');
+      }
+    }, 5000);
   }
   
   enhancedPlatformDebugging() {
@@ -199,16 +243,28 @@ class PromptWatcher {
     if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
       return element.value;
     } else if (element.contentEditable === 'true') {
-      // For contenteditable elements, we need to be more careful
-      // Clone the element to avoid modifying the original
-      const clone = element.cloneNode(true);
+      // For contenteditable elements, first try to get text without cloning
+      let text = element.innerText || element.textContent || '';
       
-      // Remove any Complyze warning elements from the clone
-      const warnings = clone.querySelectorAll('#complyze-realtime-warning, #complyze-realtime-info, [id^="complyze-"]');
-      warnings.forEach(warning => warning.remove());
+      // Only if we detect warning elements, then use the safer clone method
+      if (text.includes('Security Risk Detected') || text.includes('Complyze analyzing')) {
+        try {
+          // Clone the element to avoid modifying the original
+          const clone = element.cloneNode(true);
+          
+          // Remove any Complyze warning elements from the clone
+          const warnings = clone.querySelectorAll('#complyze-realtime-warning, #complyze-realtime-info, #complyze-loading-indicator, [id^="complyze-"]');
+          warnings.forEach(warning => warning.remove());
+          
+          // Get clean text content
+          return clone.innerText || clone.textContent || '';
+        } catch (error) {
+          console.log('Complyze: Error cleaning text, using original:', error.message);
+          return text;
+        }
+      }
       
-      // Get clean text content
-      return clone.innerText || clone.textContent || '';
+      return text;
     }
     return '';
   }
@@ -325,11 +381,16 @@ class PromptWatcher {
   async handlePromptSubmission(selectors) {
     console.log('Complyze: handlePromptSubmission called');
     
-    // Check if extension is enabled
-    const settings = await chrome.storage.local.get(['extensionEnabled']);
-    if (settings.extensionEnabled === false) {
-      console.log('Complyze: Extension is disabled, skipping analysis');
-      return;
+    // Check if extension is enabled (with error handling)
+    try {
+      const settings = await chrome.storage.local.get(['extensionEnabled']);
+      if (settings.extensionEnabled === false) {
+        console.log('Complyze: Extension is disabled, skipping analysis');
+        return;
+      }
+    } catch (error) {
+      console.log('Complyze: Could not access extension settings (context may be invalidated):', error.message);
+      // Continue anyway - don't block functionality
     }
 
     if (!this.isLoggedIn) {
@@ -398,16 +459,20 @@ class PromptWatcher {
     
     console.log('Complyze: Capturing prompt for analysis:', userPrompt.substring(0, 100) + '...');
     
-    // Send to background script for processing
-    chrome.runtime.sendMessage({
-      type: 'analyze_prompt',
-      payload: {
-        prompt: userPrompt,
-        platform: this.getCurrentPlatform(),
-        url: window.location.href,
-        timestamp: new Date().toISOString()
-      }
-    });
+    // Send to background script for processing (with error handling)
+    try {
+      chrome.runtime.sendMessage({
+        type: 'analyze_prompt',
+        payload: {
+          prompt: userPrompt,
+          platform: this.getCurrentPlatform(),
+          url: window.location.href,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.log('Complyze: Could not send message to background script (context may be invalidated):', error.message);
+    }
   }
   
   monitorInputChanges() {
@@ -705,16 +770,26 @@ class PromptWatcher {
   // NEW: Server-side analysis for comprehensive checking
   async performServerAnalysis(promptText) {
     try {
-      const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({
-          type: 'analyze_prompt_realtime',
-          payload: { prompt: promptText }
-        }, resolve);
+      const response = await new Promise((resolve, reject) => {
+        try {
+          chrome.runtime.sendMessage({
+            type: 'analyze_prompt_realtime',
+            payload: { prompt: promptText }
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              resolve(response);
+            }
+          });
+        } catch (error) {
+          reject(error);
+        }
       });
       
       return response;
     } catch (error) {
-      console.error('Complyze: Server analysis failed:', error);
+      console.error('Complyze: Server analysis failed (context may be invalidated):', error.message);
       return null;
     }
   }
