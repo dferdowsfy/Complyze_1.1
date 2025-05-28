@@ -843,31 +843,45 @@ class PromptWatcher {
 
   // NEW: Create side panel with safe prompt
   createSafePromptPanel(promptElement, analysis) {
-    // Remove existing panel if any
-    const existingPanel = document.querySelector('#complyze-safe-prompt-panel');
-    if (existingPanel) existingPanel.remove();
+    console.log('Complyze: Creating safe prompt panel...', { promptElement, analysis });
+    
+    try {
+      // Remove existing panel if any
+      const existingPanel = document.querySelector('#complyze-safe-prompt-panel');
+      if (existingPanel) {
+        console.log('Complyze: Removing existing panel');
+        existingPanel.remove();
+      }
 
-    const panel = document.createElement('div');
-    panel.id = 'complyze-safe-prompt-panel';
-    panel.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      width: 400px;
-      max-height: 80vh;
-      background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-      border: 2px solid #3b82f6;
-      border-radius: 12px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-      z-index: 1000000;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: white;
-      animation: slideInRight 0.3s ease-out;
-      overflow: hidden;
-    `;
+      const panel = document.createElement('div');
+      panel.id = 'complyze-safe-prompt-panel';
+      
+      // Enhanced styling with better visibility and positioning
+      panel.style.cssText = `
+        position: fixed !important;
+        top: 20px !important;
+        right: 20px !important;
+        width: 400px !important;
+        max-height: 80vh !important;
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+        border: 2px solid #3b82f6 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5) !important;
+        z-index: 2147483647 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        color: white !important;
+        animation: slideInRight 0.3s ease-out !important;
+        overflow: hidden !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      `;
 
-    const originalPrompt = this.getPromptText(promptElement);
-    const safePrompt = analysis.redacted_prompt || this.generateSafePrompt(originalPrompt, analysis);
+      const originalPrompt = this.getPromptText(promptElement);
+      const safePrompt = analysis.redacted_prompt || this.generateSafePrompt(originalPrompt, analysis);
+      
+      console.log('Complyze: Original prompt:', originalPrompt.substring(0, 100));
+      console.log('Complyze: Safe prompt:', safePrompt.substring(0, 100));
 
     panel.innerHTML = `
       <div style="padding: 20px; border-bottom: 1px solid rgba(59, 130, 246, 0.3);">
@@ -980,65 +994,82 @@ class PromptWatcher {
       document.head.appendChild(style);
     }
 
-    document.body.appendChild(panel);
+      document.body.appendChild(panel);
+      console.log('Complyze: Panel added to DOM');
 
-    // Add event listeners
-    panel.querySelector('#complyze-close-panel').addEventListener('click', () => {
-      panel.remove();
-    });
-
-    panel.querySelector('#complyze-copy-safe').addEventListener('click', async () => {
-      const safeText = panel.querySelector('#complyze-safe-text').value;
-      try {
-        await navigator.clipboard.writeText(safeText);
-        const button = panel.querySelector('#complyze-copy-safe');
-        const originalText = button.textContent;
-        button.textContent = '✅ Copied!';
-        button.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-        setTimeout(() => {
-          button.textContent = originalText;
-          button.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
-        }, 2000);
-      } catch (err) {
-        console.error('Failed to copy text:', err);
-      }
-    });
-
-    panel.querySelector('#complyze-use-safe').addEventListener('click', () => {
-      const safeText = panel.querySelector('#complyze-safe-text').value;
-      
-      // Replace the text in the prompt element
-      if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
-        promptElement.value = safeText;
-        promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-      } else if (promptElement.contentEditable === 'true') {
-        promptElement.textContent = safeText;
-        promptElement.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-
-      // Clear warnings and re-enable submission
-      this.clearRealTimeWarnings(promptElement);
-      this.preventSubmission = false;
-      this.blockSubmitButtons(false);
-
-      // Close panel
-      panel.remove();
-
-      // Focus back on the prompt element
-      promptElement.focus();
-      
-      // Move cursor to end
-      if (promptElement.setSelectionRange) {
-        promptElement.setSelectionRange(safeText.length, safeText.length);
-      }
-    });
-
-    // Close panel when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!panel.contains(e.target) && !e.target.closest('#complyze-realtime-warning')) {
+      // Add event listeners
+      panel.querySelector('#complyze-close-panel').addEventListener('click', () => {
+        console.log('Complyze: Close button clicked');
         panel.remove();
-      }
-    }, { once: true });
+      });
+
+      panel.querySelector('#complyze-copy-safe').addEventListener('click', async () => {
+        const safeText = panel.querySelector('#complyze-safe-text').value;
+        try {
+          await navigator.clipboard.writeText(safeText);
+          const button = panel.querySelector('#complyze-copy-safe');
+          const originalText = button.textContent;
+          button.textContent = '✅ Copied!';
+          button.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+          setTimeout(() => {
+            button.textContent = originalText;
+            button.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+          }, 2000);
+          console.log('Complyze: Text copied to clipboard');
+        } catch (err) {
+          console.error('Complyze: Failed to copy text:', err);
+        }
+      });
+
+      panel.querySelector('#complyze-use-safe').addEventListener('click', () => {
+        console.log('Complyze: Use safe version clicked');
+        const safeText = panel.querySelector('#complyze-safe-text').value;
+        
+        // Replace the text in the prompt element
+        if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+          promptElement.value = safeText;
+          promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+        } else if (promptElement.contentEditable === 'true') {
+          promptElement.textContent = safeText;
+          promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // Clear warnings and re-enable submission
+        this.clearRealTimeWarnings(promptElement);
+        this.preventSubmission = false;
+        this.blockSubmitButtons(false);
+
+        // Close panel
+        panel.remove();
+
+        // Focus back on the prompt element
+        promptElement.focus();
+        
+        // Move cursor to end
+        if (promptElement.setSelectionRange) {
+          promptElement.setSelectionRange(safeText.length, safeText.length);
+        }
+        
+        console.log('Complyze: Safe text applied and panel closed');
+      });
+
+      // Close panel when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!panel.contains(e.target) && !e.target.closest('#complyze-realtime-warning')) {
+          console.log('Complyze: Clicked outside panel, closing');
+          panel.remove();
+        }
+      }, { once: true });
+      
+      console.log('Complyze: Side panel created successfully!');
+      
+    } catch (error) {
+      console.error('Complyze: Error creating side panel:', error);
+      // Fallback: show alert with safe prompt
+      const originalPrompt = this.getPromptText(promptElement);
+      const safePrompt = this.generateSafePrompt(originalPrompt, analysis);
+      alert(`Safe Prompt:\n\n${safePrompt}\n\nCopy this text and paste it into the input field.`);
+    }
   }
 
   // NEW: Generate safe prompt by removing PII
@@ -1321,12 +1352,45 @@ window.complyzeTestPanelDirect = function() {
   console.log('Complyze: Side panel should now be visible on the right side of the screen');
 };
 
+// NEW: Force side panel test (minimal version for debugging)
+window.complyzeForcePanel = function() {
+  console.log('Complyze: Force creating side panel...');
+  
+  // Create a simple test panel to verify basic functionality
+  const testPanel = document.createElement('div');
+  testPanel.id = 'complyze-test-panel';
+  testPanel.style.cssText = `
+    position: fixed !important;
+    top: 50px !important;
+    right: 50px !important;
+    width: 300px !important;
+    height: 200px !important;
+    background: red !important;
+    border: 3px solid yellow !important;
+    z-index: 2147483647 !important;
+    color: white !important;
+    padding: 20px !important;
+    font-size: 16px !important;
+    font-weight: bold !important;
+  `;
+  
+  testPanel.innerHTML = `
+    <div>🛡️ COMPLYZE TEST PANEL</div>
+    <div>If you see this, the panel system works!</div>
+    <button onclick="this.parentElement.remove()" style="margin-top: 10px; padding: 5px;">Close</button>
+  `;
+  
+  document.body.appendChild(testPanel);
+  console.log('Complyze: Test panel created. If you see a red panel, the system works!');
+};
+
 console.log('Complyze: Test functions available:');
 console.log('- complyzeTest() - Send test prompt');
 console.log('- complyzeDebug() - Show debug info');
 console.log('- complyzeForcePrompt() - Force capture current prompt');
 console.log('- complyzeTestSafePanel() - Test warning with "View Safe Version" button');
 console.log('- complyzeTestPanelDirect() - Show side panel directly');
+console.log('- complyzeForcePanel() - Force test panel (red box for debugging)');
 
 // Authentication sync functionality
 class AuthSync {
