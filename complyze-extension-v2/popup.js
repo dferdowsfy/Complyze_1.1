@@ -374,7 +374,7 @@ class ComplyzePopup {
         width: 350px;
         min-height: 400px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #0E1E36;
         color: #333;
       }
       
@@ -496,7 +496,7 @@ class ComplyzePopup {
         width: 350px;
         min-height: 500px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #0E1E36;
         color: white;
       }
       

@@ -163,7 +163,7 @@ function RiskDetection({ inView }: { inView: boolean }) {
       transition: {
         duration: 1.6,
         repeat: Infinity,
-        repeatType: 'loop',
+        repeatType: 'loop' as const,
         ease: 'easeInOut',
       },
     },
@@ -258,7 +258,7 @@ function RiskDetection({ inView }: { inView: boolean }) {
                 '0 0 16px 6px #E53935',
                 '0 0 0px 0px #E53935'
               ] } : {}}
-              transition={{ duration: 1.6, repeat: Infinity, repeatType: 'loop', ease: 'easeInOut' }}
+              transition={{ duration: 1.6, repeat: Infinity, repeatType: 'loop' as const, ease: 'easeInOut' }}
             >Unclear intent</motion.span>
             <motion.span
               className="bg-[#E53935] text-white px-4 py-2 rounded-full font-bold text-lg shadow"
@@ -267,7 +267,7 @@ function RiskDetection({ inView }: { inView: boolean }) {
                 '0 0 16px 6px #E53935',
                 '0 0 0px 0px #E53935'
               ] } : {}}
-              transition={{ duration: 1.6, repeat: Infinity, repeatType: 'loop', ease: 'easeInOut', delay: 0.5 }}
+              transition={{ duration: 1.6, repeat: Infinity, repeatType: 'loop' as const, ease: 'easeInOut', delay: 0.5 }}
             >Potential PII</motion.span>
           </motion.div>
         </div>

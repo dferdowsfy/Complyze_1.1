@@ -73,6 +73,12 @@ export interface PromptLog {
   scored_at?: string;
 }
 
+export interface RedactionSettings {
+  user_id: string;
+  item_key: string;
+  enabled: boolean;
+}
+
 // You might also want to export the anon key if you plan to use it on the client-side elsewhere,
 // but for these API routes, the service role key is appropriate.
 // const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxpa3NraW9hdnRwbnNrcmZ4YnFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczMjI2OTIsImV4cCI6MjA2Mjg5ODY5Mn0.vRzRh_wotQ1UFVk3fVOlAhU8bWucx4oOwkQA6939jtg"; 

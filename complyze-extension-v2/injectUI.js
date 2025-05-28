@@ -55,6 +55,7 @@ class ComplyzeUI {
   }
 
   createContainer() {
+    console.log('Complyze: Creating container with enhanced border');
     const container = document.createElement('div');
     container.setAttribute('data-complyze-ui', 'true');
     container.style.cssText = `
@@ -63,15 +64,21 @@ class ComplyzeUI {
       right: 20px;
       width: 420px;
       max-height: 80vh;
-      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      background: #0E1E36;
       color: white;
       z-index: 999999;
       border-radius: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 
+        0 20px 40px rgba(0,0,0,0.4), 
+        0 0 0 10px #ffffff, 
+        0 0 20px #ffffff, 
+        0 0 40px #ffffff, 
+        0 0 60px #ffffff,
+        0 0 80px rgba(255,255,255,0.8);
+      border: 8px solid #ffffff;
       overflow: hidden;
-      animation: slideIn 0.3s ease-out;
+      animation: slideIn 0.3s ease-out, borderPulse 2s infinite;
     `;
 
     // Add animation keyframes
@@ -82,6 +89,26 @@ class ComplyzeUI {
         @keyframes slideIn {
           from { transform: translateX(100%); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes borderPulse {
+          0%, 100% { 
+            box-shadow: 
+              0 20px 40px rgba(0,0,0,0.4), 
+              0 0 0 10px #ffffff, 
+              0 0 20px #ffffff, 
+              0 0 40px #ffffff, 
+              0 0 60px #ffffff,
+              0 0 80px rgba(255,255,255,0.8);
+          }
+          50% { 
+            box-shadow: 
+              0 20px 40px rgba(0,0,0,0.4), 
+              0 0 0 15px #ffffff, 
+              0 0 30px #ffffff, 
+              0 0 60px #ffffff, 
+              0 0 90px #ffffff,
+              0 0 120px rgba(255,255,255,1);
+          }
         }
         .complyze-btn {
           padding: 8px 16px;
@@ -321,3 +348,10 @@ class ComplyzeUI {
 
 // Initialize the UI
 new ComplyzeUI();
+
+// Test function to force show the UI (for debugging)
+setTimeout(() => {
+  console.log('Complyze: Testing UI display');
+  const testUI = new ComplyzeUI();
+  testUI.showAuthRequired('https://complyze.co/dashboard');
+}, 2000);
