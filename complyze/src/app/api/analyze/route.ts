@@ -6,36 +6,80 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || 'sk-or-v1-b3fed8c04
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 async function optimizePrompt(prompt: string): Promise<string> {
-  // Simple rule-based optimization for now (OpenRouter API has auth issues)
-  console.log('Complyze: Using rule-based optimization for prompt:', prompt.substring(0, 100) + '...');
+  console.log('Complyze: Optimizing prompt based on Anthropic and OpenAI best practices:', prompt.substring(0, 100) + '...');
   
   let optimized = prompt;
   
-  // Add role context if missing
-  if (!prompt.toLowerCase().includes('you are')) {
-    if (prompt.toLowerCase().includes('email')) {
-      optimized = `You are a professional communication expert. ${optimized}`;
-    } else if (prompt.toLowerCase().includes('code') || prompt.toLowerCase().includes('program')) {
-      optimized = `You are an experienced software developer. ${optimized}`;
-    } else if (prompt.toLowerCase().includes('write') || prompt.toLowerCase().includes('help')) {
-      optimized = `You are a helpful writing assistant. ${optimized}`;
+  // 1. Clear structure with sections for longer prompts
+  if (optimized.length > 200) {
+    optimized = addPromptStructure(optimized);
+  }
+
+  // 2. Remove redundant phrases
+  const redundantPhrases = [
+    /\b(?:please|kindly|if you could|would you mind)\b/gi,
+    /\b(?:as an AI|as a language model|I understand that you are)\b/gi
+  ];
+  
+  redundantPhrases.forEach(pattern => {
+    optimized = optimized.replace(pattern, '');
+  });
+
+  // 3. Improve clarity and specificity
+  optimized = optimized
+    .replace(/\bthing\b/gi, 'item')
+    .replace(/\bstuff\b/gi, 'content')
+    .replace(/\bdo this\b/gi, 'complete this task');
+
+  // 4. Add clear instructions format if missing
+  if (!optimized.includes('Task:') && !optimized.includes('Instructions:') && !optimized.includes('You are')) {
+    // Add role context based on content
+    if (optimized.toLowerCase().includes('email') || optimized.toLowerCase().includes('message')) {
+      optimized = `You are a professional communication expert.\n\nTask: ${optimized}`;
+    } else if (optimized.toLowerCase().includes('code') || optimized.toLowerCase().includes('program') || optimized.toLowerCase().includes('debug')) {
+      optimized = `You are an experienced software developer.\n\nTask: ${optimized}`;
+    } else if (optimized.toLowerCase().includes('write') || optimized.toLowerCase().includes('content') || optimized.toLowerCase().includes('article')) {
+      optimized = `You are a skilled writing assistant.\n\nTask: ${optimized}`;
+    } else if (optimized.toLowerCase().includes('analyze') || optimized.toLowerCase().includes('data') || optimized.toLowerCase().includes('research')) {
+      optimized = `You are a thorough analyst.\n\nTask: ${optimized}`;
     } else {
-      optimized = `You are a knowledgeable assistant. ${optimized}`;
+      optimized = `Task: ${optimized}`;
     }
   }
-  
-  // Add clarity instructions
-  if (!prompt.toLowerCase().includes('clear') && !prompt.toLowerCase().includes('detailed')) {
-    optimized += ' Please provide a clear, detailed response.';
+
+  // 5. Add clarity instructions for better responses
+  if (!optimized.toLowerCase().includes('clear') && !optimized.toLowerCase().includes('detailed') && !optimized.toLowerCase().includes('specific')) {
+    optimized += '\n\nPlease provide a clear, detailed response with specific examples where relevant.';
   }
-  
-  // Add structure guidance for longer requests
-  if (prompt.length > 100 && !prompt.toLowerCase().includes('step')) {
-    optimized += ' Structure your response with clear steps or sections.';
+
+  // 6. Add structure guidance for complex requests
+  if (optimized.length > 150 && !optimized.toLowerCase().includes('step') && !optimized.toLowerCase().includes('section')) {
+    optimized += ' Structure your response with clear sections or steps.';
   }
+
+  // 7. Clean up extra whitespace
+  optimized = optimized
+    .replace(/\s+/g, ' ')
+    .replace(/\n\s*\n/g, '\n\n')
+    .trim();
   
-  console.log('Complyze: Optimized prompt:', optimized.substring(0, 150) + '...');
+  console.log('Complyze: Optimized prompt:', optimized.substring(0, 200) + '...');
   return optimized;
+}
+
+// Helper function to add structured format to longer prompts
+function addPromptStructure(prompt: string): string {
+  // Simple heuristic to add structure
+  const sentences = prompt.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  
+  if (sentences.length > 3) {
+    const context = sentences.slice(0, Math.ceil(sentences.length / 2)).join('. ') + '.';
+    const task = sentences.slice(Math.ceil(sentences.length / 2)).join('. ') + '.';
+    
+    return `Context: ${context}\n\nTask: ${task}`;
+  }
+  
+  return prompt;
 }
 
 export async function POST(request: Request) {
@@ -62,10 +106,31 @@ export async function POST(request: Request) {
 
     // 3. Calculate risk level based on PII detection and content
     let risk_level = 'low';
+    let hasCriticalRisk = false;
+    let hasHighRisk = false;
+    
     if (redactionResult.redactionDetails && redactionResult.redactionDetails.length > 0) {
-      if (redactionResult.redactionDetails.length >= 3) {
+      // Check for critical risk patterns
+      const criticalPatterns = ['ssn', 'creditcard', 'api_key', 'jwtToken', 'oauthSecret', 'sshKey', 'exportControl', 'cui', 'whistleblower', 'credentials'];
+      const highRiskPatterns = ['bank_account', 'routing_number', 'drivers_license', 'passport', 'healthInfo', 'internalUrl', 'revenueData', 'financialProjections', 'confidential', 'security', 'legal'];
+      
+      for (const detail of redactionResult.redactionDetails) {
+        if (criticalPatterns.includes(detail.type)) {
+          hasCriticalRisk = true;
+          hasHighRisk = true;
+          break;
+        } else if (highRiskPatterns.includes(detail.type)) {
+          hasHighRisk = true;
+        }
+      }
+      
+      if (hasCriticalRisk) {
+        risk_level = 'critical';
+      } else if (hasHighRisk) {
         risk_level = 'high';
-      } else if (redactionResult.redactionDetails.length >= 1) {
+      } else if (redactionResult.redactionDetails.length >= 2) {
+        risk_level = 'medium';
+      } else {
         risk_level = 'medium';
       }
     }
@@ -99,7 +164,10 @@ export async function POST(request: Request) {
       clarity_score,
       risk_level,
       control_tags,
-      pii_detected: redactionResult.redactionDetails?.map(detail => detail.type) || []
+      pii_detected: redactionResult.redactionDetails?.map(detail => detail.type) || [],
+      detectedPII: redactionResult.redactionDetails?.map(detail => detail.type) || [], // For extension compatibility
+      hasHighRisk: hasHighRisk,
+      hasCriticalRisk: hasCriticalRisk
     };
 
     console.log('Complyze: Analysis complete:', result);

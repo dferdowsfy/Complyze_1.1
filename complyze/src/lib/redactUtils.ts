@@ -29,104 +29,94 @@ export interface RedactionResult {
   }>;
 }
 
-// Expanded regex for PII & sensitive data (see comments for control mappings)
+// Comprehensive regex patterns for PII/PHI/PCI and enterprise-specific data
 const piiPatterns: Record<string, RegExp> = {
-  // --- Financial Data ---
-  // Credit card numbers (PCI DSS 3.2.1, NIST 800-53 SC-28)
-  creditcard: /\b(?:\d[ -]*?){13,16}\b/g,
-  // Bank account numbers (SOX 404, GLBA)
-  bank_account: /\b\d{8,12}\b/g, // Simplified, adjust for country
-  // Routing numbers (FFIEC, NIST CSF)
-  routing_number: /\b\d{9}\b/g, // US ABA routing
-  // Tax ID/EIN (IRS Pub 1075, SOC 2)
-  tax_id: /\b\d{2}-\d{7}\b/g, // EIN format
-  // Investment account (SEC, FINRA)
-  investment_account: /\bINVEST\d{6,10}\b/gi, // Example pattern
+  // ✅ Core PII/PHI/PCI (Standard Compliance)
+  // Personal Identifiers
+  email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+  phone: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g,
+  fullName: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g,
+  
+  // Financial Data
+  ssn: /\b\d{3}-?\d{2}-?\d{4}\b/g,
+  creditcard: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b/g,
+  bank_account: /\b\d{8,17}\b/g,
+  routing_number: /\b[0-9]{9}\b/g,
+  
+  // Government IDs
+  drivers_license: /\b[A-Z]{1,2}\d{6,8}\b/g,
+  passport: /\b[A-Z]{1,2}\d{6,9}\b/g,
+  
+  // Health Information
+  healthInfo: /\b(?:diagnosis|treatment|prescription|medical|health|patient|doctor|hospital|clinic)\b/gi,
+  insurance_number: /\b[A-Z]{2,4}\d{6,12}\b/g,
+  
+  // Network/Device
+  ip_address: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g,
+  device_id: /\b[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}\b/g,
 
-  // --- Government Identifiers ---
-  // SSN (NIST 800-122, FISMA)
-  ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
-  // Passport (ITAR, EAR)
-  passport: /\b[\dA-Z]{8,9}\b/g, // Simplified
-  // Driver's license (State, REAL ID)
-  drivers_license: /\b[A-Z0-9]{1,2}-?\d{3,8}\b/gi, // Varies by state/country
-  // Military service number (DoD, NIST 800-171)
-  military_id: /\b[0-9]{10}\b/g, // Example: 10 digits
-  // Government employee ID (FedRAMP, FISMA)
-  gov_employee_id: /\bEMP\d{5,10}\b/gi, // Example pattern
+  // 🏢 Enterprise-Specific Company Data
+  // Technical Assets
+  api_key: /\b(?:sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,}|[a-zA-Z0-9]{32,})\b/g,
+  jwtToken: /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g,
+  oauthSecret: /\b(?:client_secret|oauth_token|access_token|refresh_token)[\s:=]+[a-zA-Z0-9_-]+/gi,
+  sshKey: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g,
+  
+  // Internal URLs and Services
+  internalUrl: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g,
+  internalService: /\b(?:ServiceNow|Snowflake|Redshift|Databricks|Splunk|Tableau)\s+(?:instance|database|server)/gi,
+  
+  // Project and Code Names
+  projectName: /\b(?:Project|Operation|Initiative)\s+[A-Z][a-zA-Z]+\b/g,
+  codeNames: /\b[A-Z][a-zA-Z]+(?:DB|API|Service|Platform)\b/g,
+  
+  // Financial and Strategic
+  revenueData: /\$[\d,]+(?:\.\d{2})?\s*(?:million|billion|M|B|revenue|profit|loss)/gi,
+  financialProjections: /\b(?:Q[1-4]|FY\d{2,4})\s+(?:revenue|earnings|profit|forecast)/gi,
+  
+  // IP Ranges and Network
+  cidrRange: /\b(?:10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\/\d{1,2}\b/g,
+  
+  // Regulatory and Compliance
+  exportControl: /\b(?:ITAR|EAR|export.controlled|dual.use)\b/gi,
+  cui: /\b(?:CUI|Controlled Unclassified Information)\b/gi,
+  whistleblower: /\b(?:whistleblower|insider.threat|investigation|compliance.violation)\b/gi,
 
-  // --- Healthcare Data (HIPAA PHI) ---
-  // Medical record number (HIPAA, NIST 800-66)
-  medical_record: /\bMRN\d{6,10}\b/gi, // Example pattern
-  // Health insurance number (HITECH, 45 CFR)
-  insurance_number: /\bHIN\d{6,10}\b/gi, // Example pattern
-  // Prescription number (DEA, 21 CFR)
-  prescription_number: /\bRX\d{7,10}\b/gi, // Example pattern
-  // Biometric identifiers (HIPAA, GDPR)
-  biometric: /\b(fingerprint|iris|retina|face|voice)\b/gi, // Keyword-based
-  // Genetic information (GINA, HIPAA)
-  genetic_info: /\b(genotype|genome|DNA|RNA|chromosome)\b/gi, // Keyword-based
+  // Sensitive Keywords (Context-Aware)
+  credentials: /\b(?:password|secret|token|key|credential|auth|login)\s*[:=]\s*\S+/gi,
+  confidential: /\b(?:confidential|private|internal.only|restricted|classified)\b/gi,
+  security: /\b(?:vulnerability|exploit|backdoor|zero.day|penetration.test)\b/gi,
+  legal: /\b(?:attorney.client|privileged|litigation|settlement|NDA)\b/gi,
 
-  // --- Personal Identifiers ---
-  // Email (GDPR, CCPA, NIST PF)
-  email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-  // Phone (TCPA, GDPR)
-  phone: /\b\+?\d{1,2}[\s.-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g,
-  // Home address (CCPA, PIPEDA)
-  address: /\b\d{1,5}\s+([A-Za-z0-9.,'\-\s]+)\b/g, // Simplified
-  // IP address (GDPR, ePrivacy)
-  ip_address: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g,
-  // Device ID/MAC (COPPA, state laws)
-  device_id: /\b([A-Fa-f0-9]{2}[:-]){5}[A-Fa-f0-9]{2}\b/g,
-
-  // --- AI/Infra ---
-  // API keys/tokens (NIST 800-63B, OAuth)
-  api_key: /\b(?:sk|pk|api|key|token)[-_][a-zA-Z0-9-]{8,}\b/gi,
-  // Model weights/parameters (NIST AI RMF)
-  model_weights: /\b(model|weight|parameter)[-_ ]?\d{4,}\b/gi, // Example
-  // Inference endpoints (Cloud, SOC 2)
-  inference_endpoint: /https?:\/\/[\w.-]+\/(infer|predict|model)\b/gi, // Example
-  // Prompt templates (Trade secret)
-  prompt_template: /\b(prompt|template)[-_ ]?\d{3,}\b/gi, // Example
-
-  // --- Business/Legal ---
-  // Customer lists (Trade Secrets Act)
-  customer_list: /\bcustomer(s)? list(s)?\b/gi, // Keyword
-  // Pricing strategies (Antitrust, SEC)
-  pricing_strategy: /\bpricing strateg(y|ies)\b/gi, // Keyword
-  // M&A discussions (Securities, insider trading)
-  mna_discussion: /\bmerger(s)?|acquisition(s)?|M&A\b/gi, // Keyword
-  // Employee evaluations (Employment law, GDPR)
-  employee_evaluation: /\bemployee evaluation(s)?\b/gi, // Keyword
-  // Legal strategy (Attorney-client)
-  legal_strategy: /\blegal strateg(y|ies)\b/gi, // Keyword
-  // Regulatory communications (Agency confidentiality)
-  regulatory_comm: /\bregulator(y|ies) communication(s)?\b/gi, // Keyword
-  // Compliance violations (Self-reporting, settlements)
-  compliance_violation: /\bcompliance violation(s)?\b/gi, // Keyword
-  // Audit findings (SOX 404)
-  audit_finding: /\baudit finding(s)?\b/gi, // Keyword
-
-  // --- Behavioral/Inferential ---
-  // User interaction patterns (GDPR, CCPA)
-  user_interaction: /\b(user|customer|client) (interaction|behavior|pattern)s?\b/gi, // Keyword
-  // Preference profiles (ePrivacy, advertising)
-  preference_profile: /\bpreference profile(s)?\b/gi, // Keyword
-  // Conversation history (Data retention, RTBF)
-  conversation_history: /\bconversation histor(y|ies)\b/gi, // Keyword
-  // Decision explanations (EU AI Act, FCRA)
-  decision_explanation: /\bdecision explanation(s)?\b/gi, // Keyword
-
-  // --- AI-Specific Sensitive Data ---
-  // Proprietary datasets (Trade Secrets Act, NIST AI RMF)
-  proprietary_dataset: /\bproprietary dataset(s)?\b/gi, // Keyword
-  // Copyrighted content (DMCA, EU Copyright)
-  copyrighted_content: /\bcopyright(ed)? content\b/gi, // Keyword
-  // Personal training examples (GDPR, CCPA)
-  personal_training_example: /\bpersonal training example(s)?\b/gi, // Keyword
-
-  // --- Names (fallback, not robust) ---
+  // Legacy patterns for backward compatibility
   name: /\b([A-Z][a-z]+)\s([A-Z][a-z]+)\b/g,
+  medical_record: /\bMRN\d{6,10}\b/gi,
+  prescription_number: /\bRX\d{7,10}\b/gi,
+  biometric: /\b(fingerprint|iris|retina|face|voice)\b/gi,
+  genetic_info: /\b(genotype|genome|DNA|RNA|chromosome)\b/gi,
+  address: /\b\d{1,5}\s+([A-Za-z0-9.,'\-\s]+)\b/g,
+  model_weights: /\b(model|weight|parameter)[-_ ]?\d{4,}\b/gi,
+  inference_endpoint: /https?:\/\/[\w.-]+\/(infer|predict|model)\b/gi,
+  prompt_template: /\b(prompt|template)[-_ ]?\d{3,}\b/gi,
+  customer_list: /\bcustomer(s)? list(s)?\b/gi,
+  pricing_strategy: /\bpricing strateg(y|ies)\b/gi,
+  mna_discussion: /\bmerger(s)?|acquisition(s)?|M&A\b/gi,
+  employee_evaluation: /\bemployee evaluation(s)?\b/gi,
+  legal_strategy: /\blegal strateg(y|ies)\b/gi,
+  regulatory_comm: /\bregulator(y|ies) communication(s)?\b/gi,
+  compliance_violation: /\bcompliance violation(s)?\b/gi,
+  audit_finding: /\baudit finding(s)?\b/gi,
+  user_interaction: /\b(user|customer|client) (interaction|behavior|pattern)s?\b/gi,
+  preference_profile: /\bpreference profile(s)?\b/gi,
+  conversation_history: /\bconversation histor(y|ies)\b/gi,
+  decision_explanation: /\bdecision explanation(s)?\b/gi,
+  proprietary_dataset: /\bproprietary dataset(s)?\b/gi,
+  copyrighted_content: /\bcopyright(ed)? content\b/gi,
+  personal_training_example: /\bpersonal training example(s)?\b/gi,
+  tax_id: /\b\d{2}-\d{7}\b/g,
+  investment_account: /\bINVEST\d{6,10}\b/gi,
+  military_id: /\b[0-9]{10}\b/g,
+  gov_employee_id: /\bEMP\d{5,10}\b/gi
 };
 
 // Redaction placeholder generator for all types
