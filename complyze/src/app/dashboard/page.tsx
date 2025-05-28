@@ -520,7 +520,8 @@ function PromptIntegrityScoreCard() {
     avg_integrity: 0,
     stable: 0,
     suspicious: 0,
-    critical: 0
+    critical: 0,
+    total: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -530,18 +531,27 @@ function PromptIntegrityScoreCard() {
 
   const fetchIntegrityStats = async () => {
     try {
-      // For now, using mock data since the RPC function might not exist yet
-      // Replace with: const { data } = await supabase.rpc('get_integrity_stats');
-      const mockData = {
-        avg_integrity: 78,
-        stable: 142,
-        suspicious: 28,
-        critical: 5
-      };
+      console.log('Fetching real integrity stats from API...');
+      const response = await fetch('/api/analytics/integrity');
       
-      setIntegrityData(mockData);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch integrity stats: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Integrity stats received:', data);
+      
+      setIntegrityData(data);
     } catch (error) {
       console.error('Error fetching integrity stats:', error);
+      // Fallback to default values on error
+      setIntegrityData({
+        avg_integrity: 85,
+        stable: 0,
+        suspicious: 0,
+        critical: 0,
+        total: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -604,6 +614,11 @@ function PromptIntegrityScoreCard() {
             <span className="text-lg font-semibold" style={{ color: status.color }}>
               {status.text}
             </span>
+            {integrityData.total > 0 && (
+              <div className="text-xs text-gray-500 mt-1">
+                Based on {integrityData.total} prompts
+              </div>
+            )}
           </div>
 
           {/* Counts */}
@@ -631,6 +646,7 @@ function PromptIntegrityScoreCard() {
 function RiskTypeFrequencyCard() {
   const [riskFrequency, setRiskFrequency] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [totalPrompts, setTotalPrompts] = useState(0);
 
   const riskTypeColors: Record<string, string> = {
     'PII Leakage': '#ef4444',
@@ -649,32 +665,23 @@ function RiskTypeFrequencyCard() {
 
   const fetchRiskTypes = async () => {
     try {
-      // For now, using mock data
-      // Replace with: const { data } = await supabase.from('PromptLog').select('risk_types');
-      const mockData = [
-        { risk_types: ['PII Leakage', 'Credential Exposure'] },
-        { risk_types: ['PII Leakage'] },
-        { risk_types: ['Jailbreak Attempt'] },
-        { risk_types: ['Model Leakage', 'PII Leakage'] },
-        { risk_types: ['Vague Prompt'] },
-        { risk_types: ['Internal Asset Disclosure'] },
-        { risk_types: ['Regulatory Trigger'] },
-        { risk_types: ['PII Leakage'] },
-        { risk_types: ['Credential Exposure'] },
-        { risk_types: ['Vague Prompt', 'Other'] },
-      ];
-
-      // Aggregate risk types
-      const frequencyMap: Record<string, number> = {};
-      mockData.forEach(row => {
-        row.risk_types?.forEach(type => {
-          frequencyMap[type] = (frequencyMap[type] || 0) + 1;
-        });
-      });
-
-      setRiskFrequency(frequencyMap);
+      console.log('Fetching real risk type data from API...');
+      const response = await fetch('/api/analytics/risk-types');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch risk types: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Risk types received:', data);
+      
+      setRiskFrequency(data.risk_types || {});
+      setTotalPrompts(data.total_prompts || 0);
     } catch (error) {
       console.error('Error fetching risk types:', error);
+      // Fallback to empty data on error
+      setRiskFrequency({});
+      setTotalPrompts(0);
     } finally {
       setLoading(false);
     }
@@ -685,7 +692,14 @@ function RiskTypeFrequencyCard() {
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <h3 className="font-bold text-xl text-[#0E1E36]">Risk Type Frequency</h3>
+      <div className="flex justify-between items-center">
+        <h3 className="font-bold text-xl text-[#0E1E36]">Risk Type Frequency</h3>
+        {totalPrompts > 0 && (
+          <span className="text-sm text-gray-500">
+            {totalPrompts} prompts analyzed
+          </span>
+        )}
+      </div>
       
       {loading ? (
         <div className="flex justify-center items-center h-48">
@@ -715,7 +729,10 @@ function RiskTypeFrequencyCard() {
           
           {sortedRisks.length === 0 && (
             <div className="text-gray-500 text-center w-full py-8">
-              No risk data available
+              {totalPrompts === 0 ? 'No prompts analyzed yet' : 'No risk patterns detected'}
+              <div className="text-xs mt-2">
+                {totalPrompts === 0 ? 'Start using the extension to see risk analysis' : 'Your prompts are looking secure! 🛡️'}
+              </div>
             </div>
           )}
         </div>
