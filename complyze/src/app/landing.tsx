@@ -473,6 +473,137 @@ export default function Landing() {
         {/* <a href="#how-it-works" className="bg-[#FF6F3C] text-white font-bold text-lg px-8 py-4 rounded-lg shadow-lg hover:bg-[#ff8a5c] transition">See how it works</a> */}
       </section>
 
+      {/* Desktop App Download Section */}
+      <section className="bg-gradient-to-r from-[#0E1E36] to-[#1a2b4a] py-16 sm:py-20 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+              🖥️ Complyze Desktop
+            </h2>
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto">
+              Real-time AI prompt monitoring that lives in your menu bar. Never miss a risky prompt again.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-8 sm:gap-12 items-center">
+            {/* Features */}
+            <div className="space-y-6">
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">⚡</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Real-Time Monitoring</h3>
+                  <p className="text-gray-300">Automatically detects and analyzes AI prompts across ChatGPT, Claude, Gemini, and more.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🛡️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Menu Bar Integration</h3>
+                  <p className="text-gray-300">Lives quietly in your macOS menu bar with instant access to your dashboard and settings.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">📊</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Seamless Sync</h3>
+                  <p className="text-gray-300">All detections automatically sync with your Complyze dashboard for comprehensive reporting.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🔒</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Privacy First</h3>
+                  <p className="text-gray-300">Your prompts are analyzed locally with optional cloud sync. You control your data.</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Download Section */}
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-bold text-white mb-4">Download for macOS</h3>
+                <p className="text-gray-300 mb-6">Compatible with macOS 10.15 or later</p>
+                
+                <div className="space-y-4">
+                  {/* Apple Silicon Download */}
+                  <a 
+                    href="/Complyze Desktop-1.0.0-arm64.dmg"
+                    download
+                    className="block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg"
+                  >
+                    <div className="flex items-center justify-center space-x-3">
+                      <span className="text-xl">🍎</span>
+                      <div className="text-left">
+                        <div className="text-lg">Download for Mac</div>
+                        <div className="text-sm opacity-90">Apple Silicon (M1, M2, M3)</div>
+                      </div>
+                    </div>
+                  </a>
+                  
+                  {/* Intel Download */}
+                  <a 
+                    href="/Complyze Desktop-1.0.0.dmg"
+                    download
+                    className="block w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center justify-center space-x-3">
+                      <span className="text-xl">💻</span>
+                      <div className="text-left">
+                        <div className="text-lg">Download for Mac</div>
+                        <div className="text-sm opacity-90">Intel Processor</div>
+                      </div>
+                    </div>
+                  </a>
+                </div>
+                
+                <div className="mt-6 text-sm text-gray-400">
+                  <p className="mb-2">
+                    <strong>Version 1.0.0</strong> • Free with Complyze account
+                  </p>
+                  <p>
+                    Not sure which version? Most newer Macs use Apple Silicon.
+                  </p>
+                </div>
+              </div>
+              
+              {/* Installation Steps */}
+              <div className="border-t border-white/20 pt-6">
+                <h4 className="text-lg font-semibold text-white mb-4">Quick Install:</h4>
+                <ol className="text-sm text-gray-300 space-y-2">
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">1.</span>
+                    <span>Download and open the DMG file</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">2.</span>
+                    <span>Drag Complyze Desktop to Applications</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">3.</span>
+                    <span>Launch and login with your Complyze account</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">4.</span>
+                    <span>Look for the Complyze icon in your menu bar</span>
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Prompt Enhancement Tool Section */}
       <section className="bg-[#FAF9F6] text-[#0E1E36] py-12 sm:py-20 px-4">
         <div className="max-w-5xl mx-auto">
