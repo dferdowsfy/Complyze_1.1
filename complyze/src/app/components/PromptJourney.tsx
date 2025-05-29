@@ -165,15 +165,6 @@ function RiskDetection({ inView }: { inView: boolean }) {
         transition={{ duration: 0.8 }}
         className="w-full flex flex-col items-center"
       >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ delay: 0.1, duration: 0.7 }}
-          className="text-3xl md:text-4xl font-bold mb-8"
-          style={{ color: COLORS.risk }}
-        >
-          Weak and Risky Prompt Input
-        </motion.div>
         <div className="w-full max-w-2xl relative">
           <div
             className="rounded-2xl shadow-xl p-10 border border-[#E0E0E0] flex flex-col items-center"
@@ -185,7 +176,6 @@ function RiskDetection({ inView }: { inView: boolean }) {
               color: '#fff',
             }}
           >
-            <span className="text-lg mb-2 flex items-center gap-2" style={{ color: '#fff' }}><span role="img" aria-label="user">👤</span>User</span>
             <motion.span
               initial={{ opacity: 0 }}
               animate={inView ? { opacity: 1 } : {}}
@@ -248,12 +238,22 @@ function RiskDetection({ inView }: { inView: boolean }) {
 
 function PromptOptimizer({ inView }: { inView: boolean }) {
   return (
-    <div className="overflow-y-auto max-h-[80vh] w-full flex flex-col items-center">
+    <div className="overflow-y-auto max-h-[80vh] w-full flex flex-col items-center relative">
+      {/* Tracker in background */}
+      <div className="absolute left-0 top-0 w-full h-full z-0 pointer-events-none select-none">
+        <div className="flex flex-col items-center justify-center h-full opacity-10 text-6xl font-extrabold tracking-widest" style={{ color: '#FF6F3C', userSelect: 'none' }}>
+          <div>Risk Detection</div>
+          <div>Optimization</div>
+          <div>Compliance</div>
+          <div>Redaction</div>
+          <div>Deployment</div>
+        </div>
+      </div>
       <motion.div
         initial={{ opacity: 0, y: 80 }}
         animate={inView ? { opacity: 1, y: 0 } : {}}
         transition={{ duration: 0.8 }}
-        className="w-full flex flex-col items-center"
+        className="w-full flex flex-col items-center z-10"
       >
         {/* Animated gear logo above the cards */}
         <motion.div
@@ -272,19 +272,21 @@ function PromptOptimizer({ inView }: { inView: boolean }) {
         >
           Prompt Optimization
         </motion.div>
-        <div className="w-full max-w-4xl flex flex-col md:flex-row gap-8 items-center justify-center">
+        <div className="w-full max-w-4xl flex flex-col md:flex-row gap-8 items-center justify-center z-10">
           {/* Left side: Enhanced and Safe Prompt */}
           <motion.div
             initial={{ x: 0 }}
             animate={inView ? { x: 30 } : {}}
             transition={{ duration: 0.7 }}
             className="flex-1"
+            style={{ zIndex: 10 }}
           >
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.2, duration: 0.7 }}
               className="bg-[#e6fff3] border border-green-500 rounded-2xl p-8 shadow"
+              style={{ position: 'relative', zIndex: 10 }}
             >
               <h3 className="text-xl font-bold text-green-700 mb-4">Enhanced and Safe Prompt</h3>
               <div className="text-lg">
@@ -300,13 +302,13 @@ function PromptOptimizer({ inView }: { inView: boolean }) {
               </div>
             </motion.div>
           </motion.div>
-          
           {/* Right side: Complyze Redaction Insights */}
           <motion.div
             initial={{ x: 0, opacity: 0 }}
             animate={inView ? { x: -30, opacity: 1 } : {}}
             transition={{ duration: 0.7, delay: 0.3 }}
             className="flex-1"
+            style={{ zIndex: 10 }}
           >
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -513,6 +515,7 @@ function RedactionAudit({ inView }: { inView: boolean }) {
             animate={inView ? { opacity: 1, y: 0 } : {}}
             transition={{ delay: 0.7, duration: 0.7 }}
             className="w-full bg-[#fff0e6] rounded-xl p-5 border border-[#FF6F3C] mt-4"
+            style={{ boxShadow: '0 0 16px 2px #FF6F3C, 0 0 8px 2px #fff0e6', border: '2px solid #FF6F3C' }}
           >
             <h3 className="text-lg font-bold mb-2" style={{ color: COLORS.accent }}>Risk Mitigation Actions</h3>
             <ul className="list-disc pl-5 text-sm space-y-1">
