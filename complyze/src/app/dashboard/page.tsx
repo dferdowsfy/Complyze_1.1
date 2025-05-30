@@ -90,34 +90,34 @@ function BudgetTrackerCard({ data }: { data: any }) {
   const bgColor = isOverBudget ? "#FFEBEE" : "#E8F5E8";
   
   return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Budget Tracker</div>
-      <div className="text-lg font-semibold text-gray-500 mb-2">
-        <span style={{ color: indicatorColor, fontWeight: 800, fontSize: 22 }}>${data?.total_spend?.toFixed(2) || '0.00'}</span> 
-        <span className="text-base"> / ${data?.budget?.toFixed(2) || '500.00'}</span>
+    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Budget Tracker</div>
+      <div className="text-base sm:text-lg font-semibold text-gray-500 mb-2">
+        <span style={{ color: indicatorColor, fontWeight: 800, fontSize: '18px' }} className="sm:text-xl lg:text-2xl">${data?.total_spend?.toFixed(2) || '0.00'}</span> 
+        <span className="text-sm sm:text-base"> / ${data?.budget?.toFixed(2) || '500.00'}</span>
       </div>
       <div className="flex items-center gap-2 mb-3">
-        <span style={{ color: indicatorColor, fontSize: 24 }}>{data?.indicator || '↓'}</span>
-        <span style={{ color: indicatorColor, fontWeight: 700 }}>
+        <span style={{ color: indicatorColor, fontSize: '20px' }} className="sm:text-2xl">{data?.indicator || '↓'}</span>
+        <span style={{ color: indicatorColor, fontWeight: 700 }} className="text-sm sm:text-base">
           {Math.abs(data?.percent_delta || 0).toFixed(1)}% {data?.status || 'Under Budget'}
         </span>
       </div>
       <div className="mt-3 mb-1">
-        <div className="text-sm text-gray-400 mb-1">Monthly Budget Usage</div>
-        <div className="bg-gray-100 rounded h-4 w-full relative" style={{ backgroundColor: bgColor }}>
+        <div className="text-xs sm:text-sm text-gray-400 mb-1">Monthly Budget Usage</div>
+        <div className="bg-gray-100 rounded h-3 sm:h-4 w-full relative" style={{ backgroundColor: bgColor }}>
           <div 
             style={{ 
               width: `${Math.min(100, Math.abs(data?.percent_delta || 0) + 100)}%`, 
               background: indicatorColor 
             }} 
-            className="h-4 rounded transition-all duration-300" 
+            className="h-3 sm:h-4 rounded transition-all duration-300" 
           />
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-[#0E1E36]">
             {((data?.total_spend || 0) / (data?.budget || 500) * 100).toFixed(1)}%
           </div>
         </div>
       </div>
-      <div className="text-sm text-gray-500 font-medium">
+      <div className="text-xs sm:text-sm text-gray-500 font-medium">
         Status: <span style={{ color: indicatorColor, fontWeight: 'bold' }}>{data?.status || 'Under Budget'}</span>
       </div>
     </div>
@@ -126,26 +126,26 @@ function BudgetTrackerCard({ data }: { data: any }) {
 
 function TopPromptsCard({ data }: { data: any[] }) {
   return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Top 5 Most Expensive Prompts</div>
-      <div className="flex flex-col gap-3 flex-1">
+    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Top 5 Most Expensive Prompts</div>
+      <div className="flex flex-col gap-2 sm:gap-3 flex-1">
         {data && data.length > 0 ? (
           data.map((prompt, index) => (
-            <div key={index} className="border-l-4 border-[#FF6F3C] pl-3 py-2 bg-gray-50 rounded">
-              <div className="text-sm font-semibold text-gray-800 mb-1">
+            <div key={index} className="border-l-4 border-[#FF6F3C] pl-2 sm:pl-3 py-2 bg-gray-50 rounded">
+              <div className="text-xs sm:text-sm font-semibold text-gray-800 mb-1">
                 {prompt.prompt}
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-600">{prompt.model}</span>
-                <span className="text-sm font-bold text-[#FF6F3C]">${prompt.cost}</span>
+                <span className="text-xs sm:text-sm font-bold text-[#FF6F3C]">${prompt.cost}</span>
               </div>
             </div>
           ))
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <div className="text-center">
-              <div className="text-lg mb-2">📊</div>
-              <div>No prompts analyzed yet</div>
+              <div className="text-base sm:text-lg mb-2">📊</div>
+              <div className="text-sm sm:text-base">No prompts analyzed yet</div>
               <div className="text-xs mt-1">Start using the extension to see cost data</div>
             </div>
           </div>
@@ -166,21 +166,21 @@ function MostUsedModelCard({ model }: { model: string }) {
   const modelColor = getModelColor(model || '');
 
   return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Most Used Model</div>
+    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Most Used Model</div>
       <div className="flex-1 flex flex-col items-center justify-center">
         <div 
-          className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
+          className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 rounded-full flex items-center justify-center mb-3 sm:mb-4"
           style={{ backgroundColor: `${modelColor}20`, border: `3px solid ${modelColor}` }}
         >
-          <span className="text-2xl font-bold" style={{ color: modelColor }}>
+          <span className="text-xl sm:text-2xl font-bold" style={{ color: modelColor }}>
             {model && model !== 'No data' ? model.charAt(0) : '?'}
           </span>
         </div>
-        <div className="text-xl font-bold text-[#0E1E36] text-center">
+        <div className="text-lg sm:text-xl font-bold text-[#0E1E36] text-center">
           {model || 'No data'}
         </div>
-        <div className="text-sm text-gray-500 text-center mt-2">
+        <div className="text-xs sm:text-sm text-gray-500 text-center mt-2">
           {model && model !== 'No data' ? 'Based on prompt frequency' : 'Start using the extension to see data'}
         </div>
       </div>
@@ -190,13 +190,13 @@ function MostUsedModelCard({ model }: { model: string }) {
 
 function TotalSpendCard({ totalSpend }: { totalSpend: number }) {
   return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Total Spend</div>
+    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Total Spend</div>
       <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="text-5xl font-bold text-[#FF6F3C] mb-2">
+        <div className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#FF6F3C] mb-2">
           ${(totalSpend || 0).toFixed(2)}
         </div>
-        <div className="text-lg text-gray-600 mb-4">This Month</div>
+        <div className="text-base sm:text-lg text-gray-600 mb-3 sm:mb-4">This Month</div>
         <div className="w-full bg-gray-100 rounded-full h-2">
           <div 
             className="bg-gradient-to-r from-[#FF6F3C] to-[#FF8A5C] h-2 rounded-full transition-all duration-500"
@@ -255,7 +255,7 @@ function CostSummaryPanel() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="bg-white rounded-2xl shadow-md p-7 flex items-center justify-center min-h-[320px]">
             <div className="text-gray-500">Loading...</div>
@@ -266,7 +266,7 @@ function CostSummaryPanel() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
+    <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
       <BudgetTrackerCard data={costData?.budget_tracker} />
       <TopPromptsCard data={costData?.top_prompts} />
       <MostUsedModelCard model={costData?.most_used_model} />
@@ -447,21 +447,21 @@ function FlaggedPromptsPanel() {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-bold text-xl text-[#0E1E36]">
+    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-3 sm:gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2 sm:gap-0">
+        <div className="font-bold text-lg sm:text-xl text-[#0E1E36]">
           Flagged Prompts {refreshing && <span className="text-sm text-gray-500">(Refreshing...)</span>}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 text-sm">
           <button 
             onClick={createTestData}
-            className="text-sm text-green-600 hover:text-green-800 transition-colors"
+            className="text-green-600 hover:text-green-800 transition-colors"
           >
             Create Test Data
           </button>
           <button 
             onClick={fetchFlaggedPrompts}
-            className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+            className="text-blue-600 hover:text-blue-800 transition-colors"
             disabled={refreshing}
           >
             {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -469,9 +469,9 @@ function FlaggedPromptsPanel() {
         </div>
       </div>
       {flaggedPrompts.map((row, i) => (
-        <div key={row.id || i} className="flex flex-col md:flex-row md:items-start justify-between border-b border-gray-100 py-4 last:border-b-0">
+        <div key={row.id || i} className="flex flex-col lg:flex-row lg:items-start justify-between border-b border-gray-100 py-3 sm:py-4 last:border-b-0 gap-3 lg:gap-4">
           <div className="flex-1">
-            <div className="font-semibold text-base text-[#0E1E36] mb-2">{row.summary}</div>
+            <div className="font-semibold text-sm sm:text-base text-[#0E1E36] mb-2">{row.summary}</div>
             
             {/* Framework Tags */}
             <div className="flex flex-wrap gap-1 mb-2">
@@ -479,7 +479,7 @@ function FlaggedPromptsPanel() {
             </div>
             
             {/* Platform and LLM Provider Info */}
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
               {row.platform && (
                 <div className="flex items-center gap-1">
                   <span className="text-xs font-medium text-gray-500">Platform:</span>
@@ -517,11 +517,11 @@ function FlaggedPromptsPanel() {
             </div>
             
             {/* Metadata Row */}
-            <div className="flex items-center gap-2 text-xs text-gray-400">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs text-gray-400">
               <span>{row.date}</span>
               {row.piiTypes && row.piiTypes.length > 0 && (
                 <>
-                  <span>•</span>
+                  <span className="hidden sm:inline">•</span>
                   <span className="text-red-600 font-medium">
                     PII: {row.piiTypes.join(', ')}
                   </span>
@@ -529,8 +529,8 @@ function FlaggedPromptsPanel() {
               )}
               {row.url && (
                 <>
-                  <span>•</span>
-                  <span className="text-blue-600 font-medium truncate max-w-[200px]" title={row.url}>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="text-blue-600 font-medium truncate max-w-[200px] sm:max-w-[300px]" title={row.url}>
                     {row.url}
                   </span>
                 </>
@@ -539,8 +539,8 @@ function FlaggedPromptsPanel() {
           </div>
           
           {/* Risk and Status Badges */}
-          <div className="flex flex-col gap-2 mt-3 md:mt-0 md:ml-4">
-            <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold text-center ${
+          <div className="flex flex-row lg:flex-col gap-2 lg:mt-0">
+            <span className={`inline-block px-2 sm:px-3 py-1 rounded-full text-xs font-bold text-center ${
               row.risk === 'High' ? 'bg-red-100 text-red-700' : 
               row.risk === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 
               'bg-green-100 text-green-700'
@@ -1126,11 +1126,13 @@ export default function ComplyzeDashboard() {
   function FloatingOptimizerButton() {
     return (
       <button
-        className="fixed bottom-8 right-8 z-40 bg-[#FF6F3C] text-white font-bold text-lg px-6 py-3 rounded-full shadow-lg flex items-center gap-2 hover:bg-[#e65d2d] transition"
+        className="fixed bottom-4 sm:bottom-6 lg:bottom-8 right-4 sm:right-6 lg:right-8 z-40 bg-[#FF6F3C] text-white font-bold text-sm sm:text-base lg:text-lg px-4 sm:px-5 lg:px-6 py-2 sm:py-2.5 lg:py-3 rounded-full shadow-lg flex items-center gap-1 sm:gap-2 hover:bg-[#e65d2d] transition"
         onClick={() => setOptimizerOpen(true)}
         style={{ boxShadow: '0 4px 24px rgba(255,111,60,0.18)' }}
       >
-        <span className="text-2xl">✍️</span> Prompt Optimizer
+        <span className="text-lg sm:text-xl lg:text-2xl">✍️</span> 
+        <span className="hidden sm:inline">Prompt Optimizer</span>
+        <span className="sm:hidden">Optimize</span>
       </button>
     );
   }
@@ -1138,44 +1140,45 @@ export default function ComplyzeDashboard() {
   return (
     <div className="min-h-screen font-sans" style={{ fontSize: 22, background: COLORS.bg }}>
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex px-8 py-5 shadow-md justify-between items-center" style={{ background: COLORS.bg }}>
+      <nav className="sticky top-0 z-40 flex flex-col sm:flex-row px-4 sm:px-8 py-3 sm:py-5 shadow-md justify-between items-center" style={{ background: COLORS.bg }}>
         {/* Left: Branding */}
-        <div className="flex items-center gap-12 min-w-[180px]">
-          <span className="text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
+        <div className="flex items-center gap-6 sm:gap-12 min-w-[180px] w-full sm:w-auto justify-between sm:justify-start">
+          <span className="text-xl sm:text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
+          {/* Mobile menu toggle could go here if needed */}
         </div>
         {/* Center: Nav Links */}
-        <div className="flex gap-12 items-center">
-          <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+        <div className="flex flex-wrap sm:flex-nowrap gap-4 sm:gap-8 lg:gap-12 items-center justify-center w-full sm:w-auto mt-3 sm:mt-0">
+          <Link href="/dashboard" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Dashboard
             {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
             )}
           </Link>
-          <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+          <Link href="/dashboard/reports" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Reports
             {pathname && pathname.includes('reports') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
             )}
           </Link>
-          <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+          <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Settings
             {pathname && pathname.includes('settings') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
             )}
           </Link>
         </div>
         {/* Right: User Info Pill */}
-        <div className="flex items-center gap-4 min-w-[160px] justify-end">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
           {user?.email && (
             <div className="relative group">
               <span
-                className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20 text-sm sm:text-base"
                 title={user.email}
                 style={{ display: 'inline-block' }}
               >
@@ -1190,11 +1193,13 @@ export default function ComplyzeDashboard() {
         </div>
       </nav>
       {/* Notification Bar */}
-      <div className="w-full bg-[#E53935] text-white font-bold text-lg py-3 text-center shadow" style={{ letterSpacing: 0.2 }}>
-        3 prompts were blocked today due to high-risk redactions — Your risk score increased 12% this week
+      <div className="w-full bg-[#E53935] text-white font-bold text-sm sm:text-base lg:text-lg py-2 sm:py-3 text-center shadow px-4" style={{ letterSpacing: 0.2 }}>
+        <span className="block sm:inline">3 prompts were blocked today due to high-risk redactions</span>
+        <span className="hidden sm:inline"> — </span>
+        <span className="block sm:inline">Your risk score increased 12% this week</span>
       </div>
       {/* Main Grid */}
-      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
         {/* Top: 3 LLM Cards - REPLACED WITH COST SUMMARY */}
         {/* {LLM_CARDS.map((d) => <LLMUsageCard key={d.model} d={d} />)} */}
       </div>
@@ -1203,7 +1208,7 @@ export default function ComplyzeDashboard() {
       <CostSummaryPanel />
       
       {/* Second Row: Compliance, Risk, Optimizer */}
-      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8 lg:mb-10">
         {/* Prompt Integrity Score Card */}
         <PromptIntegrityScoreCard />
         
@@ -1214,7 +1219,7 @@ export default function ComplyzeDashboard() {
         <PromptRiskTrendsCard />
       </div>
       {/* Flagged Prompts Panel */}
-      <div className="max-w-7xl mx-auto px-4 pb-10">
+      <div className="max-w-7xl mx-auto px-4 pb-6 sm:pb-8 lg:pb-10">
         <FlaggedPromptsPanel />
       </div>
       {/* Floating Optimizer Button */}
