@@ -103,11 +103,11 @@ interface TemplateCardProps {
 function TemplateCard({ template, selected, onClick }: TemplateCardProps) {
   return (
     <div
-      className={`bg-white shadow-sm p-4 rounded-lg hover:ring-2 ring-orange-500 cursor-pointer mb-3 border transition ${selected ? "ring-2 ring-orange-500" : ""}`}
+      className={`bg-white shadow-sm p-3 sm:p-4 rounded-lg hover:ring-2 ring-orange-500 cursor-pointer mb-2 sm:mb-3 border transition ${selected ? "ring-2 ring-orange-500" : ""}`}
       onClick={onClick}
     >
-      <h3 className="font-semibold mb-1 text-base">{template.name}</h3>
-      <p className="text-sm text-slate-500 mb-2">{template.description}</p>
+      <h3 className="font-semibold mb-1 text-sm sm:text-base">{template.name}</h3>
+      <p className="text-xs sm:text-sm text-slate-500 mb-2">{template.description}</p>
       <div className="flex gap-1 flex-wrap">
         {template.frameworks.map((fw: keyof typeof FRAMEWORK_COLORS) => (
           <FrameworkPill key={fw} fw={fw} />
@@ -123,34 +123,37 @@ interface ExportBarProps {
 }
 function ExportBar({ onExport, isGenerating }: ExportBarProps) {
   return (
-    <div className="sticky bottom-0 left-0 w-full bg-white border-t border-slate-200 flex justify-end gap-4 px-8 py-4 z-40 shadow-lg">
+    <div className="sticky bottom-0 left-0 w-full bg-white border-t border-slate-200 flex flex-wrap sm:flex-nowrap justify-center sm:justify-end gap-2 sm:gap-4 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 z-40 shadow-lg">
       <button 
-        className="bg-[#6366F1] text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+        className="bg-[#6366F1] text-white px-3 sm:px-4 py-2 rounded font-semibold disabled:opacity-50 text-sm sm:text-base flex-1 sm:flex-none"
         onClick={() => onExport('pdf')}
         disabled={isGenerating}
       >
         {isGenerating ? 'Generating...' : 'PDF'}
       </button>
       <button 
-        className="bg-[#4F46E5] text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+        className="bg-[#4F46E5] text-white px-3 sm:px-4 py-2 rounded font-semibold disabled:opacity-50 text-sm sm:text-base flex-1 sm:flex-none"
         onClick={() => onExport('docx')}
         disabled={isGenerating}
       >
-        Word Doc
+        <span className="hidden sm:inline">Word Doc</span>
+        <span className="sm:hidden">Word</span>
       </button>
       <button 
-        className="bg-[#06B6D4] text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+        className="bg-[#06B6D4] text-white px-3 sm:px-4 py-2 rounded font-semibold disabled:opacity-50 text-sm sm:text-base flex-1 sm:flex-none"
         onClick={() => onExport('json')}
         disabled={isGenerating}
       >
-        JSON Bundle
+        <span className="hidden sm:inline">JSON Bundle</span>
+        <span className="sm:hidden">JSON</span>
       </button>
       <button 
-        className="bg-[#F97316] text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+        className="bg-[#F97316] text-white px-3 sm:px-4 py-2 rounded font-semibold disabled:opacity-50 text-sm sm:text-base flex-1 sm:flex-none"
         onClick={() => onExport('share')}
         disabled={isGenerating}
       >
-        Copy Share Link
+        <span className="hidden sm:inline">Copy Share Link</span>
+        <span className="sm:hidden">Share</span>
       </button>
     </div>
   );
@@ -370,32 +373,32 @@ export default function Reports() {
   return (
     <div className="min-h-screen bg-[#0E1E36] font-sans">
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex px-8 py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
+      <nav className="sticky top-0 z-40 flex flex-col sm:flex-row px-4 sm:px-8 py-3 sm:py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
         {/* Left: Branding */}
-        <div className="flex items-center gap-12 min-w-[180px]">
-          <span className="text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
+        <div className="flex items-center gap-6 sm:gap-12 min-w-[180px] w-full sm:w-auto justify-between sm:justify-start">
+          <span className="text-xl sm:text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
         </div>
         {/* Center: Nav Links */}
-        <div className="flex gap-12 items-center">
-          <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+        <div className="flex flex-wrap sm:flex-nowrap gap-4 sm:gap-8 lg:gap-12 items-center justify-center w-full sm:w-auto mt-3 sm:mt-0">
+          <Link href="/dashboard" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Dashboard
           </Link>
-          <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+          <Link href="/dashboard/reports" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Reports
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
               <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
             </span>
           </Link>
-          <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+          <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Settings
           </Link>
         </div>
         {/* Right: User Info Pill */}
-        <div className="flex items-center gap-4 min-w-[160px] justify-end">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
           {user?.email && (
             <div className="relative group">
               <span
-                className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20 text-sm sm:text-base"
                 title={user.email}
                 style={{ display: 'inline-block' }}
               >
@@ -407,43 +410,43 @@ export default function Reports() {
       </nav>
 
       {/* Main Content */}
-      <div className="flex h-[calc(100vh-120px)]">
+      <div className="flex flex-col lg:flex-row min-h-[calc(100vh-120px)]">
         {/* Left Sidebar - Templates */}
-        <div className="w-1/3 bg-slate-50 border-r border-slate-200 overflow-y-auto">
-          <div className="p-6">
-            <h2 className="text-xl font-bold mb-4 text-slate-800">Compliance Report Templates</h2>
+        <div className="w-full lg:w-1/3 bg-slate-50 border-r border-slate-200 overflow-y-auto max-h-[50vh] lg:max-h-none">
+          <div className="p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 text-slate-800">Compliance Report Templates</h2>
             
             {/* Date Range Selector */}
-            <div className="mb-6 p-4 bg-white rounded-lg border">
-              <h3 className="font-semibold mb-3 text-slate-700">Report Configuration</h3>
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-white rounded-lg border">
+              <h3 className="font-semibold mb-3 text-slate-700 text-sm sm:text-base">Report Configuration</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1">Project Name</label>
+                  <label className="block text-xs sm:text-sm font-medium text-slate-600 mb-1">Project Name</label>
                   <input
                     type="text"
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="w-full px-2 sm:px-3 py-2 border border-slate-300 rounded-md text-xs sm:text-sm"
                     placeholder="Project name"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Start Date</label>
+                    <label className="block text-xs sm:text-sm font-medium text-slate-600 mb-1">Start Date</label>
                     <input
                       type="date"
                       value={dateRange.start}
                       onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      className="w-full px-2 sm:px-3 py-2 border border-slate-300 rounded-md text-xs sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">End Date</label>
+                    <label className="block text-xs sm:text-sm font-medium text-slate-600 mb-1">End Date</label>
                     <input
                       type="date"
                       value={dateRange.end}
                       onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      className="w-full px-2 sm:px-3 py-2 border border-slate-300 rounded-md text-xs sm:text-sm"
                     />
                   </div>
                 </div>
@@ -464,15 +467,15 @@ export default function Reports() {
 
         {/* Right Content - Preview */}
         <div className="flex-1 bg-white overflow-y-auto">
-          <div className="p-8">
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold text-slate-800 mb-2">
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div className="mb-4 sm:mb-6">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 mb-2">
                 {selectedTemplate ? 
                   TEMPLATES.find(t => t.id === selectedTemplate)?.name || 'Report Preview' : 
                   'AI-Powered Compliance Reports'
                 }
               </h1>
-              <p className="text-slate-600">
+              <p className="text-slate-600 text-sm sm:text-base">
                 {selectedTemplate ? 
                   'Generated using real data from your Chrome extension and OpenRouter LLM' :
                   'Select a template to generate a compliance report with real extension data'

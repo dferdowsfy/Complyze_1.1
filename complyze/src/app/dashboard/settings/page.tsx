@@ -104,23 +104,23 @@ const CategorySection = ({
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div 
-        className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+        className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-6 cursor-pointer hover:bg-gray-50 transition-colors gap-3 sm:gap-4"
         onClick={onToggleExpanded}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
             <ToggleSwitch 
               enabled={allEnabled} 
               onChange={handleCategoryToggle}
             />
-            <h3 className="text-lg font-semibold text-[#1C2A3E]">{categoryName}</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-[#1C2A3E]">{categoryName}</h3>
           </div>
-          <span className="text-sm text-gray-500">
+          <span className="text-xs sm:text-sm text-gray-500">
             {items.filter(item => settings[`${categoryName}.${item}`]).length} of {items.length} enabled
           </span>
         </div>
         <svg 
-          className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''} self-center sm:self-auto`}
           fill="none" 
           stroke="currentColor" 
           viewBox="0 0 24 24"
@@ -130,11 +130,11 @@ const CategorySection = ({
       </div>
       
       {expanded && (
-        <div className="px-6 pb-6 border-t border-gray-100">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div className="px-4 sm:px-6 pb-4 sm:pb-6 border-t border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
             {items.map(item => (
               <div key={item} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm font-medium text-[#1C2A3E]">{item}</span>
+                <span className="text-xs sm:text-sm font-medium text-[#1C2A3E]">{item}</span>
                 <ToggleSwitch 
                   enabled={settings[`${categoryName}.${item}`] || false}
                   onChange={(enabled) => onToggle(`${categoryName}.${item}`, enabled)}
@@ -146,14 +146,14 @@ const CategorySection = ({
           {/* Custom terms input for "Other" category */}
           {categoryName === 'Other' && (
             <div className="mt-4">
-              <label className="block text-sm font-medium text-[#1C2A3E] mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-[#1C2A3E] mb-2">
                 Custom Terms (comma-separated)
               </label>
               <textarea
                 value={customTerms || ''}
                 onChange={(e) => onCustomTermsChange?.(e.target.value)}
                 placeholder="Enter custom terms to redact, separated by commas..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6F3C] focus:border-transparent resize-none"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6F3C] focus:border-transparent resize-none text-sm"
                 rows={3}
               />
               <p className="text-xs text-gray-500 mt-1">
@@ -330,40 +330,40 @@ export default function Settings() {
     return (
       <div className="min-h-screen font-sans" style={{ background: '#0E1E36' }}>
         {/* Navigation */}
-        <nav className="sticky top-0 z-40 flex px-8 py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
+        <nav className="sticky top-0 z-40 flex flex-col sm:flex-row px-4 sm:px-8 py-3 sm:py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
           {/* Left: Branding */}
-          <div className="flex items-center gap-12 min-w-[180px]">
-            <span className="text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
+          <div className="flex items-center gap-6 sm:gap-12 min-w-[180px] w-full sm:w-auto justify-between sm:justify-start">
+            <span className="text-xl sm:text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
           </div>
           {/* Center: Nav Links */}
-          <div className="flex gap-12 items-center">
-            <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+          <div className="flex flex-wrap sm:flex-nowrap gap-4 sm:gap-8 lg:gap-12 items-center justify-center w-full sm:w-auto mt-3 sm:mt-0">
+            <Link href="/dashboard" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
               Dashboard
               {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
-                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                   <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
                 </span>
               )}
             </Link>
-            <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            <Link href="/dashboard/reports" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
               Reports
               {pathname && pathname.includes('reports') && (
-                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                   <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
                 </span>
               )}
             </Link>
-            <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+            <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
               Settings
               {pathname && pathname.includes('settings') && (
-                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                   <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
                 </span>
               )}
             </Link>
           </div>
           {/* Right: User Info Pill */}
-          <div className="flex items-center gap-4 min-w-[160px] justify-end">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
             {/* User info pill from localStorage */}
             {(() => {
               let user = null;
@@ -376,7 +376,7 @@ export default function Settings() {
                 return (
                   <div className="relative group">
                     <span
-                      className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                      className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20 text-sm sm:text-base"
                       title={user.email}
                       style={{ display: 'inline-block' }}
                     >
@@ -409,40 +409,40 @@ export default function Settings() {
   return (
     <div className="min-h-screen font-sans" style={{ background: '#0E1E36' }}>
       {/* Sticky Nav Tabs */}
-      <nav className="sticky top-0 z-40 flex px-8 py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
+      <nav className="sticky top-0 z-40 flex flex-col sm:flex-row px-4 sm:px-8 py-3 sm:py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
         {/* Left: Branding */}
-        <div className="flex items-center gap-12 min-w-[180px]">
-          <span className="text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
+        <div className="flex items-center gap-6 sm:gap-12 min-w-[180px] w-full sm:w-auto justify-between sm:justify-start">
+          <span className="text-xl sm:text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
         </div>
         {/* Center: Nav Links */}
-        <div className="flex gap-12 items-center">
-          <Link href="/dashboard" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+        <div className="flex flex-wrap sm:flex-nowrap gap-4 sm:gap-8 lg:gap-12 items-center justify-center w-full sm:w-auto mt-3 sm:mt-0">
+          <Link href="/dashboard" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Dashboard
             {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
             )}
           </Link>
-          <Link href="/dashboard/reports" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+          <Link href="/dashboard/reports" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Reports
             {pathname && pathname.includes('reports') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
             )}
           </Link>
-          <Link href="/dashboard/settings" className="relative text-white font-semibold text-2xl px-4 py-2 transition focus:outline-none">
+          <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Settings
             {pathname && pathname.includes('settings') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-24 h-[8px] block">
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
             )}
           </Link>
         </div>
         {/* Right: User Info Pill */}
-        <div className="flex items-center gap-4 min-w-[160px] justify-end">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
           {/* User info pill from localStorage */}
           {(() => {
             let user = null;
@@ -455,7 +455,7 @@ export default function Settings() {
               return (
                 <div className="relative group">
                   <span
-                    className="rounded-full bg-white/10 px-4 py-1 text-white font-medium truncate max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20"
+                    className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20 text-sm sm:text-base"
                     title={user.email}
                     style={{ display: 'inline-block' }}
                   >
@@ -473,34 +473,34 @@ export default function Settings() {
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto py-12 px-4">
+      <main className="max-w-6xl mx-auto py-8 sm:py-12 px-4">
         {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Customize Your Redaction Policy</h1>
-          <p className="text-lg text-white mb-6">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">Customize Your Redaction Policy</h1>
+          <p className="text-base sm:text-lg text-white mb-4 sm:mb-6">
             Configure which types of sensitive information should be automatically redacted from your prompts.
           </p>
           
           {/* Error Display */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
               <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-red-700 font-medium">Error: {error}</span>
+                <span className="text-red-700 font-medium text-sm sm:text-base">Error: {error}</span>
               </div>
             </div>
           )}
 
           {/* Last Saved Indicator */}
           {lastSaved && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
               <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-green-700 font-medium">
+                <span className="text-green-700 font-medium text-sm sm:text-base">
                   Settings saved successfully at {lastSaved.toLocaleTimeString()}
                 </span>
               </div>
@@ -509,32 +509,32 @@ export default function Settings() {
         </div>
 
         {/* Control Panel */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
-          <h2 className="text-xl font-semibold text-[#1C2A3E] mb-4">Quick Actions</h2>
-          <div className="flex flex-wrap gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 mb-6 sm:mb-8">
+          <h2 className="text-lg sm:text-xl font-semibold text-[#1C2A3E] mb-3 sm:mb-4">Quick Actions</h2>
+          <div className="flex flex-wrap gap-2 sm:gap-4">
             <button
               onClick={expandAllCategories}
-              className="px-4 py-2 bg-gray-100 text-[#1C2A3E] rounded-lg hover:bg-gray-200 transition font-medium"
+              className="px-3 sm:px-4 py-2 bg-gray-100 text-[#1C2A3E] rounded-lg hover:bg-gray-200 transition font-medium text-sm sm:text-base"
             >
               Expand All
             </button>
             <button
               onClick={collapseAllCategories}
-              className="px-4 py-2 bg-gray-100 text-[#1C2A3E] rounded-lg hover:bg-gray-200 transition font-medium"
+              className="px-3 sm:px-4 py-2 bg-gray-100 text-[#1C2A3E] rounded-lg hover:bg-gray-200 transition font-medium text-sm sm:text-base"
             >
               Collapse All
             </button>
             <button
               onClick={enableAllRedaction}
-              className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition font-medium"
+              className="px-3 sm:px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition font-medium text-sm sm:text-base"
             >
-              Enable All Redaction
+              Enable All
             </button>
             <button
               onClick={disableAllRedaction}
-              className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition font-medium"
+              className="px-3 sm:px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition font-medium text-sm sm:text-base"
             >
-              Disable All Redaction
+              Disable All
             </button>
           </div>
         </div>
@@ -557,25 +557,25 @@ export default function Settings() {
         </div>
 
         {/* Save Button and Status */}
-        <div className="flex flex-col items-center mb-6 space-y-4">
+        <div className="flex flex-col items-center mb-4 sm:mb-6 space-y-3 sm:space-y-4">
           {/* Auto-save status */}
           <div className="flex items-center gap-2">
             {saving ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#FF6F3C]"></div>
-                <span className="text-white text-sm">Auto-saving changes...</span>
+                <span className="text-white text-xs sm:text-sm">Auto-saving changes...</span>
               </>
             ) : lastSaved ? (
               <>
                 <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-green-400 text-sm">
+                <span className="text-green-400 text-xs sm:text-sm">
                   Auto-saved at {lastSaved.toLocaleTimeString()}
                 </span>
               </>
             ) : (
-              <span className="text-gray-400 text-sm">Changes will be auto-saved</span>
+              <span className="text-gray-400 text-xs sm:text-sm">Changes will be auto-saved</span>
             )}
           </div>
           
@@ -583,30 +583,30 @@ export default function Settings() {
           <button
             onClick={saveSettings}
             disabled={saving}
-            className="px-8 py-3 bg-[#FF6F3C] text-white rounded-xl font-bold text-lg hover:bg-[#ff8a5c] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+            className="px-6 sm:px-8 py-2.5 sm:py-3 bg-[#FF6F3C] text-white rounded-xl font-bold text-base sm:text-lg hover:bg-[#ff8a5c] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
             {saving ? 'Saving...' : 'Save All Changes'}
           </button>
         </div>
 
         {/* Logout Button */}
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center mb-4 sm:mb-6">
           <button
             onClick={() => {
               localStorage.removeItem('complyze_token');
               localStorage.removeItem('complyze_user');
               window.location.href = '/';
             }}
-            className="px-6 py-2 bg-gray-200 text-[#E53935] rounded-lg font-semibold text-base hover:bg-red-100 transition border border-gray-300 shadow-sm"
+            className="px-4 sm:px-6 py-2 bg-gray-200 text-[#E53935] rounded-lg font-semibold text-sm sm:text-base hover:bg-red-100 transition border border-gray-300 shadow-sm"
           >
             Logout
           </button>
         </div>
 
         {/* Info Panel */}
-        <div className="mt-12 bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-3">How Redaction Works</h3>
-          <div className="text-blue-800 space-y-2">
+        <div className="mt-8 sm:mt-12 bg-blue-50 border border-blue-200 rounded-xl p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-blue-900 mb-2 sm:mb-3">How Redaction Works</h3>
+          <div className="text-blue-800 space-y-2 text-sm sm:text-base">
             <p>• <strong>Enabled items</strong> are completely redacted (replaced with [REDACTED]) in your prompts</p>
             <p>• <strong>Disabled items</strong> are wrapped in asterisks (*Name*) for visibility while maintaining some privacy</p>
             <p>• Changes are automatically synced to your Chrome extension</p>
