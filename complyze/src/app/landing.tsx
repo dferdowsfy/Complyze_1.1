@@ -226,6 +226,79 @@ export default function Landing() {
   };
   const switchLink = { color: '#FF6F3C', fontWeight: 600, cursor: 'pointer', marginLeft: 4 };
 
+  // Count-up animation hook
+  const useCountUp = (target: number, duration: number = 2000) => {
+    const [count, setCount] = useState(0);
+    const [isVisible, setIsVisible] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting && !isVisible) {
+            setIsVisible(true);
+          }
+        },
+        { threshold: 0.5 }
+      );
+
+      if (ref.current) {
+        observer.observe(ref.current);
+      }
+
+      return () => observer.disconnect();
+    }, [isVisible]);
+
+    useEffect(() => {
+      if (!isVisible) return;
+
+      let startTime: number;
+      const animate = (currentTime: number) => {
+        if (!startTime) startTime = currentTime;
+        const progress = Math.min((currentTime - startTime) / duration, 1);
+        
+        setCount(Math.floor(progress * target));
+        
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+
+      requestAnimationFrame(animate);
+    }, [isVisible, target, duration]);
+
+    return { count, ref };
+  };
+
+  // CountUpSection component
+  const CountUpSection = () => {
+    const { count, ref } = useCountUp(85);
+    
+    return (
+      <div ref={ref} className="flex items-center justify-center gap-8 md:gap-12">
+        <div className="text-left max-w-md">
+          <p className="text-lg md:text-xl text-gray-700 leading-relaxed">
+            Organizations using Complyze see an average reduction in compliance violations
+          </p>
+        </div>
+        <div className="flex items-center">
+          <span 
+            className="text-8xl md:text-9xl font-bold tabular-nums"
+            style={{ color: '#0e1f36' }}
+          >
+            {count}
+          </span>
+          <span 
+            className="text-4xl md:text-5xl font-bold ml-2"
+            style={{ color: '#0e1f36' }}
+          >
+            %
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#0E1E36] font-sans text-white">
       {/* Top Navigation */}
@@ -480,6 +553,13 @@ export default function Landing() {
         {/* <a href="#how-it-works" className="bg-[#FF6F3C] text-white font-bold text-lg px-8 py-4 rounded-lg shadow-lg hover:bg-[#ff8a5c] transition">See how it works</a> */}
       </section>
 
+      {/* Count-up Section */}
+      <section className="bg-[#FAF9F6] text-[#0E1E36] py-16 sm:py-20 px-4">
+        <div className="max-w-6xl mx-auto">
+          <CountUpSection />
+        </div>
+      </section>
+
       {/* Desktop App and Chrome Extension Side-by-Side Section */}
       <section className="bg-gradient-to-r from-[#0E1E36] to-[#1a2b4a] py-16 sm:py-20 px-4">
         <div className="max-w-7xl mx-auto">
@@ -488,7 +568,7 @@ export default function Landing() {
               Choose Your Protection
             </h2>
             <p className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto">
-              Comprehensive AI prompt security across all your platforms. Use one or both to protect your organization.
+            AI prompt security that protects you—or your entire organization—across every platform you use.
             </p>
           </div>
           
