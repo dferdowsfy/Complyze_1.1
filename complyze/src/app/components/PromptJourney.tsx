@@ -369,7 +369,7 @@ function PromptOptimizer({ inView }: { inView: boolean }) {
                     </tr>
                     <tr className="border-b border-gray-200">
                       <td className="py-2">📁 File Paths</td>
-                      <td className="py-2">/models/vault/.../checkpoint.pt</td>
+                      <td className="py-2">/vault/.../checkpoint.pt</td>
                       <td className="py-2">Internal IP / data leak risk (SC-28)</td>
                     </tr>
                     <tr className="border-b border-gray-200">
