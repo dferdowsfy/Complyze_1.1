@@ -277,8 +277,14 @@ export default function Landing() {
     return (
       <div ref={ref} className="flex items-center justify-center gap-8 md:gap-12">
         <div className="text-left max-w-md">
-          <p className="text-lg md:text-xl text-gray-700 leading-relaxed">
-            Organizations using Complyze see an average reduction in compliance violations
+          <p className="text-lg md:text-xl text-gray-700 leading-relaxed font-semibold">
+            <span className="text-red-600">Don't be part of the</span> 
+          </p>
+          <p className="text-xl md:text-2xl text-gray-800 leading-tight font-bold mt-2">
+            of teams leaving AI value on the table
+          </p>
+          <p className="text-base md:text-lg text-gray-600 mt-3 leading-relaxed">
+            Most organizations waste their LLM potential with poor prompts, security gaps, and missed optimization opportunities.
           </p>
         </div>
         <div className="flex items-center">
