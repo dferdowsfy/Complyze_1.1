@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase } from '@/lib/supabaseClient';
+import { useDashboardMetrics } from '@/lib/useDashboardMetrics';
+import { BudgetModal } from '@/components/BudgetModal';
 
 // Inline style helpers
 const COLORS = {
@@ -84,43 +86,65 @@ function RiskBadge({ level }: { level: 'High' | 'Medium' | 'Low' }) {
 }
 
 // Cost Summary Components
-function BudgetTrackerCard({ data }: { data: any }) {
-  const isOverBudget = data?.status === "Over Budget";
+function BudgetTrackerCard({ data, userId, onBudgetUpdate }: { data: any; userId: string; onBudgetUpdate: () => void }) {
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  
+  if (!data) return null;
+
+  const isOverBudget = data.status === "Over Budget";
   const indicatorColor = isOverBudget ? "#E53935" : "#388E3C";
   const bgColor = isOverBudget ? "#FFEBEE" : "#E8F5E8";
   
   return (
-    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Budget Tracker</div>
-      <div className="text-base sm:text-lg font-semibold text-gray-500 mb-2">
-        <span style={{ color: indicatorColor, fontWeight: 800, fontSize: '18px' }} className="sm:text-xl lg:text-2xl">${data?.total_spend?.toFixed(2) || '0.00'}</span> 
-        <span className="text-sm sm:text-base"> / ${data?.budget?.toFixed(2) || '500.00'}</span>
-      </div>
-      <div className="flex items-center gap-2 mb-3">
-        <span style={{ color: indicatorColor, fontSize: '20px' }} className="sm:text-2xl">{data?.indicator || '↓'}</span>
-        <span style={{ color: indicatorColor, fontWeight: 700 }} className="text-sm sm:text-base">
-          {Math.abs(data?.percent_delta || 0).toFixed(1)}% {data?.status || 'Under Budget'}
-        </span>
-      </div>
-      <div className="mt-3 mb-1">
-        <div className="text-xs sm:text-sm text-gray-400 mb-1">Monthly Budget Usage</div>
-        <div className="bg-gray-100 rounded h-3 sm:h-4 w-full relative" style={{ backgroundColor: bgColor }}>
-          <div 
-            style={{ 
-              width: `${Math.min(100, Math.abs(data?.percent_delta || 0) + 100)}%`, 
-              background: indicatorColor 
-            }} 
-            className="h-3 sm:h-4 rounded transition-all duration-300" 
-          />
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-[#0E1E36]">
-            {((data?.total_spend || 0) / (data?.budget || 500) * 100).toFixed(1)}%
+    <>
+      <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+        <div className="flex justify-between items-center">
+          <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Budget Tracker</div>
+          <button
+            onClick={() => setShowBudgetModal(true)}
+            className="text-xs text-[#FF6F3C] hover:text-[#E55A2B] font-medium transition-colors"
+          >
+            Set Budget
+          </button>
+        </div>
+        <div className="text-base sm:text-lg font-semibold text-gray-500 mb-2">
+          <span style={{ color: indicatorColor, fontWeight: 800, fontSize: '18px' }} className="sm:text-xl lg:text-2xl">${data.total_spend?.toFixed(2) || '0.00'}</span> 
+          <span className="text-sm sm:text-base"> / ${data.budget?.toFixed(2) || '500.00'}</span>
+        </div>
+        <div className="flex items-center gap-2 mb-3">
+          <span style={{ color: indicatorColor, fontSize: '20px' }} className="sm:text-2xl">{data.indicator || '↓'}</span>
+          <span style={{ color: indicatorColor, fontWeight: 700 }} className="text-sm sm:text-base">
+            {Math.abs(data.percent_delta || 0).toFixed(1)}% {data.status || 'Under Budget'}
+          </span>
+        </div>
+        <div className="mt-3 mb-1">
+          <div className="text-xs sm:text-sm text-gray-400 mb-1">Monthly Budget Usage</div>
+          <div className="bg-gray-100 rounded h-3 sm:h-4 w-full relative" style={{ backgroundColor: bgColor }}>
+            <div 
+              style={{ 
+                width: `${Math.min(100, (data.total_spend || 0) / (data.budget || 500) * 100)}%`, 
+                background: indicatorColor 
+              }} 
+              className="h-3 sm:h-4 rounded transition-all duration-300" 
+            />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-[#0E1E36]">
+              {((data.total_spend || 0) / (data.budget || 500) * 100).toFixed(1)}%
+            </div>
           </div>
         </div>
+        <div className="text-xs sm:text-sm text-gray-500 font-medium">
+          Status: <span style={{ color: indicatorColor, fontWeight: 'bold' }}>{data.status || 'Under Budget'}</span>
+        </div>
       </div>
-      <div className="text-xs sm:text-sm text-gray-500 font-medium">
-        Status: <span style={{ color: indicatorColor, fontWeight: 'bold' }}>{data?.status || 'Under Budget'}</span>
-      </div>
-    </div>
+
+      <BudgetModal
+        isOpen={showBudgetModal}
+        onClose={() => setShowBudgetModal(false)}
+        currentBudget={data.budget || 500}
+        userId={userId}
+        onBudgetUpdate={onBudgetUpdate}
+      />
+    </>
   );
 }
 
@@ -137,7 +161,7 @@ function TopPromptsCard({ data }: { data: any[] }) {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-600">{prompt.model}</span>
-                <span className="text-xs sm:text-sm font-bold text-[#FF6F3C]">${prompt.cost}</span>
+                <span className="text-xs sm:text-sm font-bold text-[#FF6F3C]">${prompt.cost?.toFixed(4)}</span>
               </div>
             </div>
           ))
@@ -157,9 +181,10 @@ function TopPromptsCard({ data }: { data: any[] }) {
 
 function MostUsedModelCard({ model }: { model: string }) {
   const getModelColor = (modelName: string) => {
-    if (modelName.includes('GPT') || modelName.includes('OpenAI')) return '#10A37F';
-    if (modelName.includes('Claude') || modelName.includes('Anthropic')) return '#D97706';
-    if (modelName.includes('Gemini') || modelName.includes('Google')) return '#4285F4';
+    if (modelName.includes('gpt') || modelName.includes('GPT') || modelName.includes('OpenAI')) return '#10A37F';
+    if (modelName.includes('claude') || modelName.includes('Claude') || modelName.includes('Anthropic')) return '#D97706';
+    if (modelName.includes('gemini') || modelName.includes('Gemini') || modelName.includes('Google')) return '#4285F4';
+    if (modelName.includes('llama') || modelName.includes('Llama')) return '#8B5CF6';
     return '#6366F1';
   };
 
@@ -174,7 +199,7 @@ function MostUsedModelCard({ model }: { model: string }) {
           style={{ backgroundColor: `${modelColor}20`, border: `3px solid ${modelColor}` }}
         >
           <span className="text-xl sm:text-2xl font-bold" style={{ color: modelColor }}>
-            {model && model !== 'No data' ? model.charAt(0) : '?'}
+            {model && model !== 'No data' ? model.charAt(0).toUpperCase() : '?'}
           </span>
         </div>
         <div className="text-lg sm:text-xl font-bold text-[#0E1E36] text-center">
@@ -212,46 +237,8 @@ function TotalSpendCard({ totalSpend }: { totalSpend: number }) {
 }
 
 // Cost Summary Panel Component
-function CostSummaryPanel() {
-  const [costData, setCostData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchCostSummary();
-  }, []);
-
-  const fetchCostSummary = async () => {
-    try {
-      console.log('Fetching cost summary data from API...');
-      const response = await fetch('/api/analytics/cost-summary?user_id=test-user-123&budget=500');
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch cost summary: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Cost summary received:', data);
-      
-      setCostData(data);
-    } catch (error) {
-      console.error('Error fetching cost summary:', error);
-      // Fallback to default values on error
-      setCostData({
-        budget_tracker: {
-          total_spend: 0.00,
-          budget: 500.00,
-          percent_delta: -100.0,
-          status: "Under Budget",
-          indicator: "↓"
-        },
-        top_prompts: [],
-        most_used_model: "No data",
-        total_spend: 0.00
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+function CostSummaryPanel({ userId }: { userId: string }) {
+  const { data: dashboardData, loading, error, refetch } = useDashboardMetrics(userId);
 
   if (loading) {
     return (
@@ -265,12 +252,28 @@ function CostSummaryPanel() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-10">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="text-red-800">Error loading dashboard data: {error}</div>
+          <button 
+            onClick={refetch}
+            className="mt-2 text-red-600 hover:text-red-800 underline"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-      <BudgetTrackerCard data={costData?.budget_tracker} />
-      <TopPromptsCard data={costData?.top_prompts} />
-      <MostUsedModelCard model={costData?.most_used_model} />
-      <TotalSpendCard totalSpend={costData?.total_spend} />
+      <BudgetTrackerCard data={dashboardData?.budget_tracker} userId={userId} onBudgetUpdate={refetch} />
+      <TopPromptsCard data={dashboardData?.top_prompts || []} />
+      <MostUsedModelCard model={dashboardData?.most_used_model || 'No data'} />
+      <TotalSpendCard totalSpend={dashboardData?.total_spend || 0} />
     </div>
   );
 }
@@ -562,47 +565,17 @@ function FlaggedPromptsPanel() {
 }
 
 // Prompt Integrity Score Card Component
-function PromptIntegrityScoreCard() {
-  const [integrityData, setIntegrityData] = useState({
-    avg_integrity: 0,
-    stable: 0,
-    suspicious: 0,
-    critical: 0,
-    total: 0
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchIntegrityStats();
-  }, []);
-
-  const fetchIntegrityStats = async () => {
-    try {
-      console.log('Fetching real integrity stats from API...');
-      const response = await fetch('/api/analytics/integrity');
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch integrity stats: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Integrity stats received:', data);
-      
-      setIntegrityData(data);
-    } catch (error) {
-      console.error('Error fetching integrity stats:', error);
-      // Fallback to default values on error
-      setIntegrityData({
-        avg_integrity: 85,
-        stable: 0,
-        suspicious: 0,
-        critical: 0,
-        total: 0
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+function PromptIntegrityScoreCard({ data }: { data: any }) {
+  if (!data) {
+    return (
+      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+        <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Integrity Score</h3>
+        <div className="flex justify-center items-center h-48">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   const getStatus = (score: number) => {
     if (score >= 80) return { text: 'Stable', color: '#10b981' };
@@ -610,132 +583,93 @@ function PromptIntegrityScoreCard() {
     return { text: 'Critical', color: '#ef4444' };
   };
 
-  const status = getStatus(integrityData.avg_integrity);
+  const status = getStatus(data.avg_integrity);
   const circumference = 2 * Math.PI * 45; // radius = 45
-  const strokeDashoffset = circumference - (integrityData.avg_integrity / 100) * circumference;
+  const strokeDashoffset = circumference - (data.avg_integrity / 100) * circumference;
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
       <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Integrity Score</h3>
       
-      {loading ? (
-        <div className="flex justify-center items-center h-48">
-          <div className="text-gray-500">Loading...</div>
+      {/* Radial Gauge */}
+      <div className="relative flex justify-center items-center">
+        <svg width="120" height="120" className="transform -rotate-90">
+          {/* Background circle */}
+          <circle
+            cx="60"
+            cy="60"
+            r="45"
+            stroke="#e5e7eb"
+            strokeWidth="10"
+            fill="none"
+          />
+          {/* Progress circle */}
+          <circle
+            cx="60"
+            cy="60"
+            r="45"
+            stroke={status.color}
+            strokeWidth="10"
+            fill="none"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            className="transition-all duration-1000 ease-out"
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="absolute transform rotate-0 text-center">
+          <div className="text-3xl font-bold text-[#0E1E36]">{data.avg_integrity}</div>
+          <div className="text-sm text-gray-500">/ 100</div>
         </div>
-      ) : (
-        <>
-          {/* Radial Gauge */}
-          <div className="relative flex justify-center items-center">
-            <svg width="120" height="120" className="transform -rotate-90">
-              {/* Background circle */}
-              <circle
-                cx="60"
-                cy="60"
-                r="45"
-                stroke="#e5e7eb"
-                strokeWidth="10"
-                fill="none"
-              />
-              {/* Progress circle */}
-              <circle
-                cx="60"
-                cy="60"
-                r="45"
-                stroke={status.color}
-                strokeWidth="10"
-                fill="none"
-                strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
-                className="transition-all duration-1000 ease-out"
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="absolute transform rotate-0 text-center">
-              <div className="text-3xl font-bold text-[#0E1E36]">{integrityData.avg_integrity}</div>
-              <div className="text-sm text-gray-500">/ 100</div>
-            </div>
-          </div>
+      </div>
 
-          {/* Status */}
-          <div className="text-center">
-            <span className="text-lg font-semibold" style={{ color: status.color }}>
-              {status.text}
-            </span>
-            {integrityData.total > 0 && (
-              <div className="text-xs text-gray-500 mt-1">
-                Based on {integrityData.total} prompts
-              </div>
-            )}
+      {/* Status */}
+      <div className="text-center">
+        <span className="text-lg font-semibold" style={{ color: status.color }}>
+          {status.text}
+        </span>
+        {data.total > 0 && (
+          <div className="text-xs text-gray-500 mt-1">
+            Based on {data.total} prompts
           </div>
+        )}
+      </div>
 
-          {/* Counts */}
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            <div className="text-center p-2 rounded-lg bg-green-50">
-              <div className="text-2xl font-bold text-green-600">{integrityData.stable}</div>
-              <div className="text-xs text-gray-600">Stable</div>
-            </div>
-            <div className="text-center p-2 rounded-lg bg-orange-50">
-              <div className="text-2xl font-bold text-orange-600">{integrityData.suspicious}</div>
-              <div className="text-xs text-gray-600">Suspicious</div>
-            </div>
-            <div className="text-center p-2 rounded-lg bg-red-50">
-              <div className="text-2xl font-bold text-red-600">{integrityData.critical}</div>
-              <div className="text-xs text-gray-600">Critical</div>
-            </div>
-          </div>
-        </>
-      )}
+      {/* Counts */}
+      <div className="grid grid-cols-3 gap-2 mt-2">
+        <div className="text-center p-2 rounded-lg bg-green-50">
+          <div className="text-2xl font-bold text-green-600">{data.stable}</div>
+          <div className="text-xs text-gray-600">Stable</div>
+        </div>
+        <div className="text-center p-2 rounded-lg bg-orange-50">
+          <div className="text-2xl font-bold text-orange-600">{data.suspicious}</div>
+          <div className="text-xs text-gray-600">Suspicious</div>
+        </div>
+        <div className="text-center p-2 rounded-lg bg-red-50">
+          <div className="text-2xl font-bold text-red-600">{data.critical}</div>
+          <div className="text-xs text-gray-600">Critical</div>
+        </div>
+      </div>
     </div>
   );
 }
 
 // Risk Type Frequency Card Component
-function RiskTypeFrequencyCard() {
-  const [riskFrequency, setRiskFrequency] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [totalPrompts, setTotalPrompts] = useState(0);
-
+function RiskTypeFrequencyCard({ data }: { data: Record<string, number> }) {
   const riskTypeColors: Record<string, string> = {
-    'PII Leakage': '#ef4444',
-    'Credential Exposure': '#f97316',
-    'Jailbreak Attempt': '#ec4899',
-    'Model Leakage': '#a855f7',
-    'Internal Asset Disclosure': '#3b82f6',
-    'Vague Prompt': '#eab308',
-    'Regulatory Trigger': '#22c55e',
+    'PII': '#ef4444',
+    'IP': '#f97316',
+    'Compliance': '#ec4899',
+    'Jailbreak': '#a855f7',
+    'Credential Exposure': '#3b82f6',
+    'Data Leakage': '#eab308',
+    'Regulatory': '#22c55e',
     'Other': '#6b7280'
   };
 
-  useEffect(() => {
-    fetchRiskTypes();
-  }, []);
-
-  const fetchRiskTypes = async () => {
-    try {
-      console.log('Fetching real risk type data from API...');
-      const response = await fetch('/api/analytics/risk-types');
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch risk types: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Risk types received:', data);
-      
-      setRiskFrequency(data.risk_types || {});
-      setTotalPrompts(data.total_prompts || 0);
-    } catch (error) {
-      console.error('Error fetching risk types:', error);
-      // Fallback to empty data on error
-      setRiskFrequency({});
-      setTotalPrompts(0);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Sort by frequency
-  const sortedRisks = Object.entries(riskFrequency).sort((a, b) => b[1] - a[1]);
+  const sortedRisks = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
+  const totalPrompts = Object.values(data || {}).reduce((sum, count) => sum + count, 0);
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
@@ -748,258 +682,232 @@ function RiskTypeFrequencyCard() {
         )}
       </div>
       
-      {loading ? (
-        <div className="flex justify-center items-center h-48">
-          <div className="text-gray-500">Loading...</div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {sortedRisks.map(([riskType, count]) => {
-            const color = riskTypeColors[riskType] || riskTypeColors['Other'];
-            const size = count > 5 ? 'text-base px-4 py-2' : 'text-sm px-3 py-1.5';
-            
-            return (
-              <div
-                key={riskType}
-                className={`inline-flex items-center rounded-full font-medium ${size} transition-transform hover:scale-105`}
-                style={{
-                  backgroundColor: `${color}20`,
-                  color: color,
-                  border: `1px solid ${color}40`
-                }}
-              >
-                <span>{riskType}</span>
-                <span className="ml-2 font-bold">({count})</span>
-              </div>
-            );
-          })}
+      <div className="flex flex-wrap gap-2">
+        {sortedRisks.map(([riskType, count]) => {
+          const color = riskTypeColors[riskType] || riskTypeColors['Other'];
+          const size = count > 5 ? 'text-base px-4 py-2' : 'text-sm px-3 py-1.5';
           
-          {sortedRisks.length === 0 && (
-            <div className="text-gray-500 text-center w-full py-8">
-              {totalPrompts === 0 ? 'No prompts analyzed yet' : 'No risk patterns detected'}
-              <div className="text-xs mt-2">
-                {totalPrompts === 0 ? 'Start using the extension to see risk analysis' : 'Your prompts are looking secure! 🛡️'}
-              </div>
+          return (
+            <div
+              key={riskType}
+              className={`inline-flex items-center rounded-full font-medium ${size} transition-transform hover:scale-105`}
+              style={{
+                backgroundColor: `${color}20`,
+                color: color,
+                border: `1px solid ${color}40`
+              }}
+            >
+              <span>{riskType}</span>
+              <span className="ml-2 font-bold">({count})</span>
             </div>
-          )}
-        </div>
-      )}
+          );
+        })}
+        
+        {sortedRisks.length === 0 && (
+          <div className="text-gray-500 text-center w-full py-8">
+            {totalPrompts === 0 ? 'No prompts analyzed yet' : 'No risk patterns detected'}
+            <div className="text-xs mt-2">
+              {totalPrompts === 0 ? 'Start using the extension to see risk analysis' : 'Your prompts are looking secure! 🛡️'}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // Prompt Risk Trends Card Component
-function PromptRiskTrendsCard() {
-  const [trendsData, setTrendsData] = useState({
-    total_prompts: [0, 0, 0, 0, 0, 0, 0],
-    high_risk_prompts: [0, 0, 0, 0, 0, 0, 0],
-    trend_percent: 0,
-    status: 'Flat',
-    emoji: '➖'
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchTrendsData();
-  }, []);
-
-  const fetchTrendsData = async () => {
-    try {
-      console.log('Fetching real trends data from API...');
-      const response = await fetch('/api/analytics/trends');
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch trends data: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Trends data received:', data);
-      
-      setTrendsData(data);
-    } catch (error) {
-      console.error('Error fetching trends data:', error);
-      // Fallback to default values on error
-      setTrendsData({
-        total_prompts: [20, 22, 19, 25, 23, 21, 24],
-        high_risk_prompts: [5, 4, 3, 4, 2, 2, 1],
-        trend_percent: 80,
-        status: 'Improving',
-        emoji: '📈'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const { total_prompts: totalPrompts, high_risk_prompts: highRiskPrompts, trend_percent, status, emoji } = trendsData;
-  
-  // Calculate trend direction and color
-  const isImproving = status === 'Improving';
-  const isWorsening = status === 'Worsening';
-  const color = isImproving ? '#10b981' : isWorsening ? '#ef4444' : '#f59e0b';
-
-  // SVG sparkline for both lines
-  const width = 120, height = 40, pad = 6;
-  const scaleY = (arr: number[]): number[] => {
-    const max = Math.max(...totalPrompts, 1); // Avoid division by zero
-    return arr.map((v: number, i: number) => height - pad - (v / max) * (height - 2 * pad));
-  };
-  const scaleX = (arr: number[]): number[] => arr.map((_: number, i: number) => pad + i * ((width - 2 * pad) / 6));
-  const x = scaleX(totalPrompts);
-  const yTotal = scaleY(totalPrompts);
-  const yHigh = scaleY(highRiskPrompts);
-
-  return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-3 min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-2xl text-[#0E1E36] mb-1">Prompt Risk Trends</div>
-      <div className="text-sm text-gray-500 mb-2">Last 7 Days</div>
-      
-      {loading ? (
-        <div className="flex justify-center items-center h-32">
-          <div className="text-gray-500">Loading...</div>
-        </div>
-      ) : (
-        <>
-          {/* Sparkline Chart */}
-          <svg width={width} height={height} className="mb-2">
-            {/* Total Prompts Line */}
-            <polyline fill="none" stroke="#6366F1" strokeWidth="2.5" points={x.map((xv: number, i: number) => `${xv},${yTotal[i]}`).join(' ')} />
-            {/* High-Risk Prompts Line */}
-            <polyline fill="none" stroke="#ef4444" strokeWidth="2.5" points={x.map((xv: number, i: number) => `${xv},${yHigh[i]}`).join(' ')} />
-          </svg>
-          
-          <div className="flex items-center gap-2 text-lg font-semibold mb-1">
-            <span style={{ color }}>{emoji}</span>
-            <span style={{ color }}>{status}</span>
-            <span className="text-gray-400 text-base ml-2">({trend_percent}%)</span>
-          </div>
-          
-          <div className="text-sm text-gray-600 mb-2">
-            High-risk prompts trending: <span style={{ color }}>
-              {isImproving ? '↓' : isWorsening ? '↑' : '→'} {trend_percent}%
-            </span>
-          </div>
-          
-          <div className="text-xs text-gray-400 mt-2">
-            <span className="inline-block w-3 h-3 rounded-full mr-1" style={{ background: '#6366F1' }}></span> Total Prompts
-            <span className="inline-block w-3 h-3 rounded-full mx-2" style={{ background: '#ef4444' }}></span> High-Risk Prompts
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-export default function ComplyzeDashboard() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { isAuthenticated, user, loading: authLoading, logout } = useAuth();
-  const [prompt, setPrompt] = useState("");
-  const [enhancedPrompt, setEnhancedPrompt] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [optimizerOpen, setOptimizerOpen] = useState(false);
-  const [optimizerTab, setOptimizerTab] = useState<'optimize' | 'history' | 'analysis'>('optimize');
-
-  // Show loading while checking authentication
-  if (authLoading) {
+function PromptRiskTrendsCard({ data }: { data: any }) {
+  if (!data) {
     return (
-      <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-[#0E1E36] mb-4">Loading...</div>
-          <div className="text-gray-600">Checking authentication...</div>
+      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+        <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Risk Trends</h3>
+        <div className="flex justify-center items-center h-48">
+          <div className="text-gray-500">Loading...</div>
         </div>
       </div>
     );
   }
 
-  // If not authenticated, the useAuth hook will redirect to home
-  if (!isAuthenticated) {
-    return null;
+  // Create sparkline path
+  const maxValue = Math.max(...data.high_risk_prompts, 1);
+  const height = 60;
+  const width = 200;
+  
+  const points = data.high_risk_prompts.map((value: number, index: number) => {
+    const x = (index / (data.high_risk_prompts.length - 1)) * width;
+    const y = height - (value / maxValue) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+      <div className="flex justify-between items-center">
+        <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Risk Trends</h3>
+        <span className="text-sm text-gray-500">Last 7 Days</span>
+      </div>
+      
+      {/* Sparkline Chart */}
+      <div className="flex justify-center items-center mb-4">
+        <svg width={width} height={height} className="border rounded bg-gray-50">
+          {/* Grid lines */}
+          {[0, 1, 2, 3, 4].map(i => (
+            <line
+              key={i}
+              x1="0"
+              y1={i * (height / 4)}
+              x2={width}
+              y2={i * (height / 4)}
+              stroke="#e5e7eb"
+              strokeWidth="1"
+            />
+          ))}
+          
+          {/* Trend line */}
+          <polyline
+            points={points}
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          
+          {/* Data points */}
+          {data.high_risk_prompts.map((value: number, index: number) => {
+            const x = (index / (data.high_risk_prompts.length - 1)) * width;
+            const y = height - (value / maxValue) * height;
+            return (
+              <circle
+                key={index}
+                cx={x}
+                cy={y}
+                r="4"
+                fill="#ef4444"
+                stroke="white"
+                strokeWidth="2"
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Trend Summary */}
+      <div className="text-center">
+        <div className="text-3xl mb-2">{data.emoji}</div>
+        <div className="text-lg font-semibold text-[#0E1E36] mb-1">
+          {data.status}
+        </div>
+        <div className="text-sm text-gray-600">
+          High-risk prompts: {data.trend_percent > 0 ? '+' : ''}{data.trend_percent}%
+        </div>
+      </div>
+
+      {/* Weekly Summary */}
+      <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-[#0E1E36]">
+            {data.total_prompts.reduce((a: number, b: number) => a + b, 0)}
+          </div>
+          <div className="text-xs text-gray-600">Total Prompts</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-red-600">
+            {data.high_risk_prompts.reduce((a: number, b: number) => a + b, 0)}
+          </div>
+          <div className="text-xs text-gray-600">High Risk</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Analytics Panel Component  
+function AnalyticsPanel({ userId }: { userId: string }) {
+  const { data: dashboardData, loading, error } = useDashboardMetrics(userId);
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8 lg:mb-10">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-md p-7 flex items-center justify-center min-h-[320px]">
+            <div className="text-gray-500">Loading...</div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
-  // Placeholder data
-  const riskBreakdown = [
-    { label: 'Vague prompts', value: 31, color: COLORS.accent },
-    { label: 'PII leakage', value: 23, color: COLORS.header },
-    { label: 'Jailbreak attempts', value: 15, color: COLORS.riskHigh },
-    { label: 'Other', value: 31, color: COLORS.riskLow },
-  ];
-  const deptUsage = [
-    { dept: 'Sales', flagged: 7 },
-    { dept: 'Engineering', flagged: 2 },
-    { dept: 'Marketing', flagged: 3 },
-  ];
-  const reports = [
-    { title: 'System Security Plan', link: '/reports' },
-    { title: 'Audit Log', link: '/reports' },
-    { title: 'Executive Summary', link: '/reports' },
-  ];
-  const extensions = [
-    { name: 'Prompt Governance API' },
-    { name: 'Auto-POAM Generator' },
-    { name: 'Slack/Chrome Plugin' },
-    { name: 'Prompt Intelligence Feed' },
-  ];
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 mb-6 sm:mb-8 lg:mb-10">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="text-red-800">Error loading analytics data: {error}</div>
+        </div>
+      </div>
+    );
+  }
 
-  // LLM usage/cost data
-  const llmData = [
-    {
-      model: "GPT-4o",
-      inputTokens: 1800000,
-      outputTokens: 600000,
-      inputCostPerMillion: 3.00,
-      outputCostPerMillion: 10.00,
-      dailySpend: 9.14,
-      budget: 500
-    },
-    {
-      model: "Claude 3 Opus",
-      inputTokens: 1200000,
-      outputTokens: 300000,
-      inputCostPerMillion: 15.00,
-      outputCostPerMillion: 75.00,
-      dailySpend: 19.65,
-      budget: 500
-    },
-    {
-      model: "Gemini 1.5 Flash",
-      inputTokens: 2400000,
-      outputTokens: 800000,
-      inputCostPerMillion: 0.10,
-      outputCostPerMillion: 0.40,
-      dailySpend: 1.84,
-      budget: 500
-    }
-  ];
+  return (
+    <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8 lg:mb-10">
+      {/* Prompt Integrity Score Card */}
+      <PromptIntegrityScoreCard data={dashboardData?.integrity_score} />
+      
+      {/* Risk Type Frequency Card */}
+      <RiskTypeFrequencyCard data={dashboardData?.risk_types || {}} />
+      
+      {/* Prompt Risk Trends Card */}
+      <PromptRiskTrendsCard data={dashboardData?.trends} />
+    </div>
+  );
+}
 
-  // Helper to format numbers
-  const formatNumber = (n: number) => n.toLocaleString();
+export default function Dashboard() {
+  const { isAuthenticated, user, loading, logout } = useAuth();
+  const [optimizerOpen, setOptimizerOpen] = useState(false);
+  const [enhancedPrompt, setEnhancedPrompt] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
-  // LLM Usage Cards Section - REMOVED, replaced with CostSummaryPanel
-  // const LLMUsageCards = () => (
-  //   <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
-  //     {LLM_CARDS.map((d) => <LLMUsageCard key={d.model} d={d} />)}
-  //   </div>
-  // );
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0E1E36]">
+        <div className="text-white text-lg">Loading...</div>
+      </div>
+    );
+  }
 
-  // Simulate API call for prompt enhancement
-  const handleOptimize = async (data: any) => {
-    setLoading(true);
-    setEnhancedPrompt("");
-    setTimeout(() => {
-      setEnhancedPrompt("[Optimized prompt for: ] " + data.prompt);
-      setLoading(false);
-    }, 1200);
+  if (!isAuthenticated || !user) {
+    return null; // This will be handled by the auth redirect
+  }
+
+  // Get user ID from the authenticated user
+  const userId = user?.id || "test-user-123"; // Fallback for development
+
+  const handleOptimize = ({ prompt, model, optimizeForCost }: { prompt: string; model: string; optimizeForCost: boolean }) => {
+    console.log('Optimizing:', { prompt, model, optimizeForCost });
+    
+    // Simulate optimization
+    const optimized = `Analyze the following data with respect to ${optimizeForCost ? 'cost efficiency' : 'accuracy'}: ${prompt.replace(/sensitive|private|confidential/gi, '[REDACTED]')}`;
+    setEnhancedPrompt(optimized);
   };
 
   const handleCopy = () => {
-    if (!enhancedPrompt) return;
     navigator.clipboard.writeText(enhancedPrompt);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    setTimeout(() => setCopied(false), 2000);
   };
 
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Risk breakdown data for pie chart
+  const riskBreakdown = [
+    { label: 'Low Risk', value: 45, color: '#10b981' },
+    { label: 'Medium Risk', value: 35, color: '#f59e0b' },
+    { label: 'High Risk', value: 20, color: '#ef4444' },
+  ];
+
+  // --- Prompt Optimizer Panel Component ---
   function PromptOptimizerPanel({ onOptimize }: { onOptimize: (data: any) => void }) {
     const [prompt, setPrompt] = useState("");
     const [model, setModel] = useState("GPT-4o");
@@ -1040,50 +948,6 @@ export default function ComplyzeDashboard() {
     );
   }
 
-  // Pie chart math
-  const total = riskBreakdown.reduce((a, b) => a + b.value, 0);
-  let acc = 0;
-  const pieSegments = riskBreakdown.map((seg, i) => {
-    const start = acc;
-    const end = acc + (seg.value / total) * 360;
-    acc = end;
-    const large = end - start > 180 ? 1 : 0;
-    const r = 40, cx = 50, cy = 50;
-    const x1 = cx + r * Math.cos((Math.PI * (start - 90)) / 180);
-    const y1 = cy + r * Math.sin((Math.PI * (start - 90)) / 180);
-    const x2 = cx + r * Math.cos((Math.PI * (end - 90)) / 180);
-    const y2 = cy + r * Math.sin((Math.PI * (end - 90)) / 180);
-    return (
-      <path
-        key={seg.label}
-        d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`}
-        fill={seg.color}
-        style={{ cursor: 'pointer', opacity: 0.92 }}
-        onClick={() => alert(seg.label + ' clicked!')}
-      />
-    );
-  });
-
-  // Platform extension color and logo map
-  const extensionMeta: Record<string, { color: string; logo: React.ReactNode }> = {
-    'Prompt Governance API': {
-      color: COLORS.header,
-      logo: <span style={{ fontWeight: 700, fontSize: 18 }}>API</span>,
-    },
-    'Auto-POAM Generator': {
-      color: COLORS.riskMedium,
-      logo: <span style={{ fontWeight: 700, fontSize: 18 }}>⚙️</span>,
-    },
-    'Slack/Chrome Plugin': {
-      color: '#4A154B', // Slack purple
-      logo: <span style={{ fontSize: 20 }}>💬</span>, // fallback emoji
-    },
-    'Prompt Intelligence Feed': {
-      color: COLORS.accent,
-      logo: <span style={{ fontWeight: 700, fontSize: 18 }}>🧠</span>,
-    },
-  };
-
   // --- Prompt Optimizer Drawer ---
   function OptimizerDrawer() {
     return (
@@ -1092,7 +956,6 @@ export default function ComplyzeDashboard() {
           <div className="font-bold text-lg text-[#0E1E36]">Prompt Optimizer</div>
           <button className="text-gray-400 hover:text-gray-700 text-2xl" onClick={() => setOptimizerOpen(false)} aria-label="Close">×</button>
         </div>
-        {/* Remove Tab Switcher and only show Optimize content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <PromptOptimizerPanel onOptimize={handleOptimize} />
           {/* Optimized Output */}
@@ -1205,19 +1068,11 @@ export default function ComplyzeDashboard() {
       </div>
       
       {/* Cost Summary Panel - NEW */}
-      <CostSummaryPanel />
+      <CostSummaryPanel userId={userId} />
       
       {/* Second Row: Compliance, Risk, Optimizer */}
-      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8 lg:mb-10">
-        {/* Prompt Integrity Score Card */}
-        <PromptIntegrityScoreCard />
-        
-        {/* Risk Type Frequency Card */}
-        <RiskTypeFrequencyCard />
-        
-        {/* Prompt Risk Trends Card */}
-        <PromptRiskTrendsCard />
-      </div>
+      <AnalyticsPanel userId={userId} />
+      
       {/* Flagged Prompts Panel */}
       <div className="max-w-7xl mx-auto px-4 pb-6 sm:pb-8 lg:pb-10">
         <FlaggedPromptsPanel />

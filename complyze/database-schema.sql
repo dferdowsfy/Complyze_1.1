@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   full_name TEXT,
   avatar_url TEXT,
   plan TEXT DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'enterprise')),
+  budget DECIMAL(10,2) DEFAULT 500.00, -- Monthly budget in USD
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -48,6 +49,26 @@ CREATE TABLE IF NOT EXISTS public.prompt_logs (
   scored_at TIMESTAMP WITH TIME ZONE
 );
 
+-- Prompt events table (new telemetry system for dashboard analytics)
+CREATE TABLE IF NOT EXISTS public.prompt_events (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  model TEXT NOT NULL, -- e.g. gpt-4, claude-3, gemini-pro
+  usd_cost DECIMAL(10,4) NOT NULL, -- Cost in USD with 4 decimal precision
+  prompt_tokens INTEGER NOT NULL,
+  completion_tokens INTEGER NOT NULL,
+  integrity_score INTEGER NOT NULL CHECK (integrity_score >= 0 AND integrity_score <= 100),
+  risk_type TEXT NOT NULL, -- PII, IP, Compliance, Jailbreak, etc.
+  risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high')),
+  captured_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), -- When prompt was captured
+  prompt_text TEXT, -- Optional: actual prompt content
+  response_text TEXT, -- Optional: model response content
+  source TEXT DEFAULT 'api' CHECK (source IN ('chrome_extension', 'desktop_agent', 'api')),
+  metadata JSONB DEFAULT '{}', -- Additional telemetry data
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Governance settings table
 CREATE TABLE IF NOT EXISTS public.governance_settings (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -69,6 +90,14 @@ CREATE INDEX IF NOT EXISTS idx_prompt_logs_risk_level ON public.prompt_logs(risk
 CREATE INDEX IF NOT EXISTS idx_prompt_logs_created_at ON public.prompt_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects(user_id);
 
+-- Indexes for prompt_events table (dashboard analytics)
+CREATE INDEX IF NOT EXISTS idx_prompt_events_user_id ON public.prompt_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_events_captured_at ON public.prompt_events(captured_at);
+CREATE INDEX IF NOT EXISTS idx_prompt_events_model ON public.prompt_events(model);
+CREATE INDEX IF NOT EXISTS idx_prompt_events_risk_type ON public.prompt_events(risk_type);
+CREATE INDEX IF NOT EXISTS idx_prompt_events_risk_level ON public.prompt_events(risk_level);
+CREATE INDEX IF NOT EXISTS idx_prompt_events_user_month ON public.prompt_events(user_id, date_trunc('month', captured_at));
+
 -- Create updated_at triggers
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -87,6 +116,9 @@ CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON public.projects
 CREATE TRIGGER update_prompt_logs_updated_at BEFORE UPDATE ON public.prompt_logs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_prompt_events_updated_at BEFORE UPDATE ON public.prompt_events
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_governance_settings_updated_at BEFORE UPDATE ON public.governance_settings
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -94,6 +126,7 @@ CREATE TRIGGER update_governance_settings_updated_at BEFORE UPDATE ON public.gov
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prompt_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.prompt_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.governance_settings ENABLE ROW LEVEL SECURITY;
 
 -- Users can only see their own data
@@ -126,6 +159,16 @@ CREATE POLICY "Users can create prompt logs" ON public.prompt_logs
 CREATE POLICY "Users can update own prompt logs" ON public.prompt_logs
     FOR UPDATE USING (auth.uid() = user_id);
 
+-- Prompt events policies
+CREATE POLICY "Users can view own prompt events" ON public.prompt_events
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create prompt events" ON public.prompt_events
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own prompt events" ON public.prompt_events
+    FOR UPDATE USING (auth.uid() = user_id);
+
 -- Governance settings policies
 CREATE POLICY "Users can view own governance settings" ON public.governance_settings
     FOR SELECT USING (auth.uid() = (SELECT user_id FROM public.projects WHERE id = project_id));
@@ -155,6 +198,38 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Dashboard materialized view for better performance
+CREATE MATERIALIZED VIEW IF NOT EXISTS public.dashboard_metrics AS
+SELECT 
+  user_id,
+  date_trunc('month', captured_at) as month,
+  date_trunc('day', captured_at) as day,
+  COUNT(*) as total_prompts,
+  SUM(usd_cost) as total_cost,
+  AVG(integrity_score) as avg_integrity_score,
+  COUNT(*) FILTER (WHERE risk_level = 'high') as high_risk_count,
+  COUNT(*) FILTER (WHERE risk_level = 'medium') as medium_risk_count,
+  COUNT(*) FILTER (WHERE risk_level = 'low') as low_risk_count,
+  mode() WITHIN GROUP (ORDER BY model) as most_used_model,
+  jsonb_object_agg(risk_type, risk_type_count) as risk_type_frequencies
+FROM (
+  SELECT *,
+    COUNT(*) OVER (PARTITION BY user_id, date_trunc('month', captured_at), risk_type) as risk_type_count
+  FROM public.prompt_events
+) pe
+GROUP BY user_id, date_trunc('month', captured_at), date_trunc('day', captured_at);
+
+-- Index for materialized view
+CREATE INDEX IF NOT EXISTS idx_dashboard_metrics_user_month ON public.dashboard_metrics(user_id, month);
+
+-- Function to refresh dashboard metrics
+CREATE OR REPLACE FUNCTION refresh_dashboard_metrics()
+RETURNS void AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY public.dashboard_metrics;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Insert some sample data for testing (optional)
 -- You can remove this section if you don't want sample data
