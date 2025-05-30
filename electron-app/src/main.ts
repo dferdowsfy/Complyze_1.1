@@ -16,6 +16,7 @@ const execAsync = promisify(exec);
 // Add monitoring state
 let monitoringInterval: NodeJS.Timeout | null = null;
 let lastClipboardContent = '';
+let originalClipboardContent = ''; // Store original content for restoration
 let activeProcesses = new Set<string>();
 let webContentsMonitoring = new Map<number, boolean>();
 
@@ -762,6 +763,33 @@ ipcMain.on('close-notification', (event) => {
   }
 });
 
+ipcMain.on('clipboard-action', (event, data) => {
+  console.log('Complyze Debug: Received clipboard-action:', data);
+  try {
+    switch (data.action) {
+      case 'clear':
+        clipboard.writeText('');
+        console.log('Complyze Debug: Clipboard cleared by user choice');
+        break;
+      case 'replace':
+        if (data.content) {
+          clipboard.writeText(data.content);
+          console.log('Complyze Debug: Clipboard replaced with safe version');
+          console.log('Complyze Debug: New clipboard content:', data.content.substring(0, 100) + '...');
+        }
+        break;
+      case 'keep':
+        // Do nothing - just keep the original content as is
+        console.log('Complyze Debug: User chose to keep original clipboard content (no action taken)');
+        break;
+      default:
+        console.log('Complyze Debug: Unknown clipboard action:', data.action);
+    }
+  } catch (error) {
+    console.error('Complyze Debug: Error handling clipboard action:', error);
+  }
+});
+
 ipcMain.on('open-dashboard-from-notification', async (event) => {
   try {
     await shell.openExternal(`${AUTH_CONFIG.DASHBOARD_URL}?token=${store.get('auth.token')}`);
@@ -990,7 +1018,7 @@ async function monitorActiveProcesses(): Promise<void> {
 }
 
 /**
- * Monitor clipboard for potential prompt content
+ * Monitor clipboard for potential prompt content and provide real-time blocking
  */
 async function monitorClipboard(): Promise<void> {
   try {
@@ -1008,6 +1036,7 @@ async function monitorClipboard(): Promise<void> {
         currentContent.length < 10000) {
       
       lastClipboardContent = currentContent;
+      originalClipboardContent = currentContent; // Store original for potential restoration
       
       // Enhanced prompt detection with more indicators
       const promptIndicators = [
@@ -1056,19 +1085,45 @@ async function monitorClipboard(): Promise<void> {
         
         console.log('Complyze Debug: Processing clipboard prompt...');
         
-        // Process the potential prompt
-        await processPrompt({
-          prompt: currentContent,
-          sourceApp: 'Clipboard',
-          userId: store.get('auth.user.id') as string
-        });
+        // For clipboard content, we can provide real-time blocking
+        const shouldBlock = hasSensitiveData; // Block if sensitive data detected
+        
+        if (shouldBlock) {
+          // Generate enhanced prompt first
+          const redactionResult = await comprehensiveRedact(currentContent);
+          const enhancementResult = await enhancePrompt(redactionResult.redactedText);
+          
+          // Show blocking notification for clipboard content
+          const userChoice = await createNotificationWindow({
+            prompt: currentContent,
+            riskScore: 85, // High risk for sensitive data
+            redactionDetails: [{ type: 'Sensitive Data', original: 'Detected in clipboard', redacted: '[REDACTED]' }],
+            sourceApp: 'Clipboard',
+            enhancedPrompt: enhancementResult.enhancedPrompt,
+            blockingMode: true
+          });
+          
+          console.log('Complyze Debug: User chose:', userChoice);
+          
+          // Note: The clipboard action is now handled by the notification buttons
+          // via the clipboard-action IPC handler, so we don't need to modify it here
+          
+        } else {
+          // Just process for logging and notifications
+          await processPrompt({
+            prompt: currentContent,
+            sourceApp: 'Clipboard',
+            userId: store.get('auth.user.id') as string
+          });
+        }
         
         // Notify main window
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('clipboard-prompt-detected', {
             hasPromptIndicators,
             hasSensitiveData,
-            promptPreview: currentContent.substring(0, 100) + '...'
+            promptPreview: currentContent.substring(0, 100) + '...',
+            wasBlocked: shouldBlock
           });
         }
       }
@@ -1255,7 +1310,7 @@ function createNotificationWindow(data: {
     
     // Calculate position for notification (center for blocking mode, top-right for non-blocking)
     const notificationWidth = data.blockingMode ? 500 : 400;
-    const notificationHeight = data.blockingMode ? 400 : 300;
+    const notificationHeight = data.blockingMode ? 500 : 350;
     const margin = 20;
     
     let x, y;
@@ -1279,12 +1334,12 @@ function createNotificationWindow(data: {
       alwaysOnTop: true,
       skipTaskbar: true,
       resizable: false,
-      movable: false,
+      movable: true,
       minimizable: false,
       maximizable: false,
-      closable: !data.blockingMode, // Can't close blocking notifications
+      closable: true,
       show: false,
-      modal: data.blockingMode, // Modal for blocking mode
+      modal: data.blockingMode,
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
@@ -1316,7 +1371,8 @@ function createNotificationWindow(data: {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #0E1E36 0%, #1a2f4a 100%);
             color: #FAF9F6;
-            padding: 20px;
+            padding: 0;
+            margin: 0;
             height: 100vh;
             overflow: hidden;
             border-radius: 12px;
@@ -1330,9 +1386,21 @@ function createNotificationWindow(data: {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
+            padding: 16px 20px 12px 20px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            -webkit-app-region: drag;
+            cursor: move;
+            flex-shrink: 0;
+          }
+          
+          .notification-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
           }
           
           .notification-title {
@@ -1342,6 +1410,7 @@ function createNotificationWindow(data: {
             display: flex;
             align-items: center;
             gap: 8px;
+            -webkit-app-region: no-drag;
           }
           
           .warning-icon {
@@ -1366,7 +1435,12 @@ function createNotificationWindow(data: {
             padding: 4px;
             border-radius: 4px;
             transition: all 0.2s;
-            ${data.blockingMode ? 'display: none;' : ''}
+            -webkit-app-region: no-drag;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
           }
           
           .close-btn:hover {
@@ -1473,6 +1547,8 @@ function createNotificationWindow(data: {
             gap: 12px;
             margin-top: auto;
             flex-wrap: wrap;
+            flex-shrink: 0;
+            -webkit-app-region: no-drag;
           }
           
           .btn {
@@ -1485,6 +1561,7 @@ function createNotificationWindow(data: {
             cursor: pointer;
             transition: all 0.2s;
             font-weight: 500;
+            -webkit-app-region: no-drag;
           }
           
           .btn-danger {
@@ -1536,20 +1613,22 @@ function createNotificationWindow(data: {
           }
           
           /* Custom scrollbar */
-          .prompt-preview::-webkit-scrollbar,
-          .enhanced-preview::-webkit-scrollbar {
-            width: 4px;
+          .notification-content::-webkit-scrollbar {
+            width: 6px;
           }
           
-          .prompt-preview::-webkit-scrollbar-track,
-          .enhanced-preview::-webkit-scrollbar-track {
+          .notification-content::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
           }
           
-          .prompt-preview::-webkit-scrollbar-thumb,
-          .enhanced-preview::-webkit-scrollbar-thumb {
+          .notification-content::-webkit-scrollbar-thumb {
             background: rgba(255, 111, 60, 0.6);
-            border-radius: 2px;
+            border-radius: 3px;
+          }
+          
+          .notification-content::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 111, 60, 0.8);
           }
         </style>
       </head>
@@ -1557,56 +1636,57 @@ function createNotificationWindow(data: {
         <div class="notification-header">
           <div class="notification-title">
             <div class="warning-icon">!</div>
-            ${data.blockingMode ? 'Prompt Blocked' : 'Prompt Flagged'}
+            ${data.blockingMode ? 'Sensitive Content Detected' : 'Prompt Flagged'}
           </div>
-          <button class="close-btn" onclick="closeNotification()">×</button>
+          <button class="close-btn" onclick="closeNotification()" title="Close notification">×</button>
         </div>
         
-        ${data.blockingMode ? `
-          <div class="blocking-message">
-            🛡️ This prompt has been blocked due to sensitive data. Choose how to proceed:
-          </div>
-        ` : ''}
-        
-        <div class="risk-level ${data.riskScore > 70 ? 'risk-high' : data.riskScore > 40 ? 'risk-medium' : 'risk-low'}">
-          ${data.riskScore > 70 ? 'HIGH RISK' : data.riskScore > 40 ? 'MEDIUM RISK' : 'LOW RISK'} (${data.riskScore}%)
-        </div>
-        
-        <div class="source-app">From: ${data.sourceApp}</div>
-        
-        <div class="prompt-preview">
-          <strong>Original Prompt:</strong><br>
-          ${data.prompt.substring(0, data.blockingMode ? 300 : 200)}${data.prompt.length > (data.blockingMode ? 300 : 200) ? '...' : ''}
-        </div>
-        
-        ${data.redactionDetails.length > 0 ? `
-          <div class="redaction-info">
-            <strong>Sensitive data detected:</strong>
-            ${data.redactionDetails.map(detail => `
-              <div class="redaction-item">${detail.type}: ${detail.original}</div>
-            `).join('')}
-          </div>
-        ` : ''}
-        
-        ${data.enhancedPrompt ? `
-          <div class="enhanced-preview">
-            <div class="enhanced-label">✨ Safe Alternative:</div>
-            ${data.enhancedPrompt.substring(0, 200)}${data.enhancedPrompt.length > 200 ? '...' : ''}
-          </div>
-        ` : ''}
-        
-        <div class="actions">
+        <div class="notification-content">
           ${data.blockingMode ? `
-            <button class="btn btn-danger" onclick="blockPrompt()">🚫 Block</button>
-            ${data.enhancedPrompt ? `<button class="btn btn-success" onclick="replacePrompt()">✨ Use Safe Version</button>` : ''}
-            <button class="btn btn-secondary" onclick="allowPrompt()">⚠️ Send Anyway</button>
-          ` : `
-            <button class="btn btn-secondary" onclick="dismissNotification()">Dismiss</button>
-            <button class="btn btn-primary" onclick="openDashboard()">View Details</button>
-          `}
+            <div class="blocking-message">
+              ⚠️ Sensitive data detected in your clipboard. Choose how to proceed:
+            </div>
+          ` : ''}
+          
+          <div class="risk-level ${data.riskScore > 70 ? 'risk-high' : data.riskScore > 40 ? 'risk-medium' : 'risk-low'}">
+            ${data.riskScore > 70 ? 'HIGH RISK' : data.riskScore > 40 ? 'MEDIUM RISK' : 'LOW RISK'} (${data.riskScore}%)
+          </div>
+          
+          <div class="source-app">From: ${data.sourceApp}</div>
+          
+          <div class="prompt-preview">
+            <strong>Original Prompt:</strong><br>
+            ${data.prompt.substring(0, data.blockingMode ? 500 : 300)}${data.prompt.length > (data.blockingMode ? 500 : 300) ? '...' : ''}
+          </div>
+          
+          ${data.redactionDetails.length > 0 ? `
+            <div class="redaction-info">
+              <strong>Sensitive data detected:</strong>
+              ${data.redactionDetails.map(detail => `
+                <div class="redaction-item">${detail.type}: ${detail.original}</div>
+              `).join('')}
+            </div>
+          ` : ''}
+          
+          ${data.enhancedPrompt ? `
+            <div class="enhanced-preview">
+              <div class="enhanced-label">✨ Safe Alternative:</div>
+              ${data.enhancedPrompt}
+            </div>
+          ` : ''}
+          
+          <div class="actions">
+            ${data.blockingMode ? `
+              ${data.enhancedPrompt ? `<button class="btn btn-success" onclick="replacePrompt()" title="Copy safe version to clipboard">✨ Copy Safe Version</button>` : ''}
+              <button class="btn btn-secondary" onclick="keepOriginal()" title="Close popup and keep original content">📋 Keep Original</button>
+            ` : `
+              <button class="btn btn-secondary" onclick="dismissNotification()">Dismiss</button>
+              <button class="btn btn-primary" onclick="openDashboard()">View Details</button>
+            `}
+          </div>
+          
+          <div class="auto-close">Auto-closes in <span id="countdown">${data.blockingMode ? 30 : 10}</span>s</div>
         </div>
-        
-        <div class="auto-close">Auto-closes in <span id="countdown">10</span>s</div>
         
         <script>
           const { ipcRenderer } = require('electron');
@@ -1621,44 +1701,95 @@ function createNotificationWindow(data: {
             }
             
             if (countdown <= 0) {
-              ${data.blockingMode ? 'blockPrompt()' : 'closeNotification()'};
+              ${data.blockingMode ? 'closeNotification()' : 'dismissNotification()'};
             }
           }, 1000);
           
           function closeNotification() {
+            console.log('Complyze Notification: Closing notification');
             clearInterval(timer);
-            ipcRenderer.send('notification-response', { action: 'dismiss' });
+            try {
+              ipcRenderer.send('notification-response', { action: 'dismiss' });
+            } catch (error) {
+              console.error('Error sending notification response:', error);
+              window.close();
+            }
           }
           
           function dismissNotification() {
+            console.log('Complyze Notification: Dismissing notification');
             clearInterval(timer);
-            ipcRenderer.send('notification-response', { action: 'dismiss' });
+            try {
+              ipcRenderer.send('notification-response', { action: 'dismiss' });
+            } catch (error) {
+              console.error('Error dismissing notification:', error);
+              window.close();
+            }
           }
           
           function openDashboard() {
+            console.log('Complyze Notification: Opening dashboard');
             clearInterval(timer);
-            ipcRenderer.send('open-dashboard-from-notification');
-            ipcRenderer.send('notification-response', { action: 'dismiss' });
-          }
-          
-          function blockPrompt() {
-            clearInterval(timer);
-            ipcRenderer.send('notification-response', { action: 'block' });
-          }
-          
-          function allowPrompt() {
-            clearInterval(timer);
-            ipcRenderer.send('notification-response', { action: 'allow' });
+            try {
+              ipcRenderer.send('open-dashboard-from-notification');
+              ipcRenderer.send('notification-response', { action: 'dismiss' });
+            } catch (error) {
+              console.error('Error opening dashboard:', error);
+              window.close();
+            }
           }
           
           function replacePrompt() {
+            console.log('Complyze Notification: Copying safe version to clipboard');
             clearInterval(timer);
-            ipcRenderer.send('notification-response', { action: 'replace' });
+            try {
+              // Replace clipboard with enhanced prompt
+              const enhancedPrompt = \`${(data.enhancedPrompt || '').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+              console.log('Enhanced prompt to copy:', enhancedPrompt.substring(0, 100) + '...');
+              ipcRenderer.send('clipboard-action', { action: 'replace', content: enhancedPrompt });
+              ipcRenderer.send('notification-response', { action: 'replace' });
+            } catch (error) {
+              console.error('Error copying safe version:', error);
+              window.close();
+            }
           }
           
-          // Prevent window from being dragged
+          function keepOriginal() {
+            console.log('Complyze Notification: Keeping original content and closing popup');
+            clearInterval(timer);
+            try {
+              // Just close the popup without any clipboard action
+              ipcRenderer.send('notification-response', { action: 'allow' });
+            } catch (error) {
+              console.error('Error keeping original content:', error);
+              window.close();
+            }
+          }
+          
+          // Prevent window from being dragged on interactive elements
           document.addEventListener('mousedown', (e) => {
-            e.preventDefault();
+            const target = e.target;
+            if (target.classList.contains('btn') || 
+                target.classList.contains('close-btn') ||
+                target.closest('.actions') ||
+                target.closest('.notification-content')) {
+              e.stopPropagation();
+            }
+          });
+          
+          // Add click event listeners as backup
+          document.addEventListener('DOMContentLoaded', () => {
+            console.log('Complyze Notification: DOM loaded, setting up event listeners');
+            
+            // Add event listeners to buttons
+            const buttons = document.querySelectorAll('.btn');
+            buttons.forEach(button => {
+              button.addEventListener('click', (e) => {
+                console.log('Button clicked:', button.textContent);
+                e.preventDefault();
+                e.stopPropagation();
+              });
+            });
           });
         </script>
       </body>
@@ -1686,7 +1817,9 @@ function createNotificationWindow(data: {
 
     // Handle notification response
     const handleResponse = (event: any, response: { action: string }) => {
+      console.log('Complyze Debug: Received notification response:', response);
       if (event.sender === notificationWindow.webContents) {
+        console.log('Complyze Debug: Response from correct notification window');
         ipcMain.removeListener('notification-response', handleResponse);
         
         if (!notificationWindow.isDestroyed()) {
@@ -1694,6 +1827,8 @@ function createNotificationWindow(data: {
         }
         
         resolve(response.action as 'allow' | 'block' | 'replace');
+      } else {
+        console.log('Complyze Debug: Response from different window, ignoring');
       }
     };
     

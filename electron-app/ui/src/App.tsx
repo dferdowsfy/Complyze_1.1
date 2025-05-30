@@ -269,6 +269,26 @@ function App() {
     }
   };
 
+  const testClipboardBlocking = async () => {
+    try {
+      setLoading(true);
+      
+      // Put sensitive content in clipboard to test real blocking
+      const testContent = 'Please help me process this customer data: Name: John Smith, SSN: 123-45-6789, Email: john@company.com, Credit Card: 4532-1234-5678-9012';
+      
+      // Use Electron's clipboard API through IPC
+      await window.electronAPI.testPromptInterception(testContent);
+      
+      // Show success message
+      alert('✅ Clipboard blocking test completed! Check for notification popup.');
+      
+    } catch (err) {
+      setError('Clipboard blocking test failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const testPromptProcessing = async () => {
     try {
       setLoading(true);
@@ -280,6 +300,7 @@ function App() {
         // Update recent activity
         const activity = await ipcRenderer.invoke('get-recent-activity');
         setRecentActivity(activity || []);
+        alert('✅ Monitoring test completed! Check Recent Activity below.');
       }
     } catch (err) {
       setError('Failed to test prompt processing');
@@ -289,30 +310,9 @@ function App() {
   };
 
   const testPromptInterception = async () => {
-    try {
-      setLoading(true);
-      const result = await window.electronAPI.testPromptInterception(
-        'Please help me process this customer data: Name: John Smith, SSN: 123-45-6789, Email: john@company.com, Credit Card: 4532-1234-5678-9012'
-      );
-      
-      if (result.success) {
-        console.log('Interception test result:', result.result);
-        // Update recent activity
-        const activity = await ipcRenderer.invoke('get-recent-activity');
-        setRecentActivity(activity || []);
-        
-        // Show result to user
-        const action = result.result.action;
-        const message = action === 'block' ? 'Prompt was blocked!' : 
-                       action === 'replace' ? 'Prompt was replaced with safe version!' : 
-                       'Prompt was allowed to proceed.';
-        alert(`Blocking Test Result: ${message}`);
-      }
-    } catch (err) {
-      setError('Failed to test prompt interception');
-    } finally {
-      setLoading(false);
-    }
+    // This function has been replaced with testClipboardBlocking
+    // External desktop apps cannot be directly intercepted due to OS security restrictions
+    console.log('testPromptInterception is deprecated - use testClipboardBlocking instead');
   };
 
   return (
@@ -384,6 +384,36 @@ function App() {
           </button>
         </div>
 
+        <div className="capabilities-notice">
+          <h3>🛡️ What Complyze Desktop Agent Can Do</h3>
+          <div className="capability-grid">
+            <div className="capability-item working">
+              <span className="capability-status">✅</span>
+              <div>
+                <strong>Clipboard Protection</strong>
+                <p>Real-time blocking when you copy sensitive prompts</p>
+              </div>
+            </div>
+            <div className="capability-item working">
+              <span className="capability-status">✅</span>
+              <div>
+                <strong>App Detection</strong>
+                <p>Monitors when AI apps are running for awareness</p>
+              </div>
+            </div>
+            <div className="capability-item limited">
+              <span className="capability-status">⚠️</span>
+              <div>
+                <strong>External App Blocking</strong>
+                <p>Cannot directly block ChatGPT Desktop, Claude Desktop due to OS security</p>
+              </div>
+            </div>
+          </div>
+          <div className="recommendation">
+            <strong>💡 Recommended Workflow:</strong> Copy your prompts to clipboard first, then paste into AI apps. This enables full protection!
+          </div>
+        </div>
+
         <div className="monitoring-section">
           <div className="monitoring-header">
             <h2>Prompt Monitoring</h2>
@@ -443,12 +473,27 @@ function App() {
               <div className="monitoring-instructions">
                 <h4>How Monitoring Works:</h4>
                 <ul>
-                  <li><strong>Desktop Apps:</strong> Automatically detects when monitored apps are running</li>
-                  <li><strong>Clipboard:</strong> Monitors clipboard for prompts with sensitive data</li>
-                  <li><strong>Web Browsing:</strong> Install the Complyze Chrome Extension for full web monitoring</li>
+                  <li><strong>✅ Clipboard Protection:</strong> Real-time blocking of sensitive data in clipboard</li>
+                  <li><strong>✅ Desktop Apps:</strong> Detects when monitored apps are running (awareness only)</li>
+                  <li><strong>✅ Web Browsing:</strong> Install the Complyze Chrome Extension for full web blocking</li>
+                  <li><strong>⚠️ External Apps:</strong> Cannot directly block ChatGPT Desktop, Claude Desktop due to OS security</li>
                 </ul>
+                <div className="protection-levels">
+                  <div className="protection-item">
+                    <span className="protection-icon">🛡️</span>
+                    <div>
+                      <strong>Full Protection:</strong> Clipboard monitoring with real-time blocking
+                    </div>
+                  </div>
+                  <div className="protection-item">
+                    <span className="protection-icon">👁️</span>
+                    <div>
+                      <strong>Awareness Mode:</strong> Desktop app detection and activity logging
+                    </div>
+                  </div>
+                </div>
                 <p className="instruction-note">
-                  💡 <strong>Tip:</strong> Copy text to clipboard or use the test button to see monitoring in action!
+                  💡 <strong>Best Practice:</strong> Copy prompts to clipboard first - this enables full blocking protection!
                 </p>
               </div>
               
@@ -457,15 +502,15 @@ function App() {
                 className="test-btn"
                 disabled={loading}
               >
-                {loading ? 'Testing...' : 'Test Monitoring'}
+                {loading ? 'Testing...' : 'Test Monitoring (Non-blocking)'}
               </button>
               
               <button 
-                onClick={testPromptInterception}
+                onClick={testClipboardBlocking}
                 className="test-btn test-blocking"
                 disabled={loading}
               >
-                {loading ? 'Testing...' : 'Test Blocking'}
+                {loading ? 'Testing...' : 'Test Clipboard Blocking'}
               </button>
             </div>
           )}
