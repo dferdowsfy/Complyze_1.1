@@ -1259,10 +1259,11 @@ class PromptWatcher {
       `;
 
       const originalPrompt = this.getPromptText(promptElement);
-      const safePrompt = analysis.redacted_prompt || this.generateSafePrompt(originalPrompt, analysis);
+      // FIX: Use optimized_prompt instead of redacted_prompt to avoid [REDACTED] placeholders
+      const safePrompt = analysis.optimized_prompt || analysis.redacted_prompt || this.generateSafePrompt(originalPrompt, analysis);
       
       console.log('Complyze: Original prompt:', originalPrompt.substring(0, 100));
-      console.log('Complyze: Safe prompt:', safePrompt.substring(0, 100));
+      console.log('Complyze: Safe prompt (optimized):', safePrompt.substring(0, 100));
 
     panel.innerHTML = `
       <div style="padding: 20px; border-bottom: 1px solid rgba(59, 130, 246, 0.3);">
@@ -1275,14 +1276,14 @@ class PromptWatcher {
           </button>
         </div>
         <p style="margin: 0; font-size: 14px; color: #9ca3af; line-height: 1.4;">
-          We've created a safer version of your prompt by removing sensitive information.
+          We've created an optimized version of your prompt by rephrasing it to remove sensitive information.
         </p>
       </div>
 
       <div style="padding: 20px; max-height: 50vh; overflow-y: auto;">
         <div style="margin-bottom: 16px;">
           <label style="display: block; font-size: 12px; font-weight: 600; color: #3b82f6; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-            Safe Prompt (Ready to Use)
+            Optimized Prompt (Ready to Use)
           </label>
           <textarea id="complyze-safe-text" style="
             width: 100%;
@@ -1312,7 +1313,7 @@ class PromptWatcher {
             cursor: pointer;
             transition: all 0.2s;
           ">
-            📋 Copy Safe Version
+            📋 Copy Optimized Version
           </button>
           <button id="complyze-use-safe" style="
             flex: 1;
@@ -1347,7 +1348,7 @@ class PromptWatcher {
           </div>
           <div style="font-size: 13px; color: #93c5fd; line-height: 1.4;">
             1. Click "Use This Version" to replace your current prompt<br>
-            2. Or copy the safe version and paste it manually<br>
+            2. Or copy the optimized version and paste it manually<br>
             3. The submit button will be re-enabled automatically
           </div>
         </div>
@@ -1493,26 +1494,100 @@ class PromptWatcher {
       // Add more mappings as needed
     };
 
-    // Core PII/PHI/PCI Redaction Patterns
+    // Core PII/PHI/PCI Optimization Patterns (rephrase instead of redact)
     const coreReplacements = {
-      email: { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replacement: '[EMAIL_REDACTED]' },
-      phone: { pattern: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g, replacement: '[PHONE_REDACTED]' },
-      fullName: { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, replacement: '[NAME_REDACTED]' },
-      ssn: { pattern: /\b\d{3}-?\d{2}-?\d{4}\b/g, replacement: '[SSN_REDACTED]' },
-      passport: { pattern: /\b[A-Z]{1,2}\d{6,9}\b/g, replacement: '[PASSPORT_REDACTED]' },
-      ipAddress: { pattern: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, replacement: '[IP_ADDRESS_REDACTED]' }
+      email: { 
+        pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, 
+        replacement: (match) => {
+          // Extract domain for context if it's a common service
+          const domain = match.split('@')[1];
+          if (domain.includes('gmail') || domain.includes('yahoo') || domain.includes('outlook')) {
+            return 'a personal email address';
+          } else if (domain.includes('company') || domain.includes('corp') || domain.includes('enterprise')) {
+            return 'a corporate email address';
+          }
+          return 'an email address';
+        }
+      },
+      phone: { 
+        pattern: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g, 
+        replacement: 'a phone number'
+      },
+      fullName: { 
+        pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, 
+        replacement: (match) => {
+          // Try to preserve context
+          const words = match.split(' ');
+          if (words.length === 2) {
+            return 'a person\'s name';
+          } else {
+            return 'someone\'s full name';
+          }
+        }
+      },
+      ssn: { 
+        pattern: /\b\d{3}-?\d{2}-?\d{4}\b/g, 
+        replacement: 'a social security number'
+      },
+      passport: { 
+        pattern: /\b[A-Z]{1,2}\d{6,9}\b/g, 
+        replacement: 'a passport number'
+      },
+      ipAddress: { 
+        pattern: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, 
+        replacement: (match) => {
+          // Preserve context for internal vs external IPs
+          if (match.startsWith('192.168.') || match.startsWith('10.') || match.startsWith('172.')) {
+            return 'an internal IP address';
+          }
+          return 'an IP address';
+        }
+      }
     };
-    // Enterprise-Specific Company Data
+
+    // Enterprise-Specific Company Data (rephrase instead of redact)
     const enterprisePatterns = {
-      apiKey: { pattern: /\b(?:sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,}|[a-zA-Z0-9]{32,})\b/g, replacement: '[API_KEY_REDACTED]' },
-      oauthSecret: { pattern: /\b(?:client_secret|oauth_token|access_token|refresh_token)[\s:=]+[a-zA-Z0-9_-]+/gi, replacement: '[OAUTH_SECRET_REDACTED]' },
-      sshKey: { pattern: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g, replacement: '[SSH_KEY_REDACTED]' },
-      internalUrl: { pattern: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g, replacement: '[INTERNAL_URL_REDACTED]' },
-      projectName: { pattern: /\b(?:Project|Operation|Initiative)\s+[A-Z][a-zA-Z]+\b/g, replacement: '[PROJECT_NAME_REDACTED]' },
-      codeNames: { pattern: /\b[A-Z][a-zA-Z]+(?:DB|API|Service|Platform)\b/g, replacement: '[CODE_NAMES_REDACTED]' },
-      cidrRange: { pattern: /\b(?:10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\/\d{1,2}\b/g, replacement: '[CIDR_RANGE_REDACTED]' }
+      apiKey: { 
+        pattern: /\b(?:sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,}|[a-zA-Z0-9]{32,})\b/g, 
+        replacement: 'an API key'
+      },
+      oauthSecret: { 
+        pattern: /\b(?:client_secret|oauth_token|access_token|refresh_token)[\s:=]+[a-zA-Z0-9_-]+/gi, 
+        replacement: 'authentication credentials'
+      },
+      sshKey: { 
+        pattern: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g, 
+        replacement: 'SSH private key credentials'
+      },
+      internalUrl: { 
+        pattern: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g, 
+        replacement: (match) => {
+          if (match.includes('dev-')) return 'a development environment URL';
+          if (match.includes('staging-')) return 'a staging environment URL';
+          if (match.includes('internal-')) return 'an internal system URL';
+          if (match.includes('admin-')) return 'an admin panel URL';
+          return 'an internal URL';
+        }
+      },
+      projectName: { 
+        pattern: /\b(?:Project|Operation|Initiative)\s+[A-Z][a-zA-Z]+\b/g, 
+        replacement: 'a project codename'
+      },
+      codeNames: { 
+        pattern: /\b[A-Z][a-zA-Z]+(?:DB|API|Service|Platform)\b/g, 
+        replacement: (match) => {
+          if (match.includes('DB')) return 'a database system';
+          if (match.includes('API')) return 'an API service';
+          if (match.includes('Service')) return 'a service component';
+          if (match.includes('Platform')) return 'a platform system';
+          return 'an internal system';
+        }
+      },
+      cidrRange: { 
+        pattern: /\b(?:10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\/\d{1,2}\b/g, 
+        replacement: 'a private network range'
+      }
     };
-    // Add more patterns as needed
 
     // Merge all patterns
     const allPatterns = { ...coreReplacements, ...enterprisePatterns };
@@ -1522,15 +1597,51 @@ class PromptWatcher {
       // Default to enabled if not specified
       const enabled = this.redactionSettings && settingsKey ? this.redactionSettings[settingsKey] !== false : true;
       if (enabled) {
-        // Redact as usual
-        safePrompt = safePrompt.replace(config.pattern, config.replacement);
+        // Use optimized replacement (rephrase instead of redact)
+        if (typeof config.replacement === 'function') {
+          safePrompt = safePrompt.replace(config.pattern, config.replacement);
+        } else {
+          safePrompt = safePrompt.replace(config.pattern, config.replacement);
+        }
       } else {
         // If disabled, wrap in asterisks for visibility
         safePrompt = safePrompt.replace(config.pattern, (match) => `*${match}*`);
       }
     }
 
+    // Additional optimization: improve prompt structure and clarity
+    safePrompt = this.optimizePromptStructure(safePrompt);
+
     return safePrompt;
+  }
+
+  // Helper function to optimize prompt structure
+  optimizePromptStructure(prompt) {
+    let optimized = prompt;
+    
+    // Remove redundant phrases
+    const redundantPhrases = [
+      /\b(?:please|kindly|if you could|would you mind)\b/gi,
+      /\b(?:as an AI|as a language model|I understand that you are)\b/gi
+    ];
+    
+    redundantPhrases.forEach(pattern => {
+      optimized = optimized.replace(pattern, '');
+    });
+
+    // Improve clarity and specificity
+    optimized = optimized
+      .replace(/\bthing\b/gi, 'item')
+      .replace(/\bstuff\b/gi, 'content')
+      .replace(/\bdo this\b/gi, 'complete this task');
+
+    // Clean up extra whitespace
+    optimized = optimized
+      .replace(/\s+/g, ' ')
+      .replace(/\n\s*\n/g, '\n\n')
+      .trim();
+    
+    return optimized;
   }
 
   // NEW: Show loading indicator
@@ -1655,7 +1766,7 @@ class PromptWatcher {
     confirmation.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 16px;">✅</span>
-        <span>Safe prompt applied - ready to send!</span>
+        <span>Optimized prompt applied - ready to send!</span>
       </div>
     `;
     

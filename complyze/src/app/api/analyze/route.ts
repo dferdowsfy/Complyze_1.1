@@ -10,12 +10,15 @@ async function optimizePrompt(prompt: string): Promise<string> {
   
   let optimized = prompt;
   
-  // 1. Clear structure with sections for longer prompts
+  // 1. First, intelligently handle sensitive information by rephrasing
+  optimized = await intelligentlyRemoveSensitiveInfo(optimized);
+
+  // 2. Clear structure with sections for longer prompts
   if (optimized.length > 200) {
     optimized = addPromptStructure(optimized);
   }
 
-  // 2. Remove redundant phrases
+  // 3. Remove redundant phrases
   const redundantPhrases = [
     /\b(?:please|kindly|if you could|would you mind)\b/gi,
     /\b(?:as an AI|as a language model|I understand that you are)\b/gi
@@ -25,13 +28,13 @@ async function optimizePrompt(prompt: string): Promise<string> {
     optimized = optimized.replace(pattern, '');
   });
 
-  // 3. Improve clarity and specificity
+  // 4. Improve clarity and specificity
   optimized = optimized
     .replace(/\bthing\b/gi, 'item')
     .replace(/\bstuff\b/gi, 'content')
     .replace(/\bdo this\b/gi, 'complete this task');
 
-  // 4. Add clear instructions format if missing
+  // 5. Add clear instructions format if missing
   if (!optimized.includes('Task:') && !optimized.includes('Instructions:') && !optimized.includes('You are')) {
     // Add role context based on content
     if (optimized.toLowerCase().includes('email') || optimized.toLowerCase().includes('message')) {
@@ -47,23 +50,110 @@ async function optimizePrompt(prompt: string): Promise<string> {
     }
   }
 
-  // 5. Add clarity instructions for better responses
+  // 6. Add clarity instructions for better responses
   if (!optimized.toLowerCase().includes('clear') && !optimized.toLowerCase().includes('detailed') && !optimized.toLowerCase().includes('specific')) {
     optimized += '\n\nPlease provide a clear, detailed response with specific examples where relevant.';
   }
 
-  // 6. Add structure guidance for complex requests
+  // 7. Add structure guidance for complex requests
   if (optimized.length > 150 && !optimized.toLowerCase().includes('step') && !optimized.toLowerCase().includes('section')) {
     optimized += ' Structure your response with clear sections or steps.';
   }
 
-  // 7. Clean up extra whitespace
+  // 8. Clean up extra whitespace
   optimized = optimized
     .replace(/\s+/g, ' ')
     .replace(/\n\s*\n/g, '\n\n')
     .trim();
   
   console.log('Complyze: Optimized prompt:', optimized.substring(0, 200) + '...');
+  return optimized;
+}
+
+// New function to intelligently remove sensitive information
+async function intelligentlyRemoveSensitiveInfo(prompt: string): Promise<string> {
+  let optimized = prompt;
+  
+  // Define patterns and their intelligent replacements
+  // Order matters - more specific patterns should come first
+  const sensitivePatterns = [
+    {
+      // API keys (should come before phone numbers to avoid conflicts)
+      pattern: /\b(?:sk-[a-zA-Z0-9]{10,}|pk_[a-zA-Z0-9]{10,}|api[_-]?key[_-]?[a-zA-Z0-9]{8,})\b/gi,
+      replacement: 'an API key'
+    },
+    {
+      // Email addresses
+      pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+      replacement: (match: string) => {
+        const domain = match.split('@')[1];
+        if (domain.includes('gmail') || domain.includes('yahoo') || domain.includes('outlook')) {
+          return 'a personal email address';
+        } else if (domain.includes('company') || domain.includes('corp') || domain.includes('enterprise')) {
+          return 'a corporate email address';
+        }
+        return 'an email address';
+      }
+    },
+    {
+      // Phone numbers (more specific pattern to avoid conflicts)
+      pattern: /\b(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b/g,
+      replacement: 'a phone number'
+    },
+    {
+      // Names (simple pattern for common first name + last name)
+      pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g,
+      replacement: (match: string) => {
+        const words = match.split(' ');
+        if (words.length === 2) {
+          return 'a person\'s name';
+        } else {
+          return 'someone\'s full name';
+        }
+      }
+    },
+    {
+      // SSN
+      pattern: /\b\d{3}-?\d{2}-?\d{4}\b/g,
+      replacement: 'a social security number'
+    },
+    {
+      // Credit card numbers
+      pattern: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
+      replacement: 'a credit card number'
+    },
+    {
+      // IP addresses
+      pattern: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g,
+      replacement: (match: string) => {
+        if (match.startsWith('192.168.') || match.startsWith('10.') || match.startsWith('172.')) {
+          return 'an internal IP address';
+        }
+        return 'an IP address';
+      }
+    },
+    {
+      // Internal URLs
+      pattern: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g,
+      replacement: (match: string) => {
+        if (match.includes('dev-')) return 'a development environment URL';
+        if (match.includes('staging-')) return 'a staging environment URL';
+        if (match.includes('internal-')) return 'an internal system URL';
+        if (match.includes('admin-')) return 'an admin panel URL';
+        return 'an internal URL';
+      }
+    }
+  ];
+
+  // Apply intelligent replacements
+  for (const { pattern, replacement } of sensitivePatterns) {
+    if (typeof replacement === 'function') {
+      optimized = optimized.replace(pattern, replacement);
+    } else {
+      optimized = optimized.replace(pattern, replacement);
+    }
+  }
+
   return optimized;
 }
 
@@ -91,18 +181,19 @@ export async function POST(request: Request) {
 
     console.log('Complyze: Analyzing prompt:', prompt.substring(0, 100) + '...');
 
-    // 1. Redact known PII/sensitive data
+    // 1. First, optimize the original prompt (before redaction)
+    const optimized_prompt = await optimizePrompt(prompt);
+
+    // 2. Then redact known PII/sensitive data from the original prompt
     const redactionResult = await comprehensiveRedact(prompt);
     const redacted_prompt = redactionResult.redactedText;
     
-    console.log('Complyze: Redaction result:', {
+    console.log('Complyze: Processing results:', {
       original_length: prompt.length,
+      optimized_length: optimized_prompt.length,
       redacted_length: redacted_prompt.length,
       pii_found: redactionResult.redactionDetails?.length || 0
     });
-
-    // 2. Optimize the redacted prompt
-    const optimized_prompt = await optimizePrompt(redacted_prompt);
 
     // 3. Calculate risk level based on PII detection and content
     let risk_level = 'low';
