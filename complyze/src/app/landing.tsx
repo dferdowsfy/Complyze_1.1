@@ -280,7 +280,7 @@ export default function Landing() {
           <div className="flex items-baseline gap-2 mb-4 flex-wrap">
             <span className="text-2xl md:text-3xl text-red-600 font-bold whitespace-nowrap">Don't be part of the</span>
             <span 
-              className="text-4xl md:text-5xl font-bold tabular-nums"
+              className="text-6xl md:text-8xl font-bold tabular-nums"
               style={{ color: '#FF6F3C' }}
             >
               {count}%
