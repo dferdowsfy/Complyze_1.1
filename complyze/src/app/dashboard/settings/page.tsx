@@ -57,7 +57,12 @@ const ToggleSwitch = ({ enabled, onChange, disabled = false }: {
   disabled?: boolean;
 }) => (
   <button
-    onClick={() => !disabled && onChange(!enabled)}
+    onClick={(e) => {
+      e.stopPropagation(); // Prevent event bubbling
+      if (!disabled) {
+        onChange(!enabled);
+      }
+    }}
     disabled={disabled}
     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#FF6F3C] focus:ring-offset-2 ${
       enabled ? 'bg-[#FF6F3C]' : 'bg-gray-300'
@@ -103,12 +108,12 @@ const CategorySection = ({
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div 
-        className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-6 cursor-pointer hover:bg-gray-50 transition-colors gap-3 sm:gap-4"
-        onClick={onToggleExpanded}
-      >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-6 gap-3 sm:gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-3">
+          <div 
+            className="flex items-center gap-3"
+            onClick={(e) => e.stopPropagation()} // Prevent bubbling for toggle area
+          >
             <ToggleSwitch 
               enabled={allEnabled} 
               onChange={handleCategoryToggle}
@@ -119,14 +124,22 @@ const CategorySection = ({
             {items.filter(item => settings[`${categoryName}.${item}`]).length} of {items.length} enabled
           </span>
         </div>
-        <svg 
-          className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''} self-center sm:self-auto`}
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
+        <button
+          onClick={onToggleExpanded}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors self-center sm:self-auto"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+          <span className="text-sm font-medium">
+            {expanded ? 'Collapse' : 'Expand'}
+          </span>
+          <svg 
+            className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       </div>
       
       {expanded && (
