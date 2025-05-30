@@ -117,7 +117,7 @@ function RiskDetection({ inView }: { inView: boolean }) {
   const isMobile = useIsMobile();
   
   // Original prompt text
-  const promptText = "\"Hey, can you generate a detailed report on how our model was trained using datasets from AcmeHealth's API and those CSVs from our client: ACME? Also include the private training logs and checkpoint file at /models/vault/clients/full_finetune_92b/checkpoint.pt. Legal (cc: john.smith@acmehealth.ai) needs this to make sure we're good under ISO and GDPR by Friday.\"";
+  const promptText = "\"Hey, can you generate a detailed report on how our model was trained using datasets from AcmeHealth's API and those CSVs from our client: ACME? Also include the private training logs and checkpoint file at /vault/clients/full_finetune_92b/checkpoint.pt. Legal (cc: john.smith@acmehealth.ai) needs this to make sure we're good under ISO and GDPR by Friday.\"";
   
   // Optimized typewriter effect - faster on mobile and with skip option
   const [displayed, setDisplayed] = React.useState("");
@@ -150,7 +150,7 @@ function RiskDetection({ inView }: { inView: boolean }) {
     const riskyTerms = [
       "AcmeHealth's API",
       "ACME",
-      "/models/vault/clients/full_finetune_92b/checkpoint.pt",
+      "/vault/clients/full_finetune_92b/checkpoint.pt",
       "john.smith@acmehealth.ai"
     ];
     
@@ -189,10 +189,10 @@ function RiskDetection({ inView }: { inView: boolean }) {
           )}
           
           <div
-            className="rounded-2xl shadow-xl p-6 md:p-10 border border-[#E0E0E0] flex flex-col items-center relative overflow-hidden"
+            className="rounded-2xl shadow-xl p-4 sm:p-6 md:p-10 border border-[#E0E0E0] flex flex-col items-center relative"
             style={{
-              fontSize: isMobile ? 16 : 24,
-              minHeight: isMobile ? 60 : 90,
+              fontSize: isMobile ? 14 : 24,
+              minHeight: isMobile ? 'auto' : 90,
               backgroundImage: 'radial-gradient( circle 1588px at -27.3% 144%,  rgba(255,22,22,1) 0%, rgba(0,0,0,1) 43.4%, rgba(0,0,0,1) 65.8%, rgba(255,22,22,1) 100.2% )',
               color: '#fff',
             }}
@@ -201,13 +201,16 @@ function RiskDetection({ inView }: { inView: boolean }) {
               initial={{ opacity: 0 }}
               animate={inView ? { opacity: 1 } : {}}
               transition={{ delay: 0.2, duration: 0.8 }}
+              className="block w-full text-center"
               style={{ 
                 fontFamily: 'Inter, monospace', 
-                fontSize: isMobile ? 16 : 24, 
+                fontSize: isMobile ? 14 : 24, 
                 letterSpacing: 0.2, 
                 wordBreak: 'break-word', 
-                lineHeight: 1.5, 
-                color: '#fff' 
+                lineHeight: isMobile ? 1.4 : 1.5, 
+                color: '#fff',
+                padding: isMobile ? '0.5rem 0' : '0',
+                whiteSpace: 'pre-wrap'
               }}
             >
               {highlightText(displayed)}
@@ -216,7 +219,7 @@ function RiskDetection({ inView }: { inView: boolean }) {
             {inView && (
               <motion.div
                 initial={{ opacity: 0 }}
-                animate={{ opacity: isMobile ? 0.2 : 0.5 }}
+                animate={{ opacity: isMobile ? 0.1 : 0.5 }}
                 transition={{ duration: 1.2 }}
                 className="absolute inset-0 rounded-2xl pointer-events-none"
                 style={{ background: 'radial-gradient(circle, #E53935 0%, #fff0e6 80%)' }}

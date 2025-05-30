@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { ipcRenderer } from 'electron';
 import './App.css';
 
 // Add TypeScript declaration for electronAPI
@@ -7,8 +6,6 @@ declare global {
   interface Window {
     electronAPI: {
       processPrompt: (data: any) => Promise<any>;
-      testPromptProcessing: (testPrompt?: string) => Promise<any>;
-      testPromptInterception: (testPrompt?: string) => Promise<any>;
       getActiveMonitoring: () => Promise<any>;
       checkAuth: () => Promise<any>;
       login: (credentials: any) => Promise<any>;
@@ -20,6 +17,9 @@ declare global {
       getRecentActivity: () => Promise<any>;
       onAppDetected: (callback: (data: any) => void) => void;
       onPromptProcessed: (callback: (data: any) => void) => void;
+      testSimpleNotification: () => Promise<any>;
+      testInputDetection: () => Promise<any>;
+      testNotification: () => Promise<any>;
     };
   }
 }
@@ -70,7 +70,7 @@ function App() {
     confirmPassword: '',
     companyName: ''
   });
-  const [monitoringEnabled, setMonitoringEnabled] = useState(true);
+  const [monitoringEnabled, setMonitoringEnabled] = useState(false);
   const [monitoredApps, setMonitoredApps] = useState<MonitoredApp[]>([]);
   const [monitoredWebURLs, setMonitoredWebURLs] = useState<MonitoredWebURL[]>([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -82,28 +82,31 @@ function App() {
     clipboardMonitoring: false
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [showPromptInput, setShowPromptInput] = useState(false);
+  const [manualPrompt, setManualPrompt] = useState('');
+  const [lastResult, setLastResult] = useState<string>('');
 
   useEffect(() => {
     // Initialize app data
     const initializeApp = async () => {
       try {
         // Check authentication
-        const { authenticated, user } = await ipcRenderer.invoke('check-auth');
+        const { authenticated, user } = await window.electronAPI.checkAuth();
         setIsLoggedIn(authenticated);
         setUser(user || null);
 
         // Get monitoring status
-        const monitoringStatus = await ipcRenderer.invoke('get-monitoring-status');
+        const monitoringStatus = await window.electronAPI.getMonitoringStatus();
         setMonitoringEnabled(monitoringStatus.enabled);
         setMonitoredApps(monitoringStatus.monitoredApps || []);
         setMonitoredWebURLs(monitoringStatus.monitoredWebURLs || []);
         
         // Get active monitoring status
-        const activeStatus = await ipcRenderer.invoke('get-active-monitoring');
+        const activeStatus = await window.electronAPI.getActiveMonitoring();
         setActiveMonitoring(activeStatus);
         
         // Get recent activity
-        const activity = await ipcRenderer.invoke('get-recent-activity');
+        const activity = await window.electronAPI.getRecentActivity();
         setRecentActivity(activity || []);
       } catch (err) {
         console.error('App initialization failed:', err);
@@ -116,7 +119,7 @@ function App() {
     const handleAppDetected = (data: any) => {
       console.log('App detected:', data);
       // Update active monitoring status
-      ipcRenderer.invoke('get-active-monitoring').then(setActiveMonitoring);
+      window.electronAPI.getActiveMonitoring().then(setActiveMonitoring);
     };
     
     const handlePromptProcessed = (data: any) => {
@@ -149,10 +152,6 @@ function App() {
     if (window.electronAPI) {
       window.electronAPI.onAppDetected(handleAppDetected);
       window.electronAPI.onPromptProcessed(handlePromptProcessed);
-      
-      // Add listeners for new events
-      ipcRenderer.on('browsers-detected', (event, data) => handleBrowsersDetected(data));
-      ipcRenderer.on('clipboard-prompt-detected', (event, data) => handleClipboardPromptDetected(data));
     }
     
     // Cleanup function
@@ -167,7 +166,7 @@ function App() {
     setLoading(true);
     
     try {
-      const result = await ipcRenderer.invoke('login', loginForm);
+      const result = await window.electronAPI.login(loginForm);
       if (result.success) {
         setIsLoggedIn(true);
         setUser(result.user);
@@ -195,7 +194,7 @@ function App() {
     }
 
     try {
-      const result = await ipcRenderer.invoke('signup', signupForm);
+      const result = await window.electronAPI.signup(signupForm);
       if (result.success) {
         if (result.emailConfirmationRequired) {
           // Email confirmation required
@@ -235,7 +234,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await ipcRenderer.invoke('logout');
+      await window.electronAPI.logout();
       setIsLoggedIn(false);
       setUser(null);
     } catch (err) {
@@ -250,69 +249,46 @@ function App() {
     }
     
     try {
-      await ipcRenderer.invoke('open-dashboard');
+      await window.electronAPI.openDashboard();
     } catch (err) {
-      setError('Failed to open dashboard. Please ensure you are logged in.');
+      setError('Failed to open dashboard');
     }
   };
 
   const toggleMonitoring = async () => {
     try {
-      const enabled = await ipcRenderer.invoke('toggle-monitoring');
+      const enabled = await window.electronAPI.toggleMonitoring();
       setMonitoringEnabled(enabled);
       
       // Update active monitoring status
-      const activeStatus = await ipcRenderer.invoke('get-active-monitoring');
+      const activeStatus = await window.electronAPI.getActiveMonitoring();
       setActiveMonitoring(activeStatus);
     } catch (err) {
       setError('Failed to toggle monitoring');
     }
   };
 
-  const testClipboardBlocking = async () => {
+  const handleManualPromptTest = async () => {
+    if (!manualPrompt.trim()) {
+      setError('Please enter a prompt to test');
+      return;
+    }
+    
+    setLoading(true);
     try {
-      setLoading(true);
+      // Copy the prompt to clipboard to trigger monitoring
+      await navigator.clipboard.writeText(manualPrompt);
       
-      // Put sensitive content in clipboard to test real blocking
-      const testContent = 'Please help me process this customer data: Name: John Smith, SSN: 123-45-6789, Email: john@company.com, Credit Card: 4532-1234-5678-9012';
-      
-      // Use Electron's clipboard API through IPC
-      await window.electronAPI.testPromptInterception(testContent);
+      // Clear the input
+      setManualPrompt('');
       
       // Show success message
-      alert('✅ Clipboard blocking test completed! Check for notification popup.');
-      
+      console.log('Prompt copied to clipboard and will be processed');
     } catch (err) {
-      setError('Clipboard blocking test failed');
+      setError('Failed to copy prompt to clipboard');
     } finally {
       setLoading(false);
     }
-  };
-
-  const testPromptProcessing = async () => {
-    try {
-      setLoading(true);
-      const result = await window.electronAPI.testPromptProcessing(
-        'Test prompt with sensitive data: john.doe@example.com and SSN 123-45-6789'
-      );
-      
-      if (result.success) {
-        // Update recent activity
-        const activity = await ipcRenderer.invoke('get-recent-activity');
-        setRecentActivity(activity || []);
-        alert('✅ Monitoring test completed! Check Recent Activity below.');
-      }
-    } catch (err) {
-      setError('Failed to test prompt processing');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const testPromptInterception = async () => {
-    // This function has been replaced with testClipboardBlocking
-    // External desktop apps cannot be directly intercepted due to OS security restrictions
-    console.log('testPromptInterception is deprecated - use testClipboardBlocking instead');
   };
 
   return (
@@ -382,11 +358,139 @@ function App() {
           >
             {showMonitoring ? 'Hide' : 'Show'} Monitoring Settings
           </button>
+          
+          <button 
+            onClick={() => setShowPromptInput(!showPromptInput)}
+            className="prompt-input-btn"
+          >
+            {showPromptInput ? 'Hide' : 'Show'} Prompt Tester
+          </button>
         </div>
+
+        {showPromptInput && (
+          <div className="prompt-input-section">
+            <h3>🧪 Test Prompt Enhancement</h3>
+            <p>Enter a prompt below to see how Complyze enhances it. The prompt will be copied to clipboard and processed automatically.</p>
+            <div className="input-container">
+              <textarea
+                value={manualPrompt}
+                onChange={(e) => setManualPrompt(e.target.value)}
+                placeholder="Enter your prompt here... (e.g., 'Help me write an email to john@company.com about my project')"
+                className="prompt-textarea"
+                rows={4}
+              />
+              <div className="input-actions">
+                <button 
+                  onClick={handleManualPromptTest}
+                  className="test-btn"
+                  disabled={loading || !manualPrompt.trim()}
+                >
+                  {loading ? 'Processing...' : '✨ Enhance Prompt'}
+                </button>
+                <button 
+                  onClick={() => setManualPrompt('')}
+                  className="clear-btn"
+                  disabled={!manualPrompt.trim()}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="example-prompts">
+              <h4>Quick Examples:</h4>
+              <div className="example-buttons">
+                <button 
+                  onClick={() => setManualPrompt('Please explain how machine learning works')}
+                  className="example-btn"
+                >
+                  Simple Question
+                </button>
+                <button 
+                  onClick={() => setManualPrompt('Help me write an email to john.doe@company.com about my SSN 123-45-6789')}
+                  className="example-btn"
+                >
+                  With Sensitive Data
+                </button>
+                <button 
+                  onClick={() => setManualPrompt('Generate a comprehensive blog post about artificial intelligence')}
+                  className="example-btn"
+                >
+                  Creative Task
+                </button>
+              </div>
+            </div>
+            
+            <div className="test-notifications">
+              <h4>🧪 Test Notifications:</h4>
+              <div className="test-buttons">
+                <button 
+                  onClick={async () => {
+                    try {
+                      const result = await window.electronAPI.testSimpleNotification();
+                      setLastResult(`Test notification: ${result.success ? 'SUCCESS' : 'FAILED'} - ${result.message}`);
+                    } catch (error: any) {
+                      setLastResult(`Test notification error: ${error.message}`);
+                    }
+                  }}
+                  className="test-btn test-notification"
+                >
+                  🔔 Test Simple Notification
+                </button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const result = await window.electronAPI.testInputDetection();
+                      setLastResult(`Input detection test: ${result.success ? 'SUCCESS' : 'FAILED'} - ${result.message}`);
+                    } catch (error: any) {
+                      setLastResult(`Input detection error: ${error.message}`);
+                    }
+                  }}
+                  className="test-btn test-detection"
+                >
+                  🎯 Test Input Detection
+                </button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const result = await window.electronAPI.testNotification();
+                      setLastResult(`Full notification test: ${result.success ? 'SUCCESS' : 'FAILED'} - ${result.message || result.userChoice}`);
+                    } catch (error: any) {
+                      setLastResult(`Full notification error: ${error.message}`);
+                    }
+                  }}
+                  className="test-btn test-full"
+                >
+                  🚀 Test Full Notification
+                </button>
+              </div>
+              <div className="test-instructions">
+                <p><strong>Use these buttons to verify the notification system is working:</strong></p>
+                <ul>
+                  <li><strong>Simple:</strong> Shows a basic notification popup</li>
+                  <li><strong>Input Detection:</strong> Simulates detecting text input from ChatGPT</li>
+                  <li><strong>Full:</strong> Shows a complete notification with sensitive data</li>
+                </ul>
+              </div>
+              {lastResult && (
+                <div className="test-results">
+                  <h5>Last Test Result:</h5>
+                  <p className="result-text">{lastResult}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="capabilities-notice">
           <h3>🛡️ What Complyze Desktop Agent Can Do</h3>
           <div className="capability-grid">
+            <div className="capability-item working">
+              <span className="capability-status">✅</span>
+              <div>
+                <strong>Real-time Input Monitoring</strong>
+                <p>Monitors text as you type in ChatGPT and Claude desktop apps (requires accessibility permissions)</p>
+              </div>
+            </div>
             <div className="capability-item working">
               <span className="capability-status">✅</span>
               <div>
@@ -398,19 +502,26 @@ function App() {
               <span className="capability-status">✅</span>
               <div>
                 <strong>App Detection</strong>
-                <p>Monitors when AI apps are running for awareness</p>
+                <p>Monitors when AI apps like ChatGPT Desktop and Claude are running</p>
               </div>
             </div>
-            <div className="capability-item limited">
-              <span className="capability-status">⚠️</span>
+            <div className="capability-item working">
+              <span className="capability-status">✅</span>
               <div>
-                <strong>External App Blocking</strong>
-                <p>Cannot directly block ChatGPT Desktop, Claude Desktop due to OS security</p>
+                <strong>Prompt Enhancement</strong>
+                <p>Shows optimized versions of your prompts with insights</p>
+              </div>
+            </div>
+            <div className="capability-item working">
+              <span className="capability-status">✅</span>
+              <div>
+                <strong>Text Replacement</strong>
+                <p>Can replace text directly in AI apps with enhanced versions</p>
               </div>
             </div>
           </div>
           <div className="recommendation">
-            <strong>💡 Recommended Workflow:</strong> Copy your prompts to clipboard first, then paste into AI apps. This enables full protection!
+            <strong>💡 New Feature:</strong> With accessibility permissions, Complyze can now monitor and enhance your prompts as you type in ChatGPT and Claude desktop apps!
           </div>
         </div>
 
@@ -421,7 +532,7 @@ function App() {
               onClick={toggleMonitoring}
               className={`toggle-btn ${monitoringEnabled ? 'enabled' : 'disabled'}`}
             >
-              {monitoringEnabled ? 'Enabled' : 'Disabled'}
+              {monitoringEnabled ? 'ON' : 'OFF'}
             </button>
           </div>
           <p>
@@ -473,45 +584,31 @@ function App() {
               <div className="monitoring-instructions">
                 <h4>How Monitoring Works:</h4>
                 <ul>
-                  <li><strong>✅ Clipboard Protection:</strong> Real-time blocking of sensitive data in clipboard</li>
-                  <li><strong>✅ Desktop Apps:</strong> Detects when monitored apps are running (awareness only)</li>
-                  <li><strong>✅ Web Browsing:</strong> Install the Complyze Chrome Extension for full web blocking</li>
-                  <li><strong>⚠️ External Apps:</strong> Cannot directly block ChatGPT Desktop, Claude Desktop due to OS security</li>
+                  <li><strong>🔥 NEW: Real-time Input Monitoring:</strong> Monitors text as you type in ChatGPT/Claude desktop apps</li>
+                  <li><strong>✅ Clipboard Protection:</strong> Real-time enhancement of prompts copied to clipboard</li>
+                  <li><strong>✅ Desktop Apps:</strong> Detects ChatGPT Desktop, Claude Desktop, and other AI apps</li>
+                  <li><strong>✅ Smart Enhancement:</strong> Shows optimized prompts with AI best practices</li>
+                  <li><strong>✅ Sensitive Data Protection:</strong> Removes emails, SSNs, credit cards automatically</li>
+                  <li><strong>🔄 Text Replacement:</strong> Can replace text directly in AI apps with enhanced versions</li>
                 </ul>
                 <div className="protection-levels">
                   <div className="protection-item">
                     <span className="protection-icon">🛡️</span>
                     <div>
-                      <strong>Full Protection:</strong> Clipboard monitoring with real-time blocking
+                      <strong>Full Protection:</strong> Real-time input monitoring + clipboard protection (requires accessibility permissions)
                     </div>
                   </div>
                   <div className="protection-item">
                     <span className="protection-icon">👁️</span>
                     <div>
-                      <strong>Awareness Mode:</strong> Desktop app detection and activity logging
+                      <strong>App Awareness:</strong> Desktop app detection and activity logging
                     </div>
                   </div>
                 </div>
                 <p className="instruction-note">
-                  💡 <strong>Best Practice:</strong> Copy prompts to clipboard first - this enables full blocking protection!
+                  💡 <strong>Grant Accessibility Permissions:</strong> Go to System Preferences {'>'}  Security & Privacy {'>'}  Accessibility and add Complyze for real-time input monitoring!
                 </p>
               </div>
-              
-              <button 
-                onClick={testPromptProcessing}
-                className="test-btn"
-                disabled={loading}
-              >
-                {loading ? 'Testing...' : 'Test Monitoring (Non-blocking)'}
-              </button>
-              
-              <button 
-                onClick={testClipboardBlocking}
-                className="test-btn test-blocking"
-                disabled={loading}
-              >
-                {loading ? 'Testing...' : 'Test Clipboard Blocking'}
-              </button>
             </div>
           )}
         </div>
@@ -575,7 +672,7 @@ function App() {
                 ))}
               </div>
             ) : (
-              <p>No recent activity. Start using monitored apps to see prompt processing here.</p>
+              <p>No recent activity. Start using monitored apps or copy prompts to clipboard to see enhancement here.</p>
             )}
           </div>
         </div>

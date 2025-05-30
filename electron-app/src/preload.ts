@@ -40,6 +40,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   testPromptInterception: (testPrompt?: string) => ipcRenderer.invoke('test-prompt-interception', testPrompt),
   getActiveMonitoring: () => ipcRenderer.invoke('get-active-monitoring'),
   
+  // Add the missing test notification handlers
+  testSimpleNotification: () => ipcRenderer.invoke('test-simple-notification'),
+  testInputDetection: () => ipcRenderer.invoke('test-input-detection'),
+  testNotification: () => ipcRenderer.invoke('test-notification'),
+  
   // Add the missing reportPrompt method
   reportPrompt: (data: { prompt: string; sourceApp: string }) => ipcRenderer.invoke('prompt-captured', data),
   

@@ -5,13 +5,38 @@ import Store from 'electron-store';
 import log from 'electron-log';
 import { monitoredApps, monitoredWebURLs } from './monitoringTargets';
 import { comprehensiveRedact, calculateRiskScore } from './shared/redactionEngine';
-import { enhancePrompt } from './shared/promptEnhancer';
+import { enhancePrompt, shouldTriggerOptimization } from './shared/promptEnhancer';
 import { dispatchToComplyze, checkComplyzeAuth, PromptLogData } from './shared/dispatch';
+import { openRouterService, SecurityInsights, EnhancedRedactionDetails } from './shared/openRouterService';
+
+// Set app name early for macOS menu bar
+app.setName('Complyze');
 
 // Add monitoring system imports
 import { exec } from 'child_process';
 import { promisify } from 'util';
 const execAsync = promisify(exec);
+
+// Add accessibility monitoring
+let accessibilityPermissionGranted = false;
+let inputMonitoringInterval: NodeJS.Timeout | null = null;
+let lastDetectedInput = '';
+let currentFocusedApp = '';
+let lastInputProcessTime = 0;
+
+// Check for accessibility permissions
+async function checkAccessibilityPermissions(): Promise<boolean> {
+  try {
+    // On macOS, we need accessibility permissions to monitor other apps
+    const { stdout } = await execAsync('osascript -e "tell application \\"System Events\\" to get name of every process"');
+    accessibilityPermissionGranted = true;
+    return true;
+  } catch (error) {
+    console.log('Accessibility permissions not granted');
+    accessibilityPermissionGranted = false;
+    return false;
+  }
+}
 
 // Add monitoring state
 let monitoringInterval: NodeJS.Timeout | null = null;
@@ -19,6 +44,14 @@ let lastClipboardContent = '';
 let originalClipboardContent = ''; // Store original content for restoration
 let activeProcesses = new Set<string>();
 let webContentsMonitoring = new Map<number, boolean>();
+let currentActiveApp = '';
+let lastActiveApp = '';
+let lastNotificationTime = 0;
+let processingQueue = new Set<string>();
+
+// Add notification suppression system
+let recentNotifications = new Map<string, number>(); // content hash -> timestamp
+let suppressionDuration = 300000; // 5 minutes suppression for same content
 
 // Helper function to make HTTP requests using Electron's net module
 interface HttpResponse {
@@ -141,14 +174,20 @@ function createMainWindow(): void {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 20, y: 20 },
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
       devTools: isDevelopment
     },
     show: false,
     icon: getIconPath(),
     backgroundColor: '#0E1E36'
   });
+
+  // Debug preload script path
+  const preloadPath = path.join(__dirname, 'preload.js');
+  console.log('Complyze Debug: Preload script path:', preloadPath);
+  console.log('Complyze Debug: Preload script exists:', require('fs').existsSync(preloadPath));
 
   // Set the app name
   app.name = 'Complyze';
@@ -158,7 +197,37 @@ function createMainWindow(): void {
     ? 'http://localhost:3001' 
     : `file://${path.join(__dirname, '../ui/build/index.html')}`;
   
+  console.log('Complyze Debug: Loading URL:', startUrl);
+  console.log('Complyze Debug: isDevelopment:', isDevelopment);
+  console.log('Complyze Debug: __dirname:', __dirname);
+  
   mainWindow.loadURL(startUrl);
+
+  // Add debugging for load events
+  mainWindow.webContents.on('did-start-loading', () => {
+    console.log('Complyze Debug: Started loading React app');
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('Complyze Debug: Finished loading React app');
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('Complyze Debug: Failed to load React app:', errorCode, errorDescription, validatedURL);
+  });
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log('Complyze Debug: DOM ready');
+  });
+
+  // Set dock icon explicitly on macOS
+  if (process.platform === 'darwin') {
+    const iconPath = getIconPath();
+    if (iconPath && require('fs').existsSync(iconPath)) {
+      app.dock.setIcon(iconPath);
+      console.log('Dock icon set to:', iconPath);
+    }
+  }
 
   // Window event handlers
   mainWindow.once('ready-to-show', () => {
@@ -314,7 +383,8 @@ function updateTrayMenu(): void {
  */
 function getIconPath(): string {
   const isDevelopment = process.env.NODE_ENV === 'development';
-  const iconName = os.platform() === 'darwin' ? 'icon.png' : 'icon.png';
+  // Use 512px icon for better quality in dock
+  const iconName = os.platform() === 'darwin' ? 'icon-512.png' : 'icon.png';
   
   // In development, use the absolute path to the assets directory
   const iconPath = path.join(__dirname, '..', 'assets', iconName);
@@ -322,14 +392,19 @@ function getIconPath(): string {
   // Ensure the icon exists
   try {
     if (require('fs').existsSync(iconPath)) {
+      console.log('Using icon:', iconPath);
       return iconPath;
     }
-    // Fallback to a default icon if the custom one doesn't exist
-    return path.join(__dirname, '..', 'assets', 'icon.png');
+    // Fallback to main icon if the specific one doesn't exist
+    const fallbackPath = path.join(__dirname, '..', 'assets', 'icon.png');
+    if (require('fs').existsSync(fallbackPath)) {
+      console.log('Using fallback icon:', fallbackPath);
+      return fallbackPath;
+    }
   } catch (error) {
     console.error('Error loading icon:', error);
-    return '';
   }
+  return '';
 }
 
 /**
@@ -350,7 +425,7 @@ async function interceptPrompt(data: {
     // 2. Generate enhanced prompt if needed
     let enhancementResult = null;
     if (riskScore > 30 || redactionResult.redactionDetails.length > 0) {
-      enhancementResult = await enhancePrompt(redactionResult.redactedText);
+      enhancementResult = await enhancePrompt(data.prompt);
     }
     
     // 3. Determine if blocking is needed
@@ -366,7 +441,8 @@ async function interceptPrompt(data: {
         redactionDetails: redactionResult.redactionDetails,
         sourceApp: data.sourceApp,
         enhancedPrompt: enhancementResult?.enhancedPrompt,
-        blockingMode: true
+        blockingMode: true,
+        enhancementResult
       });
       
       // Log the interaction
@@ -390,7 +466,8 @@ async function interceptPrompt(data: {
         redactionDetails: redactionResult.redactionDetails,
         sourceApp: data.sourceApp,
         enhancedPrompt: enhancementResult?.enhancedPrompt,
-        blockingMode: false
+        blockingMode: false,
+        enhancementResult
       });
       
       return { action: 'allow' };
@@ -456,8 +533,8 @@ async function processPrompt(data: {
     // 1. Redact sensitive data
     const redactionResult = await comprehensiveRedact(data.prompt);
     
-    // 2. Enhance prompt (only if redacted content is safe)
-    const enhancementResult = await enhancePrompt(redactionResult.redactedText);
+    // 2. Enhance prompt (using original prompt, not redacted content)
+    const enhancementResult = await enhancePrompt(data.prompt);
     
     // 3. Calculate risk score
     const riskScore = calculateRiskScore(redactionResult.redactionDetails);
@@ -494,7 +571,8 @@ async function processPrompt(data: {
         redactionDetails: redactionResult.redactionDetails,
         sourceApp: data.sourceApp,
         enhancedPrompt: enhancementResult.enhancedPrompt,
-        blockingMode: false
+        blockingMode: false,
+        enhancementResult
       });
     }
     
@@ -755,6 +833,52 @@ ipcMain.handle('test-prompt-interception', async (event, testPrompt) => {
   return { success: true, result, message: 'Test prompt intercepted' };
 });
 
+// Test notification popup
+ipcMain.handle('test-notification', async (event) => {
+  try {
+    const testPrompt = 'Please help me write an email to john.doe@company.com about my SSN 123-45-6789 and credit card 4532-1234-5678-9012. I need to include my phone number 555-123-4567 in the signature.';
+    
+    // Generate enhanced prompt
+    const enhancementResult = await enhancePrompt(testPrompt);
+    
+    // Create test notification
+    const userChoice = await createNotificationWindow({
+      prompt: testPrompt,
+      riskScore: 95,
+      redactionDetails: [
+        { type: 'Email', original: 'john.doe@company.com', redacted: '[REDACTED_EMAIL]' },
+        { type: 'SSN', original: '123-45-6789', redacted: '[REDACTED_SSN]' },
+        { type: 'Credit Card', original: '4532-1234-5678-9012', redacted: '[REDACTED_CREDIT_CARD]' },
+        { type: 'Phone', original: '555-123-4567', redacted: '[REDACTED_PHONE]' }
+      ],
+      sourceApp: 'Test Application',
+      enhancedPrompt: enhancementResult.enhancedPrompt,
+      blockingMode: true,
+      enhancementResult
+    });
+    
+    return { success: true, userChoice, message: 'Test notification displayed' };
+  } catch (error) {
+    log.error('Test notification error:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+// Replace text in AI app
+ipcMain.handle('replace-text-in-app', async (event, enhancedText) => {
+  try {
+    if (!currentFocusedApp) {
+      return { success: false, error: 'No AI app currently focused' };
+    }
+    
+    await replaceTextInActiveApp(enhancedText, currentFocusedApp);
+    return { success: true, message: 'Text replaced successfully' };
+  } catch (error) {
+    log.error('Replace text error:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
 // Notification IPC handlers
 ipcMain.on('close-notification', (event) => {
   const senderWindow = BrowserWindow.fromWebContents(event.sender);
@@ -812,6 +936,25 @@ app.whenReady().then(() => {
 
   // Start monitoring system
   startMonitoring();
+
+  // Check accessibility permissions
+  checkAccessibilityPermissions().then(granted => {
+    if (granted) {
+      console.log('Complyze Debug: Accessibility permissions granted - enhanced monitoring enabled');
+      accessibilityPermissionGranted = true;
+      
+      // Start input monitoring if monitoring is enabled
+      if (isMonitoringEnabled()) {
+        startMonitoring(); // Restart monitoring to include input monitoring
+      }
+    } else {
+      console.log('Complyze Debug: Accessibility permissions not granted - limited monitoring mode');
+      accessibilityPermissionGranted = false;
+      
+      // Don't show notification about accessibility permissions immediately on launch
+      // Users can discover this through settings or when they actually need it
+    }
+  });
 
   // Register global shortcuts
   globalShortcut.register('CommandOrControl+Shift+C', () => {
@@ -872,20 +1015,40 @@ function startMonitoring(): void {
   if (monitoringInterval) {
     clearInterval(monitoringInterval);
   }
+  
+  if (inputMonitoringInterval) {
+    clearInterval(inputMonitoringInterval);
+  }
 
   log.info('Starting Complyze monitoring system...');
   
-  // Monitor every 2 seconds
+  // Monitor every 5 seconds for better responsiveness (reduced from 10)
   monitoringInterval = setInterval(async () => {
     if (!isMonitoringEnabled()) return;
     
     try {
       await monitorActiveProcesses();
       await monitorClipboard();
+      await monitorActiveWindow();
     } catch (error) {
       log.error('Monitoring error:', error);
     }
-  }, 2000);
+  }, 5000); // Reduced from 10000 to 5000ms
+
+  // Start AI app input monitoring (more responsive for input detection)
+  if (accessibilityPermissionGranted) {
+    inputMonitoringInterval = setInterval(async () => {
+      if (!isMonitoringEnabled()) return;
+      
+      try {
+        await monitorAIAppInput();
+      } catch (error) {
+        log.error('Input monitoring error:', error);
+      }
+    }, 1500); // Reduced from 2000 to 1500ms for better input detection
+    
+    log.info('AI app input monitoring started');
+  }
 
   // Setup web content monitoring
   setupWebContentMonitoring();
@@ -902,6 +1065,11 @@ function stopMonitoring(): void {
     monitoringInterval = null;
   }
   
+  if (inputMonitoringInterval) {
+    clearInterval(inputMonitoringInterval);
+    inputMonitoringInterval = null;
+  }
+  
   webContentsMonitoring.clear();
   log.info('Complyze monitoring system stopped');
 }
@@ -916,7 +1084,7 @@ async function monitorActiveProcesses(): Promise<void> {
     
     if (platform === 'darwin') {
       // Use ps -ax to get full command lines, which is better for app detection
-      command = 'ps -ax';
+      command = 'ps -axo pid,comm,command';
     } else if (platform === 'win32') {
       command = 'tasklist /fo csv /nh';
     } else {
@@ -926,37 +1094,49 @@ async function monitorActiveProcesses(): Promise<void> {
     const { stdout } = await execAsync(command);
     const runningProcesses = stdout.split('\n').map(line => line.trim());
     
-    // Debug: Log some processes to see what we're getting
-    console.log('Complyze Debug: Sample running processes:', runningProcesses.slice(0, 5));
-    
-    // Check for monitored apps
+    // Check for monitored apps with improved detection
     const enabledApps = monitoredApps.filter(app => 
       app.enabled && (app.platform === 'all' || app.platform === platform)
     );
     
     console.log('Complyze Debug: Checking for apps:', enabledApps.map(app => app.name));
     
-    // Also check for browsers (for web monitoring guidance)
-    const browserProcesses = [
-      'Google Chrome', 'Chrome', 'Safari', 'Firefox', 'Microsoft Edge', 'Edge'
-    ];
-    
-    let browsersDetected = [];
-    
     for (const app of enabledApps) {
       const isRunning = runningProcesses.some(process => {
         const processLower = process.toLowerCase();
-        const appNameLower = app.processName.toLowerCase();
-        const execNameLower = app.executableName.toLowerCase();
         
-        // For macOS, check if the process line contains the app name
-        const matches = processLower.includes(appNameLower) || 
-                       processLower.includes(execNameLower) ||
-                       processLower.includes(`${appNameLower}.app`) ||
-                       processLower.includes(`${execNameLower}.app`);
+        // Enhanced detection patterns for ChatGPT and Claude
+        let matches = false;
+        
+        if (app.name === 'ChatGPT Desktop') {
+          matches = processLower.includes('chatgpt') ||
+                   processLower.includes('openai') ||
+                   processLower.includes('gpt') ||
+                   processLower.includes('chat gpt') ||
+                   // Common ChatGPT app bundle identifiers
+                   processLower.includes('com.openai.chat') ||
+                   processLower.includes('chatgpt.app') ||
+                   // Check for ChatGPT in the command line
+                   (processLower.includes('/applications/') && processLower.includes('chatgpt'));
+        } else if (app.name === 'Claude Desktop') {
+          matches = processLower.includes('claude') ||
+                   processLower.includes('anthropic') ||
+                   processLower.includes('claude.app') ||
+                   // Common Claude app bundle identifiers
+                   processLower.includes('com.anthropic.claude') ||
+                   (processLower.includes('/applications/') && processLower.includes('claude'));
+        } else {
+          // Fallback to original detection
+          const appNameLower = app.processName.toLowerCase();
+          const execNameLower = app.executableName.toLowerCase();
+          matches = processLower.includes(appNameLower) || 
+                   processLower.includes(execNameLower) ||
+                   processLower.includes(`${appNameLower}.app`) ||
+                   processLower.includes(`${execNameLower}.app`);
+        }
         
         if (matches) {
-          console.log(`Complyze Debug: Found match for ${app.name}: ${process.substring(0, 100)}...`);
+          console.log(`Complyze Debug: Found match for ${app.name}: ${process.substring(0, 150)}...`);
         }
         
         return matches;
@@ -989,27 +1169,8 @@ async function monitorActiveProcesses(): Promise<void> {
       }
     }
     
-    // Check for browsers
-    for (const browser of browserProcesses) {
-      const isRunning = runningProcesses.some(process => 
-        process.toLowerCase().includes(browser.toLowerCase())
-      );
-      
-      if (isRunning) {
-        browsersDetected.push(browser);
-      }
-    }
-    
     // Debug: Log current active processes
     console.log('Complyze Debug: Current active processes:', Array.from(activeProcesses));
-    
-    // Update browser detection status
-    if (browsersDetected.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('browsers-detected', {
-        browsers: browsersDetected,
-        message: 'Install Complyze Chrome Extension for web monitoring'
-      });
-    }
     
   } catch (error) {
     log.error('Process monitoring error:', error);
@@ -1024,108 +1185,131 @@ async function monitorClipboard(): Promise<void> {
   try {
     const currentContent = clipboard.readText();
     
-    // Debug: Log clipboard changes
-    if (currentContent !== lastClipboardContent) {
-      console.log('Complyze Debug: Clipboard changed, length:', currentContent.length);
-      console.log('Complyze Debug: Clipboard preview:', currentContent.substring(0, 100));
-    }
-    
-    // Only process if content changed and is substantial
+    // Only process if content changed and meets basic criteria
     if (currentContent !== lastClipboardContent && 
-        currentContent.length > 10 && 
-        currentContent.length < 10000) {
+        currentContent.length > 5 && // Lowered from 10
+        currentContent.length < 5000 &&
+        !processingQueue.has(currentContent)) {
       
-      lastClipboardContent = currentContent;
-      originalClipboardContent = currentContent; // Store original for potential restoration
+      // Prevent spam notifications (reduced time)
+      const now = Date.now();
+      if (now - lastNotificationTime < 3000) { // Reduced from 8000 to 3000ms
+        return;
+      }
       
-      // Enhanced prompt detection with more indicators
-      const promptIndicators = [
-        // Question words
-        'explain', 'how to', 'what is', 'why does', 'can you', 'please',
-        'could you', 'would you', 'help me', 'i need', 'tell me',
+      // Use smart content detection
+      const shouldOptimize = shouldTriggerOptimization(currentContent);
+      
+      console.log(`Complyze Debug: Clipboard content detected (${currentContent.length} chars)`);
+      console.log(`Complyze Debug: Should optimize: ${shouldOptimize}`);
+      console.log(`Complyze Debug: Content preview: "${currentContent.substring(0, 50)}..."`);
+      
+      // ALWAYS SHOW NOTIFICATION FOR ANY SUBSTANTIAL CONTENT (for debugging)
+      if (shouldOptimize || currentContent.length > 15) {
         
-        // AI task words
-        'generate', 'create', 'write', 'analyze', 'summarize', 'translate',
-        'review', 'check', 'improve', 'optimize', 'debug', 'fix',
+        // Check if we should suppress this notification
+        if (shouldSuppressNotification(currentContent)) {
+          console.log('Complyze Debug: Notification suppressed - content shown recently');
+          return;
+        }
         
-        // Common AI prompt starters
-        'act as', 'pretend to be', 'you are', 'imagine you',
-        'role play', 'simulate', 'behave like'
-      ];
-      
-      const lowerContent = currentContent.toLowerCase();
-      const hasPromptIndicators = promptIndicators.some(indicator => 
-        lowerContent.includes(indicator)
-      );
-      
-      // Also check for sensitive data patterns
-      const sensitivePatterns = [
-        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, // Email
-        /\b\d{3}-\d{2}-\d{4}\b/, // SSN
-        /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/, // Credit card
-        /\b\d{3}-\d{3}-\d{4}\b/, // Phone number
-      ];
-      
-      const hasSensitiveData = sensitivePatterns.some(pattern => 
-        pattern.test(currentContent)
-      );
-      
-      console.log('Complyze Debug: Clipboard analysis:', {
-        hasPromptIndicators,
-        hasSensitiveData,
-        length: currentContent.length
-      });
-      
-      if (hasPromptIndicators || hasSensitiveData) {
-        log.info('Potential prompt detected in clipboard', {
-          hasPromptIndicators,
-          hasSensitiveData,
-          length: currentContent.length
+        lastClipboardContent = currentContent;
+        originalClipboardContent = currentContent;
+        lastNotificationTime = now;
+        processingQueue.add(currentContent);
+        
+        console.log('Complyze Debug: *** TRIGGERING CLIPBOARD NOTIFICATION ***');
+        
+        // Generate enhanced prompt for ALL detected content
+        const redactionResult = await comprehensiveRedact(currentContent);
+        const enhancementResult = await enhancePrompt(currentContent);
+        const riskScore = Math.max(calculateRiskScore(redactionResult.redactionDetails), 30); // Minimum 30 for visibility
+        
+        console.log(`Complyze Debug: Enhancement result: ${enhancementResult ? 'SUCCESS' : 'FAILED'}`);
+        console.log(`Complyze Debug: Risk score: ${riskScore}`);
+        console.log(`Complyze Debug: Redactions: ${redactionResult.redactionDetails.length}`);
+        
+        // Check for sensitive data or AI risks (expanded detection)
+        const sensitivePatterns = [
+          /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, // Email
+          /\b\d{3}-\d{2}-\d{4}\b/, // SSN
+          /\b\d{9}\b/, // SSN no dashes
+          /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/, // Credit card
+          /\b\d{3}-\d{3}-\d{4}\b/, // Phone
+          /\bapi[\s_-]?key/i, // API keys
+          /\btoken/i, // Tokens
+          /\bjailbreak/i, // AI jailbreak
+          /ignore.*instructions/i, // Prompt injection
+          /\bgdpr/i, /\bpci\s+dss/i, /\bnist\s+ai/i // Compliance
+        ];
+        
+        const hasSensitiveData = sensitivePatterns.some(pattern => 
+          pattern.test(currentContent)
+        );
+        
+        console.log(`Complyze Debug: Has sensitive data: ${hasSensitiveData}`);
+        
+        // Show notification based on risk level (but ALWAYS show for debugging)
+        const shouldBlock = hasSensitiveData || riskScore > 50;
+        
+        console.log(`Complyze Debug: Should block: ${shouldBlock}`);
+        console.log(`Complyze Debug: About to create notification window...`);
+        
+        try {
+          if (shouldBlock) {
+            // Show blocking notification for sensitive data
+            const userChoice = await createNotificationWindow({
+              prompt: currentContent,
+              riskScore: Math.max(75, riskScore),
+              redactionDetails: redactionResult.redactionDetails,
+              sourceApp: 'Clipboard',
+              enhancedPrompt: enhancementResult.enhancedPrompt,
+              blockingMode: true,
+              enhancementResult
+            });
+            
+            console.log('Complyze Debug: BLOCKING notification created, user chose:', userChoice);
+          } else {
+            // Show non-blocking notification for optimization
+            const notificationPromise = createNotificationWindow({
+              prompt: currentContent,
+              riskScore: Math.max(35, riskScore), // Ensure minimum visibility
+              redactionDetails: redactionResult.redactionDetails,
+              sourceApp: 'Clipboard',
+              enhancedPrompt: enhancementResult.enhancedPrompt,
+              blockingMode: false,
+              enhancementResult
+            });
+            
+            console.log('Complyze Debug: NON-BLOCKING notification created');
+          }
+        } catch (notificationError) {
+          console.error('Complyze Debug: ERROR creating notification:', notificationError);
+        }
+        
+        // Also process for logging
+        await processPrompt({
+          prompt: currentContent,
+          sourceApp: 'Clipboard',
+          userId: store.get('auth.user.id') as string
         });
         
-        console.log('Complyze Debug: Processing clipboard prompt...');
-        
-        // For clipboard content, we can provide real-time blocking
-        const shouldBlock = hasSensitiveData; // Block if sensitive data detected
-        
-        if (shouldBlock) {
-          // Generate enhanced prompt first
-          const redactionResult = await comprehensiveRedact(currentContent);
-          const enhancementResult = await enhancePrompt(redactionResult.redactedText);
-          
-          // Show blocking notification for clipboard content
-          const userChoice = await createNotificationWindow({
-            prompt: currentContent,
-            riskScore: 85, // High risk for sensitive data
-            redactionDetails: [{ type: 'Sensitive Data', original: 'Detected in clipboard', redacted: '[REDACTED]' }],
-            sourceApp: 'Clipboard',
-            enhancedPrompt: enhancementResult.enhancedPrompt,
-            blockingMode: true
-          });
-          
-          console.log('Complyze Debug: User chose:', userChoice);
-          
-          // Note: The clipboard action is now handled by the notification buttons
-          // via the clipboard-action IPC handler, so we don't need to modify it here
-          
-        } else {
-          // Just process for logging and notifications
-          await processPrompt({
-            prompt: currentContent,
-            sourceApp: 'Clipboard',
-            userId: store.get('auth.user.id') as string
-          });
-        }
+        // Clean up processing queue
+        setTimeout(() => {
+          processingQueue.delete(currentContent);
+        }, 30000);
         
         // Notify main window
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('clipboard-prompt-detected', {
-            hasPromptIndicators,
+            optimizationTriggered: true,
             hasSensitiveData,
             promptPreview: currentContent.substring(0, 100) + '...',
             wasBlocked: shouldBlock
           });
         }
+      } else {
+        console.log(`Complyze Debug: Content not substantial enough or doesn't match patterns`);
       }
     }
   } catch (error) {
@@ -1304,13 +1488,17 @@ function createNotificationWindow(data: {
   sourceApp: string;
   enhancedPrompt?: string;
   blockingMode?: boolean;
+  enhancementResult?: any; // New: full enhancement result with insights
+  isLiveInput?: boolean;
+  securityInsights?: SecurityInsights | null;
+  enhancedRedactionDetails?: EnhancedRedactionDetails[];
 }): Promise<'allow' | 'block' | 'replace'> {
   return new Promise((resolve) => {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
     
     // Calculate position for notification (center for blocking mode, top-right for non-blocking)
-    const notificationWidth = data.blockingMode ? 500 : 400;
-    const notificationHeight = data.blockingMode ? 500 : 350;
+    const notificationWidth = data.blockingMode ? 600 : 500; // Made wider for better content display
+    const notificationHeight = data.blockingMode ? 650 : 450; // Made taller for scrollable content
     const margin = 20;
     
     let x, y;
@@ -1333,7 +1521,7 @@ function createNotificationWindow(data: {
       frame: false,
       alwaysOnTop: true,
       skipTaskbar: true,
-      resizable: false,
+      resizable: true, // Made resizable for better UX
       movable: true,
       minimizable: false,
       maximizable: false,
@@ -1343,7 +1531,8 @@ function createNotificationWindow(data: {
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
-        devTools: isDevelopment
+        devTools: isDevelopment,
+        webSecurity: false // Allow clipboard access
       },
       backgroundColor: '#0E1E36',
       transparent: false,
@@ -1396,7 +1585,6 @@ function createNotificationWindow(data: {
           
           .notification-content {
             flex: 1;
-            padding: 20px;
             overflow-y: auto;
             overflow-x: hidden;
             display: flex;
@@ -1448,6 +1636,12 @@ function createNotificationWindow(data: {
             color: #FF6F3C;
           }
           
+          .content-section {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            flex-shrink: 0;
+          }
+          
           .blocking-message {
             background: rgba(220, 53, 69, 0.1);
             border: 1px solid rgba(220, 53, 69, 0.3);
@@ -1468,6 +1662,7 @@ function createNotificationWindow(data: {
             font-weight: bold;
             margin-bottom: 16px;
             text-align: center;
+            display: inline-block;
           }
           
           .risk-high {
@@ -1491,69 +1686,138 @@ function createNotificationWindow(data: {
           .source-app {
             font-size: 12px;
             color: rgba(255, 255, 255, 0.6);
-            margin-bottom: 12px;
-          }
-          
-          .prompt-preview {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 6px;
-            padding: 12px;
-            font-size: 12px;
-            line-height: 1.4;
             margin-bottom: 16px;
-            max-height: ${data.blockingMode ? '100px' : '60px'};
-            overflow-y: auto;
-            border-left: 3px solid #FF6F3C;
-            flex-shrink: 0;
           }
           
-          .redaction-info {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 16px;
-            flex-shrink: 0;
-          }
-          
-          .redaction-item {
-            background: rgba(220, 53, 69, 0.1);
-            padding: 6px 8px;
-            border-radius: 4px;
-            margin: 4px 0;
-            font-size: 10px;
-          }
-          
-          .enhanced-preview {
+          .enhanced-prompt-section {
             background: rgba(40, 167, 69, 0.1);
             border: 1px solid rgba(40, 167, 69, 0.3);
-            border-radius: 6px;
-            padding: 12px;
+            border-radius: 8px;
             margin-bottom: 16px;
-            font-size: 11px;
-            line-height: 1.4;
-            max-height: 80px;
-            overflow-y: auto;
-            ${data.enhancedPrompt ? '' : 'display: none;'}
+          }
+          
+          .enhanced-prompt-header {
+            background: rgba(40, 167, 69, 0.2);
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(40, 167, 69, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
           }
           
           .enhanced-label {
             color: #28a745;
             font-weight: bold;
-            margin-bottom: 8px;
-            font-size: 10px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+          
+          .copy-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+          }
+          
+          .copy-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+          }
+          
+          .enhanced-prompt-content {
+            padding: 16px;
+            font-size: 13px;
+            line-height: 1.5;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+          }
+          
+          .insights-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            margin-bottom: 16px;
+          }
+          
+          .insights-header {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px 8px 0 0;
+          }
+          
+          .insights-title {
+            color: #FF6F3C;
+            font-weight: bold;
+            font-size: 13px;
+          }
+          
+          .insights-content {
+            padding: 16px;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+          }
+          
+          .insight-item {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid #FF6F3C;
+          }
+          
+          .insight-label {
+            color: #FF6F3C;
+            font-weight: bold;
+            margin-bottom: 4px;
+            font-size: 11px;
+          }
+          
+          .insight-value {
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.4;
+          }
+          
+          .redaction-details {
+            background: rgba(220, 53, 69, 0.1);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 12px;
+          }
+          
+          .redaction-item {
+            background: rgba(220, 53, 69, 0.2);
+            padding: 6px 8px;
+            border-radius: 4px;
+            margin: 4px 0;
+            font-size: 11px;
+            color: #dc3545;
           }
           
           .actions {
+            padding: 16px 20px;
             display: flex;
             gap: 12px;
-            margin-top: auto;
             flex-wrap: wrap;
             flex-shrink: 0;
             -webkit-app-region: no-drag;
+            background: rgba(255, 255, 255, 0.02);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
           }
           
           .btn {
             flex: 1;
-            min-width: ${data.blockingMode ? '120px' : '80px'};
+            min-width: ${data.blockingMode ? '120px' : '100px'};
             padding: ${data.blockingMode ? '10px 16px' : '8px 12px'};
             border: none;
             border-radius: 6px;
@@ -1608,27 +1872,83 @@ function createNotificationWindow(data: {
             font-size: 9px;
             color: rgba(255, 255, 255, 0.4);
             text-align: center;
-            margin-top: 12px;
+            margin-top: 8px;
             ${data.blockingMode ? 'display: none;' : ''}
           }
           
           /* Custom scrollbar */
-          .notification-content::-webkit-scrollbar {
+          .notification-content::-webkit-scrollbar,
+          .enhanced-prompt-content::-webkit-scrollbar,
+          .insights-content::-webkit-scrollbar {
             width: 6px;
           }
           
-          .notification-content::-webkit-scrollbar-track {
+          .notification-content::-webkit-scrollbar-track,
+          .enhanced-prompt-content::-webkit-scrollbar-track,
+          .insights-content::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, 0.05);
             border-radius: 3px;
           }
           
-          .notification-content::-webkit-scrollbar-thumb {
+          .notification-content::-webkit-scrollbar-thumb,
+          .enhanced-prompt-content::-webkit-scrollbar-thumb,
+          .insights-content::-webkit-scrollbar-thumb {
             background: rgba(255, 111, 60, 0.6);
             border-radius: 3px;
           }
           
-          .notification-content::-webkit-scrollbar-thumb:hover {
+          .notification-content::-webkit-scrollbar-thumb:hover,
+          .enhanced-prompt-content::-webkit-scrollbar-thumb:hover,
+          .insights-content::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 111, 60, 0.8);
+          }
+          
+          .copy-success {
+            background: #28a745;
+            color: white;
+            transition: all 0.3s;
+          }
+          
+          .ai-risk-section {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            border-radius: 6px;
+          }
+          
+          .ai-risks {
+            color: #ffc107;
+            font-weight: 500;
+          }
+          
+          .compliance-section {
+            background: rgba(13, 110, 253, 0.1);
+            border: 1px solid rgba(13, 110, 253, 0.3);
+            border-radius: 6px;
+          }
+          
+          .compliance-frameworks {
+            color: #0d6efd;
+            line-height: 1.6;
+          }
+          
+          .compliance-frameworks strong {
+            color: #ffffff;
+          }
+          
+          .compliance-frameworks code {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 10px;
+          }
+          
+          .redaction-item code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            color: #ff6b6b;
           }
         </style>
       </head>
@@ -1636,62 +1956,163 @@ function createNotificationWindow(data: {
         <div class="notification-header">
           <div class="notification-title">
             <div class="warning-icon">!</div>
-            ${data.blockingMode ? 'Sensitive Content Detected' : 'Prompt Flagged'}
+            ${data.blockingMode ? 'Prompt Enhanced & Protected' : 'Prompt Optimized'}
           </div>
           <button class="close-btn" onclick="closeNotification()" title="Close notification">×</button>
         </div>
         
         <div class="notification-content">
-          ${data.blockingMode ? `
-            <div class="blocking-message">
-              ⚠️ Sensitive data detected in your clipboard. Choose how to proceed:
+          <div class="content-section">
+            ${data.blockingMode ? `
+              <div class="blocking-message">
+                ⚠️ Sensitive data detected and removed. Using the optimized version below is recommended.
+              </div>
+            ` : ''}
+            
+            <div class="source-app">From: ${data.sourceApp}</div>
+            
+            <div class="risk-level ${data.riskScore > 70 ? 'risk-high' : data.riskScore > 40 ? 'risk-medium' : 'risk-low'}">
+              ${data.riskScore > 70 ? 'HIGH RISK' : data.riskScore > 40 ? 'MEDIUM RISK' : 'LOW RISK'} (${data.riskScore}%)
             </div>
-          ` : ''}
-          
-          <div class="risk-level ${data.riskScore > 70 ? 'risk-high' : data.riskScore > 40 ? 'risk-medium' : 'risk-low'}">
-            ${data.riskScore > 70 ? 'HIGH RISK' : data.riskScore > 40 ? 'MEDIUM RISK' : 'LOW RISK'} (${data.riskScore}%)
           </div>
-          
-          <div class="source-app">From: ${data.sourceApp}</div>
-          
-          <div class="prompt-preview">
-            <strong>Original Prompt:</strong><br>
-            ${data.prompt.substring(0, data.blockingMode ? 500 : 300)}${data.prompt.length > (data.blockingMode ? 500 : 300) ? '...' : ''}
-          </div>
-          
-          ${data.redactionDetails.length > 0 ? `
-            <div class="redaction-info">
-              <strong>Sensitive data detected:</strong>
-              ${data.redactionDetails.map(detail => `
-                <div class="redaction-item">${detail.type}: ${detail.original}</div>
-              `).join('')}
-            </div>
-          ` : ''}
           
           ${data.enhancedPrompt ? `
-            <div class="enhanced-preview">
-              <div class="enhanced-label">✨ Safe Alternative:</div>
-              ${data.enhancedPrompt}
+            <div class="content-section">
+              <div class="enhanced-prompt-section">
+                <div class="enhanced-prompt-header">
+                  <div class="enhanced-label">
+                    ✨ Optimized Prompt
+                  </div>
+                  <button class="copy-btn" onclick="copyEnhancedPrompt()" id="copyBtn">📋 Copy</button>
+                </div>
+                <div class="enhanced-prompt-content" id="enhancedPrompt">${data.enhancedPrompt}</div>
+              </div>
             </div>
           ` : ''}
           
-          <div class="actions">
-            ${data.blockingMode ? `
-              ${data.enhancedPrompt ? `<button class="btn btn-success" onclick="replacePrompt()" title="Copy safe version to clipboard">✨ Copy Safe Version</button>` : ''}
-              <button class="btn btn-secondary" onclick="keepOriginal()" title="Close popup and keep original content">📋 Keep Original</button>
-            ` : `
-              <button class="btn btn-secondary" onclick="dismissNotification()">Dismiss</button>
-              <button class="btn btn-primary" onclick="openDashboard()">View Details</button>
-            `}
+          <div class="content-section">
+            <div class="insights-section">
+              <div class="insights-header">
+                <div class="insights-title">🔍 Analysis & Insights</div>
+              </div>
+              <div class="insights-content">
+                ${data.enhancementResult ? `
+                  <div class="insight-item">
+                    <div class="insight-label">Intent Detected:</div>
+                    <div class="insight-value">${data.enhancementResult.detectedIntent}</div>
+                  </div>
+                  
+                  <div class="insight-item">
+                    <div class="insight-label">Optimization Reason:</div>
+                    <div class="insight-value">${data.enhancementResult.optimizationReason}</div>
+                  </div>
+                  
+                  <div class="insight-item">
+                    <div class="insight-label">Quality Score:</div>
+                    <div class="insight-value">${data.enhancementResult.qualityScore}% (was estimated at ${Math.max(20, data.enhancementResult.qualityScore - 15)}%)</div>
+                  </div>
+                  
+                  <div class="insight-item">
+                    <div class="insight-label">Clarity Score:</div>
+                    <div class="insight-value">${data.enhancementResult.clarityScore}% (was estimated at ${Math.max(20, data.enhancementResult.clarityScore - 20)}%)</div>
+                  </div>
+                  
+                  ${data.enhancementResult.improvements.length > 0 ? `
+                    <div class="insight-item">
+                      <div class="insight-label">Improvements Made:</div>
+                      <div class="insight-value">
+                        ${data.enhancementResult.improvements.map((improvement: string) => `• ${improvement}`).join('<br>')}
+                      </div>
+                    </div>
+                  ` : ''}
+                  
+                  ${data.enhancementResult.aiRiskIndicators && data.enhancementResult.aiRiskIndicators.length > 0 ? `
+                    <div class="insight-item ai-risk-section">
+                      <div class="insight-label">🤖 AI Security Risks Detected:</div>
+                      <div class="insight-value ai-risks">
+                        ${data.enhancementResult.aiRiskIndicators.map((risk: string) => `⚠️ ${risk}`).join('<br>')}
+                      </div>
+                    </div>
+                  ` : ''}
+                  
+                  ${data.enhancementResult.complianceFrameworks && data.enhancementResult.complianceFrameworks.length > 0 ? `
+                    <div class="insight-item compliance-section">
+                      <div class="insight-label">📋 Compliance Framework Controls:</div>
+                      <div class="insight-value compliance-frameworks">
+                        ${data.enhancementResult.complianceFrameworks.map((framework: string) => {
+                          let description = '';
+                          switch (framework) {
+                            case 'NIST AI RMF':
+                              description = 'AI Risk Management Framework controls applied';
+                              break;
+                            case 'ISO 42001':
+                              description = 'AI Management System standard compliance';
+                              break;
+                            case 'FedRAMP SC-28':
+                              description = 'System and Communications Protection controls';
+                              break;
+                            case 'OWASP LLM Top 10':
+                              description = 'LLM security vulnerability mitigation';
+                              break;
+                            case 'GDPR/CCPA':
+                              description = 'Personal data protection compliance';
+                              break;
+                            case 'PCI DSS':
+                              description = 'Payment card data security standards';
+                              break;
+                            case 'SOC 2 Type II':
+                              description = 'Trust service criteria compliance';
+                              break;
+                            case 'Trade Secret Protection':
+                              description = 'Confidential business information controls';
+                              break;
+                            default:
+                              description = 'Security control framework applied';
+                          }
+                          return `🔒 <strong>${framework}</strong>: ${description}`;
+                        }).join('<br><br>')}
+                      </div>
+                    </div>
+                  ` : ''}
+                ` : `
+                  <div class="insight-item">
+                    <div class="insight-label">Risk Level:</div>
+                    <div class="insight-value">${data.riskScore > 70 ? 'High - Contains sensitive information' : data.riskScore > 40 ? 'Medium - Some privacy concerns' : 'Low - Generally safe'}</div>
+                  </div>
+                `}
+                
+                ${data.redactionDetails.length > 0 ? `
+                  <div class="redaction-details">
+                    <div class="insight-label">🔒 Sensitive Data Removed:</div>
+                    ${data.redactionDetails.map(detail => `
+                      <div class="redaction-item">
+                        <strong>${detail.type}</strong>: <code>${detail.original}</code>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
           </div>
+        </div>
+        
+        <div class="actions">
+          ${data.blockingMode ? `
+            ${data.enhancedPrompt ? `<button class="btn btn-success" onclick="copyAndClose()" title="Copy optimized prompt and close">✨ Use Optimized</button>` : ''}
+            ${data.isLiveInput ? `<button class="btn btn-primary" onclick="replaceInApp()" title="Replace text in the AI app">🔄 Replace Text</button>` : ''}
+            <button class="btn btn-secondary" onclick="keepOriginal()" title="Keep original content">📋 Keep Original</button>
+          ` : `
+            <button class="btn btn-secondary" onclick="dismissNotification()">Dismiss</button>
+            <button class="btn btn-primary" onclick="openDashboard()">View Dashboard</button>
+          `}
           
-          <div class="auto-close">Auto-closes in <span id="countdown">${data.blockingMode ? 30 : 10}</span>s</div>
+          <div class="auto-close">Auto-closes in <span id="countdown">${data.blockingMode ? 20 : 8}</span>s</div>
         </div>
         
         <script>
           const { ipcRenderer } = require('electron');
           
-          let countdown = ${data.blockingMode ? 30 : 10};
+          let countdown = ${data.blockingMode ? 20 : 8};
           const countdownElement = document.getElementById('countdown');
           
           const timer = setInterval(() => {
@@ -1704,6 +2125,42 @@ function createNotificationWindow(data: {
               ${data.blockingMode ? 'closeNotification()' : 'dismissNotification()'};
             }
           }, 1000);
+          
+          function copyEnhancedPrompt() {
+            const enhancedPrompt = document.getElementById('enhancedPrompt').textContent;
+            const copyBtn = document.getElementById('copyBtn');
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(enhancedPrompt).then(() => {
+              // Visual feedback
+              copyBtn.textContent = '✓ Copied!';
+              copyBtn.className = 'copy-btn copy-success';
+              
+              setTimeout(() => {
+                copyBtn.textContent = '📋 Copy';
+                copyBtn.className = 'copy-btn';
+              }, 2000);
+            }).catch(err => {
+              console.error('Failed to copy text: ', err);
+              copyBtn.textContent = '❌ Failed';
+              setTimeout(() => {
+                copyBtn.textContent = '📋 Copy';
+              }, 2000);
+            });
+          }
+          
+          function copyAndClose() {
+            copyEnhancedPrompt();
+            setTimeout(() => {
+              clearInterval(timer);
+              try {
+                ipcRenderer.send('notification-response', { action: 'replace' });
+              } catch (error) {
+                console.error('Error sending notification response:', error);
+                window.close();
+              }
+            }, 1000);
+          }
           
           function closeNotification() {
             console.log('Complyze Notification: Closing notification');
@@ -1739,58 +2196,38 @@ function createNotificationWindow(data: {
             }
           }
           
-          function replacePrompt() {
-            console.log('Complyze Notification: Copying safe version to clipboard');
-            clearInterval(timer);
-            try {
-              // Replace clipboard with enhanced prompt
-              const enhancedPrompt = \`${(data.enhancedPrompt || '').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
-              console.log('Enhanced prompt to copy:', enhancedPrompt.substring(0, 100) + '...');
-              ipcRenderer.send('clipboard-action', { action: 'replace', content: enhancedPrompt });
-              ipcRenderer.send('notification-response', { action: 'replace' });
-            } catch (error) {
-              console.error('Error copying safe version:', error);
-              window.close();
-            }
-          }
-          
           function keepOriginal() {
-            console.log('Complyze Notification: Keeping original content and closing popup');
+            console.log('Complyze Notification: Keeping original content');
             clearInterval(timer);
             try {
-              // Just close the popup without any clipboard action
               ipcRenderer.send('notification-response', { action: 'allow' });
             } catch (error) {
-              console.error('Error keeping original content:', error);
+              console.error('Error keeping original:', error);
               window.close();
             }
           }
           
-          // Prevent window from being dragged on interactive elements
-          document.addEventListener('mousedown', (e) => {
-            const target = e.target;
-            if (target.classList.contains('btn') || 
-                target.classList.contains('close-btn') ||
-                target.closest('.actions') ||
-                target.closest('.notification-content')) {
-              e.stopPropagation();
-            }
-          });
-          
-          // Add click event listeners as backup
-          document.addEventListener('DOMContentLoaded', () => {
-            console.log('Complyze Notification: DOM loaded, setting up event listeners');
+          async function replaceInApp() {
+            const enhancedPrompt = document.getElementById('enhancedPrompt').textContent;
+            console.log('Complyze Notification: Replacing text in AI app');
+            clearInterval(timer);
             
-            // Add event listeners to buttons
-            const buttons = document.querySelectorAll('.btn');
-            buttons.forEach(button => {
-              button.addEventListener('click', (e) => {
-                console.log('Button clicked:', button.textContent);
-                e.preventDefault();
-                e.stopPropagation();
-              });
-            });
-          });
+            try {
+              // Send the enhanced prompt to be replaced in the AI app
+              const result = await ipcRenderer.invoke('replace-text-in-app', enhancedPrompt);
+              if (result.success) {
+                console.log('Text replaced successfully in AI app');
+                // Close notification after successful replacement
+                ipcRenderer.send('notification-response', { action: 'replace' });
+              } else {
+                console.error('Failed to replace text:', result.error);
+                alert('Failed to replace text in the AI app. You can copy the enhanced prompt instead.');
+              }
+            } catch (error) {
+              console.error('Error replacing text:', error);
+              alert('An error occurred while replacing text. You can copy the enhanced prompt instead.');
+            }
+          }
         </script>
       </body>
       </html>
@@ -1854,7 +2291,7 @@ function createNotificationWindow(data: {
         if (!notificationWindow.isDestroyed()) {
           notificationWindow.close();
         }
-      }, 10000);
+      }, 8000); // Reduced from 10000 to 8000ms
     }
   });
 }
@@ -1876,4 +2313,463 @@ function repositionNotifications(): void {
   });
 }
 
+/**
+ * Monitor active window changes
+ */
+async function monitorActiveWindow(): Promise<void> {
+  try {
+    const { stdout } = await execAsync('osascript -e "tell application \\"System Events\\" to get name of first application process whose frontmost is true"');
+    const activeApp = stdout.trim();
+    
+    // Only update if the app actually changed
+    if (activeApp !== currentActiveApp) {
+      lastActiveApp = currentActiveApp;
+      currentActiveApp = activeApp;
+      
+      const isAIApp = activeApp.toLowerCase().includes('chatgpt') || 
+                     activeApp.toLowerCase().includes('claude') ||
+                     activeApp.toLowerCase().includes('openai');
+      
+      // Only show app switch notification if user stayed on the AI app for more than 10 seconds
+      // This prevents spam when quickly switching between apps
+      if (isAIApp && lastActiveApp !== activeApp) {
+        setTimeout(() => {
+          // Check if user is still on the same AI app after 10 seconds
+          if (currentActiveApp === activeApp) {
+            // Notify main window about AI app focus (but don't show popup immediately)
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('ai-app-detected', {
+                appName: activeApp,
+                isActive: true,
+                timestamp: Date.now()
+              });
+            }
+            
+            log.info(`AI application detected: ${activeApp}`);
+            console.log(`Complyze Debug: AI app focus confirmed after 10 seconds: ${activeApp}`);
+          }
+        }, 10000); // Wait 10 seconds before confirming app focus
+      }
+    }
+  } catch (error) {
+    // Silent error handling for app monitoring
+  }
+}
+
+// Monitor text input in AI applications
+async function monitorAIAppInput(): Promise<void> {
+  if (!accessibilityPermissionGranted) return;
+  
+  // Prevent too frequent processing (reduced time)
+  const now = Date.now();
+  if (now - lastInputProcessTime < 2000) { // Reduced from 5000 to 2000ms for better responsiveness
+    return;
+  }
+  
+  try {
+    // Get the frontmost application
+    const { stdout: frontApp } = await execAsync('osascript -e "tell application \\"System Events\\" to get name of first application process whose frontmost is true"');
+    const activeApp = frontApp.trim();
+    
+    // Enhanced AI app detection
+    const isAIApp = activeApp.toLowerCase().includes('chatgpt') || 
+                   activeApp.toLowerCase().includes('claude') ||
+                   activeApp.toLowerCase().includes('openai') ||
+                   activeApp.toLowerCase().includes('anthropic') ||
+                   activeApp.toLowerCase().includes('gpt') ||
+                   activeApp.toLowerCase().includes('gemini');
+    
+    if (isAIApp) {
+      currentFocusedApp = activeApp;
+      console.log(`Complyze Debug: Monitoring input for ${activeApp}`);
+      
+      // Simplified text detection approach
+      try {
+        // Method 1: Check if clipboard was recently updated with text input
+        const currentClipboard = clipboard.readText();
+        
+        // Method 2: Try simplified AppleScript for direct text detection
+        const simpleScript = `
+          tell application "System Events"
+            try
+              tell process "${activeApp}"
+                try
+                  set frontWin to front window
+                  set textFields to text fields of frontWin
+                  set textAreas to text areas of frontWin
+                  set foundText to ""
+                  
+                  repeat with aField in textFields
+                    try
+                      set fieldValue to value of aField as string
+                      if length of fieldValue > 15 then
+                        set foundText to fieldValue
+                        exit repeat
+                      end if
+                    end try
+                  end repeat
+                  
+                  if foundText is "" then
+                    repeat with anArea in textAreas
+                      try
+                        set areaValue to value of anArea as string
+                        if length of areaValue > 15 then
+                          set foundText to areaValue
+                          exit repeat
+                        end if
+                      end try
+                    end repeat
+                  end if
+                  
+                  return foundText
+                on error
+                  return ""
+                end try
+              end tell
+            on error
+              return ""
+            end try
+          end tell
+        `;
+        
+        let detectedText = "";
+        try {
+          const { stdout } = await execAsync(`osascript -e '${simpleScript.replace(/'/g, "\\'")}'`);
+          detectedText = stdout.trim();
+        } catch (scriptError) {
+          console.log('Complyze Debug: AppleScript detection failed, monitoring clipboard changes...');
+          
+          // Fallback: monitor clipboard for recent changes that look like AI input
+          if (currentClipboard && 
+              currentClipboard !== lastDetectedInput && 
+              currentClipboard.length > 15 &&
+              shouldTriggerOptimization(currentClipboard)) {
+            detectedText = currentClipboard;
+          }
+        }
+        
+        // Process using smart detection
+        if (detectedText && 
+            detectedText !== lastDetectedInput && 
+            detectedText.length > 15 && 
+            detectedText.length < 3000 && 
+            !processingQueue.has(detectedText) &&
+            shouldTriggerOptimization(detectedText) &&
+            !shouldSuppressNotification(detectedText)) {
+          
+          lastDetectedInput = detectedText;
+          lastInputProcessTime = now;
+          processingQueue.add(detectedText);
+          
+          console.log(`Complyze Debug: Smart detection triggered for ${activeApp} input`);
+          
+          // Process the detected prompt
+          try {
+            await processDetectedPrompt(detectedText, activeApp);
+            processingQueue.delete(detectedText);
+          } catch (error) {
+            console.error('Error processing detected prompt:', error);
+            processingQueue.delete(detectedText);
+          }
+        }
+      } catch (error) {
+        console.error('Complyze Debug: Text detection error:', error);
+      }
+    }
+  } catch (error) {
+    console.error('Complyze Debug: Input monitoring error:', error);
+  }
+}
+
+// Process detected prompt from AI apps
+async function processDetectedPrompt(promptText: string, sourceApp: string): Promise<void> {
+  try {
+    console.log(`Complyze Debug: *** PROCESSING PROMPT FROM ${sourceApp} ***`);
+    console.log(`Complyze Debug: Prompt text: "${promptText.substring(0, 100)}..."`);
+    
+    // ALWAYS show a notification for ANY detected prompt - this ensures we see something
+    console.log(`Complyze Debug: *** FORCING NOTIFICATION FOR DETECTED INPUT ***`);
+    
+    // Quick risk assessment first
+    const redactionResult = await comprehensiveRedact(promptText);
+    const riskScore = Math.max(calculateRiskScore(redactionResult.redactionDetails), 40); // Minimum 40 for visibility
+    
+    console.log(`Complyze Debug: Risk score: ${riskScore}, Redactions: ${redactionResult.redactionDetails.length}`);
+    
+    // Generate enhancement for all prompts
+    const enhancementResult = await enhancePrompt(promptText);
+    console.log(`Complyze Debug: Enhancement generated: ${enhancementResult.enhancedPrompt ? 'YES' : 'NO'}`);
+    
+    // Expanded sensitive data detection
+    const allSensitivePatterns = [
+      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, // Email
+      /\b\d{3}-\d{2}-\d{4}\b/, // SSN
+      /\b\d{9}\b/, // SSN no dashes
+      /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/, // Credit card
+      /\b\d{3}-\d{3}-\d{4}\b/, // Phone
+      /\b\(\d{3}\)\s?\d{3}-\d{4}\b/, // Phone with parentheses
+      /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, // IP address
+      /\b\d{10,12}\b/, // Bank account
+      /\b[a-z]{1,2}\d{6,8}\b/i, // Passport
+      /\b[a-z]\d{7,8}\b/i, // Driver's license
+      /\bmrn[\s:]*\d{6,10}/i, // Medical record
+      /\bapi[\s_-]?key[\s:=]+[a-z0-9\-_]{16,}/i, // API keys
+      /\btoken[\s:=]+[a-z0-9\-_\.]{20,}/i, // Auth tokens
+      /\bbearer\s+[a-z0-9\-_\.]{20,}/i, // Bearer tokens
+      /\bjailbreak/i, // AI jailbreak
+      /ignore\s+(previous|all)\s+instructions/i, // Prompt injection
+      /forget\s+(everything|all)\s+(above|before)/i, // Instruction override
+      /\bdeveloper\s+mode/i, // Developer mode
+      /\bdan\s+mode/i, // DAN mode
+      /\bgdpr/i, /\bccpa/i, // Privacy regulations
+      /\bpci\s+dss/i, // Payment card standards
+      /\bnist\s+ai/i, /\bai\s+rmf/i, // AI frameworks
+      /\bowasp\s+llm/i, // OWASP LLM
+      /\btrade\s+secret/i, /\bproprietary/i // Business confidential
+    ];
+    
+    const hasAnySensitiveData = allSensitivePatterns.some(pattern => pattern.test(promptText));
+    
+    // Show notification for ANY detected content (for debugging)
+    const shouldBlock = hasAnySensitiveData || riskScore > 40; // Lowered threshold
+    
+    console.log(`Complyze Debug: Has any sensitive data: ${hasAnySensitiveData}`);
+    console.log(`Complyze Debug: Should block: ${shouldBlock}`);
+    console.log(`Complyze Debug: Creating notification window...`);
+    
+    try {
+      if (shouldBlock) {
+        // For high-risk content, generate security insights
+        const [securityInsights, enhancedRedactionDetails] = await Promise.all([
+          openRouterService.generateSecurityInsights(promptText, redactionResult.redactionDetails, riskScore).catch(() => null),
+          openRouterService.analyzeRedactionDetails(redactionResult.redactionDetails).catch(() => [])
+        ]);
+        
+        const userChoice = await createNotificationWindow({
+          prompt: promptText,
+          riskScore: Math.max(riskScore, 60), // Ensure visibility
+          redactionDetails: redactionResult.redactionDetails,
+          sourceApp: sourceApp,
+          enhancedPrompt: enhancementResult.enhancedPrompt,
+          blockingMode: true,
+          enhancementResult,
+          isLiveInput: true,
+          securityInsights: securityInsights ?? null,
+          enhancedRedactionDetails: enhancedRedactionDetails ?? []
+        });
+        
+        console.log(`Complyze Debug: BLOCKING notification shown, user choice: ${userChoice}`);
+        
+        // If user chose to replace, update the text field
+        if (userChoice === 'replace' && enhancementResult.enhancedPrompt) {
+          await replaceTextInActiveApp(enhancementResult.enhancedPrompt, sourceApp);
+        }
+      } else {
+        // For all other content, show non-blocking notification
+        const notificationPromise = createNotificationWindow({
+          prompt: promptText,
+          riskScore: Math.max(riskScore, 35), // Ensure visibility
+          redactionDetails: redactionResult.redactionDetails,
+          sourceApp: sourceApp,
+          enhancedPrompt: enhancementResult.enhancedPrompt,
+          blockingMode: false,
+          enhancementResult,
+          isLiveInput: true
+        });
+        
+        console.log('Complyze Debug: NON-BLOCKING notification shown');
+      }
+    } catch (notificationError) {
+      console.error('Complyze Debug: ERROR creating notification:', notificationError);
+      
+      // Even if there's an error, show a simple notification so we know detection works
+      try {
+        await createNotificationWindow({
+          prompt: promptText,
+          riskScore: 50,
+          redactionDetails: [],
+          sourceApp: sourceApp,
+          enhancedPrompt: 'Error processing prompt - please check console',
+          blockingMode: false,
+          enhancementResult: {
+            enhancedPrompt: 'Error processing prompt',
+            improvements: ['Error occurred during processing'],
+            detectedIntent: 'Unknown',
+            optimizationReason: 'Error occurred',
+            qualityScore: 0,
+            clarityScore: 0,
+            originalPrompt: promptText,
+            sensitiveDataRemoved: [],
+            complianceFrameworks: [],
+            aiRiskIndicators: []
+          },
+          isLiveInput: true
+        });
+        console.log('Complyze Debug: FALLBACK notification shown');
+      } catch (fallbackError) {
+        console.error('Complyze Debug: Even fallback notification failed:', fallbackError);
+      }
+    }
+    
+    // Log the interaction asynchronously (don't wait for this)
+    setTimeout(async () => {
+      try {
+        await processPrompt({
+          prompt: promptText,
+          sourceApp: sourceApp,
+          userId: store.get('auth.user.id') as string
+        });
+      } catch (error) {
+        console.error('Background logging error:', error);
+      }
+    }, 1000);
+    
+  } catch (error) {
+    console.error('Error processing detected prompt:', error);
+    
+    // Even if there's an error, show a simple notification so we know detection works
+    try {
+      await createNotificationWindow({
+        prompt: promptText,
+        riskScore: 50,
+        redactionDetails: [],
+        sourceApp: sourceApp,
+        enhancedPrompt: 'Error processing prompt',
+        blockingMode: false,
+        enhancementResult: {
+          enhancedPrompt: 'Error processing prompt',
+          improvements: ['Error occurred during processing'],
+          detectedIntent: 'Unknown',
+          optimizationReason: 'Error occurred',
+          qualityScore: 0,
+          clarityScore: 0,
+          originalPrompt: promptText,
+          sensitiveDataRemoved: [],
+          complianceFrameworks: [],
+          aiRiskIndicators: []
+        },
+        isLiveInput: true
+      });
+      console.log('Complyze Debug: ERROR fallback notification shown');
+    } catch (fallbackError) {
+      console.error('Complyze Debug: Even error fallback notification failed:', fallbackError);
+    }
+  }
+}
+
+// Replace text in the active AI application
+async function replaceTextInActiveApp(newText: string, appName: string): Promise<void> {
+  try {
+    const replaceScript = `
+      tell application "System Events"
+        tell process "${appName}"
+          try
+            set focusedElement to focused UI element
+            if exists focusedElement then
+              if (class of focusedElement is text field) or (class of focusedElement is text area) then
+                set value of focusedElement to "${newText.replace(/"/g, '\\"')}"
+                return true
+              end if
+            end if
+          end try
+        end tell
+      end tell
+      return false
+    `;
+    
+    await execAsync(`osascript -e '${replaceScript}'`);
+    console.log(`Complyze Debug: Replaced text in ${appName}`);
+  } catch (error) {
+    console.error('Error replacing text:', error);
+  }
+}
+
 log.info('Complyze Desktop Agent initialized'); 
+
+// Test input detection from main window
+ipcMain.handle('test-input-detection', async (event) => {
+  try {
+    const testPrompt = 'Can you help me write an email to john.doe@company.com about my account?';
+    console.log('Complyze Debug: *** TESTING INPUT DETECTION ***');
+    console.log(`Complyze Debug: Test prompt: "${testPrompt}"`);
+    
+    // Simulate detected input from ChatGPT
+    await processDetectedPrompt(testPrompt, 'ChatGPT (Test)');
+    
+    return { success: true, message: 'Test input detection triggered' };
+  } catch (error) {
+    console.error('Test input detection error:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+// Test simple notification
+ipcMain.handle('test-simple-notification', async (event) => {
+  try {
+    console.log('Complyze Debug: *** TESTING SIMPLE NOTIFICATION ***');
+    
+    // Create a simple notification to verify the system works
+    await createNotificationWindow({
+      prompt: 'This is a test notification to verify the system is working',
+      riskScore: 30,
+      redactionDetails: [],
+      sourceApp: 'Test System',
+      enhancedPrompt: 'This is an enhanced version of the test prompt',
+      blockingMode: false,
+      enhancementResult: {
+        enhancedPrompt: 'This is an enhanced version of the test prompt',
+        improvements: ['Added clarity', 'Improved structure'],
+        detectedIntent: 'Testing system functionality',
+        optimizationReason: 'System test verification',
+        qualityScore: 85,
+        clarityScore: 90
+      },
+      isLiveInput: false
+    });
+    
+    return { success: true, message: 'Simple notification test completed' };
+  } catch (error) {
+    console.error('Simple notification test error:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+/**
+ * Generate a simple hash for content to track notifications
+ */
+function generateContentHash(content: string): string {
+  // Simple hash function for tracking (not cryptographic)
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString();
+}
+
+/**
+ * Check if we should suppress notification for this content
+ */
+function shouldSuppressNotification(content: string): boolean {
+  const contentHash = generateContentHash(content);
+  const now = Date.now();
+  
+  // Clean up old entries
+  for (const [hash, timestamp] of recentNotifications.entries()) {
+    if (now - timestamp > suppressionDuration) {
+      recentNotifications.delete(hash);
+    }
+  }
+  
+  // Check if we've shown this content recently
+  const lastShown = recentNotifications.get(contentHash);
+  if (lastShown && (now - lastShown) < suppressionDuration) {
+    console.log(`Complyze Debug: Suppressing notification - content shown ${Math.round((now - lastShown) / 1000)}s ago`);
+    return true;
+  }
+  
+  // Record this notification
+  recentNotifications.set(contentHash, now);
+  return false;
+}

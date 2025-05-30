@@ -1,0 +1,11 @@
+version: 1.0.0
+files:
+  - url: Complyze-Desktop-1.0.0.dmg
+    sha512: jmhdJZZp0xl0aFaFYriLB6uhM8dCMsLe2i9hZ53is0rKOZ/3Ujw5GeGPyzcrkjMEYe2T5Obwdycfvt/TH/vTtA==
+    size: 104474531
+  - url: Complyze-Desktop-1.0.0-arm64.dmg
+    sha512: 6tYup9vAQYvTNhXj/q2jPk7NxmRpRUCgWLlOnzckiqVsSogceQKs+t3gzeL2dS9zuHOVJOp+BGNN+ELvQXp6IA==
+    size: 99403116
+path: Complyze-Desktop-1.0.0.dmg
+sha512: jmhdJZZp0xl0aFaFYriLB6uhM8dCMsLe2i9hZ53is0rKOZ/3Ujw5GeGPyzcrkjMEYe2T5Obwdycfvt/TH/vTtA==
+releaseDate: '2025-05-29T19:40:58.639Z'
