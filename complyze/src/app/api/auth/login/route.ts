@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as LoginRequestBody;
     const { email, password } = body;
 
+    console.log('Complyze API: Login attempt for:', email);
+
     if (!email || !password) {
       return NextResponse.json({ 
         error: 'Email and password are required' 
@@ -34,16 +36,33 @@ export async function POST(request: NextRequest) {
       password
     });
 
+    console.log('Complyze API: Login result:', {
+      user: data?.user?.id,
+      session: !!data?.session,
+      emailConfirmed: data?.user?.email_confirmed_at,
+      error: error?.message
+    });
+
     if (error) {
+      console.error('Complyze API: Login error:', error);
       return NextResponse.json({ 
-        error: 'Invalid credentials',
+        error: 'Invalid credentials or account not verified',
         details: error.message
       }, { status: 401 });
     }
 
     if (!data.user || !data.session) {
+      console.error('Complyze API: No user or session returned');
       return NextResponse.json({ 
         error: 'Authentication failed' 
+      }, { status: 401 });
+    }
+
+    // Check if email is confirmed
+    if (!data.user.email_confirmed_at) {
+      console.error('Complyze API: Email not confirmed for user:', email);
+      return NextResponse.json({ 
+        error: 'Please verify your email address before logging in' 
       }, { status: 401 });
     }
 
@@ -54,6 +73,11 @@ export async function POST(request: NextRequest) {
       .eq('id', data.user.id)
       .single();
 
+    console.log('Complyze API: Profile lookup result:', {
+      profile: !!userProfile,
+      error: profileError?.message
+    });
+
     if (profileError) {
       console.error('Error fetching user profile:', profileError);
       // Create profile if it doesn't exist
@@ -62,7 +86,8 @@ export async function POST(request: NextRequest) {
         .insert({
           id: data.user.id,
           email: data.user.email || '',
-          full_name: data.user.user_metadata?.full_name || null
+          full_name: data.user.user_metadata?.full_name || null,
+          plan: 'free'
         })
         .select()
         .single();
@@ -74,6 +99,7 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
       }
 
+      console.log('Complyze API: Profile created during login');
       return NextResponse.json({
         success: true,
         user: {
@@ -87,6 +113,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    console.log('Complyze API: Login successful for user:', email);
     return NextResponse.json({
       success: true,
       user: {
@@ -102,7 +129,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'Login failed' },
+      { error: 'Login failed. Please try again.' },
       { status: 500 }
     );
   }

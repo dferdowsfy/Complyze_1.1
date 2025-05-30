@@ -60,6 +60,8 @@ export default function Landing() {
     setError('');
     
     try {
+      console.log('Complyze UI: Attempting login with:', { email: loginFields.email });
+      
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -71,9 +73,12 @@ export default function Landing() {
         }),
       });
 
+      console.log('Complyze UI: Login response status:', response.status);
       const data = await response.json();
+      console.log('Complyze UI: Login response data:', data);
 
       if (response.ok && data.success) {
+        console.log('Complyze UI: Login successful, storing tokens and redirecting');
         // Store auth data in localStorage for the dashboard
         localStorage.setItem('complyze_token', data.access_token);
         localStorage.setItem('complyze_user', JSON.stringify(data.user));
@@ -81,10 +86,12 @@ export default function Landing() {
         // Redirect to dashboard
         window.location.href = '/dashboard';
       } else {
-        setError(data.error || 'Login failed');
+        console.error('Complyze UI: Login failed:', data);
+        setError(data.error || data.details || 'Login failed');
       }
     } catch (error) {
-      setError('Login failed. Please try again.');
+      console.error('Complyze UI: Login error:', error);
+      setError('Login failed. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -478,7 +485,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
-              🖥️ Complyze Desktop
+              Complyze Desktop
             </h2>
             <p className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto">
               Real-time AI prompt monitoring that lives in your menu bar. Never miss a risky prompt again.
@@ -538,7 +545,7 @@ export default function Landing() {
                 <div className="space-y-4">
                   {/* Apple Silicon Download */}
                   <a 
-                    href="/Complyze Desktop-1.0.0-arm64.dmg"
+                    href="/downloads/ComplyzeDesktop-macOS-Apple.dmg"
                     download
                     className="block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg"
                   >
@@ -553,7 +560,7 @@ export default function Landing() {
                   
                   {/* Intel Download */}
                   <a 
-                    href="/Complyze Desktop-1.0.0.dmg"
+                    href="/downloads/ComplyzeDesktop-macOS-Intel.dmg"
                     download
                     className="block w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-lg transition-colors"
                   >
