@@ -611,6 +611,148 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Chrome Extension Section */}
+      <section className="bg-gradient-to-r from-[#1a2b4a] to-[#0E1E36] py-16 sm:py-20 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+              Complyze Chrome Extension
+            </h2>
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto">
+              Browser-based AI prompt security that works wherever you work. Protect your prompts across any web-based AI tool.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-8 sm:gap-12 items-center">
+            {/* Download Section */}
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-bold text-white mb-4">Install for Chrome</h3>
+                <p className="text-gray-300 mb-6">Works with Chrome, Edge, Brave, and other Chromium browsers</p>
+                
+                <div className="space-y-4">
+                  {/* Chrome Web Store */}
+                  <a 
+                    href="https://chromewebstore.google.com/detail/complyze-ai-prompt-securi/your-extension-id"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg"
+                  >
+                    <div className="flex items-center justify-center space-x-3">
+                      <span className="text-xl">🌐</span>
+                      <div className="text-left">
+                        <div className="text-lg">Add to Chrome</div>
+                        <div className="text-sm opacity-90">Free from Chrome Web Store</div>
+                      </div>
+                    </div>
+                  </a>
+                  
+                  {/* Manual Install */}
+                  <a 
+                    href="/downloads/complyze-extension-v2.zip"
+                    download
+                    className="block w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center justify-center space-x-3">
+                      <span className="text-xl">📦</span>
+                      <div className="text-left">
+                        <div className="text-lg">Manual Install</div>
+                        <div className="text-sm opacity-90">For enterprise deployments</div>
+                      </div>
+                    </div>
+                  </a>
+                </div>
+                
+                <div className="mt-6 text-sm text-gray-400">
+                  <p className="mb-2">
+                    <strong>Version 2.0</strong> • Free with Complyze account
+                  </p>
+                  <p>
+                    Compatible with all Chromium-based browsers
+                  </p>
+                </div>
+              </div>
+              
+              {/* Installation Steps */}
+              <div className="border-t border-white/20 pt-6">
+                <h4 className="text-lg font-semibold text-white mb-4">Quick Install:</h4>
+                <ol className="text-sm text-gray-300 space-y-2">
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">1.</span>
+                    <span>Click "Add to Chrome" above</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">2.</span>
+                    <span>Click "Add Extension" in the popup</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">3.</span>
+                    <span>Pin the extension to your toolbar</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">4.</span>
+                    <span>Login with your Complyze account</span>
+                  </li>
+                </ol>
+              </div>
+            </div>
+
+            {/* Features */}
+            <div className="space-y-6">
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🔍</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Universal Detection</h3>
+                  <p className="text-gray-300">Works on ChatGPT, Claude, Gemini, Perplexity, and any web-based AI tool automatically.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">⚠️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Instant Alerts</h3>
+                  <p className="text-gray-300">Get immediate warnings when sensitive data is detected in your prompts before you hit send.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">✨</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Smart Redaction</h3>
+                  <p className="text-gray-300">Automatically replace sensitive information with safe placeholders while preserving context.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🔗</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Seamless Integration</h3>
+                  <p className="text-gray-300">Works invisibly in the background, syncing all activity to your Complyze dashboard.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">⚙️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Customizable Rules</h3>
+                  <p className="text-gray-300">Configure detection patterns and redaction rules to match your organization's security policies.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Prompt Enhancement Tool Section */}
       <section className="bg-[#FAF9F6] text-[#0E1E36] py-12 sm:py-20 px-4">
         <div className="max-w-5xl mx-auto">
