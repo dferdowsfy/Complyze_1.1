@@ -276,20 +276,17 @@ export default function Landing() {
     
     return (
       <div ref={ref} className="flex items-center justify-center gap-8 md:gap-12">
-        <div className="text-left max-w-lg">
-          <div className="flex flex-wrap items-baseline gap-2 mb-4">
-            <span className="text-2xl md:text-3xl text-red-600 font-bold">Don't be part of the</span>
+        <div className="text-left max-w-4xl">
+          <div className="flex items-baseline gap-2 mb-4 flex-wrap">
+            <span className="text-2xl md:text-3xl text-red-600 font-bold whitespace-nowrap">Don't be part of the</span>
             <span 
-              className="text-6xl md:text-7xl font-bold tabular-nums"
-              style={{ color: '#0e1f36' }}
+              className="text-4xl md:text-5xl font-bold tabular-nums"
+              style={{ color: '#FF6F3C' }}
             >
               {count}%
             </span>
-            <span className="text-2xl md:text-3xl text-gray-800 font-bold">of organizations</span>
+            <span className="text-2xl md:text-3xl text-gray-800 font-bold">of organizations underutilizing their AI</span>
           </div>
-          <p className="text-2xl md:text-3xl text-gray-800 font-bold mb-4">
-            underutilizing their AI
-          </p>
           <p className="text-base md:text-lg text-gray-600 leading-relaxed">
             Most teams are leaving massive value on the table through poor prompts, security vulnerabilities, and missed optimization opportunities.
           </p>
