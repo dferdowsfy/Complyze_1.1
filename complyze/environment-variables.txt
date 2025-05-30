@@ -11,7 +11,7 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhY
 # =============================================================================
 # OPENROUTER API CONFIGURATION
 # =============================================================================
-OPENROUTER_API_KEY=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
+OPENROUTER_API_KEY=sk-or-v1-a40a8b7c4a68decedb3dce0d9e9aa358d2f203d9f
 
 # =============================================================================
 # NEXT.JS CONFIGURATION

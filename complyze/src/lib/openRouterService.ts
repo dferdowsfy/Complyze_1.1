@@ -27,7 +27,7 @@ class OpenRouterService {
     this.config = {
       apiKey: process.env.OPENROUTER_API_KEY || '',
       baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'anthropic/claude-3.5-sonnet' // High-quality model for report generation
+      model: 'perplexity/sonar-reasoning-pro' // As specified in requirements
     };
   }
 
@@ -131,22 +131,43 @@ class OpenRouterService {
     const currentDate = new Date().toISOString().split('T')[0];
     const projectName = project || 'Complyze AI Compliance';
     
+    // Format date range for context
+    let dateRangeText = 'Current period';
+    let daysInRange = 'Unknown';
+    
+    if (dateRange?.start && dateRange?.end) {
+      const startDate = new Date(dateRange.start);
+      const endDate = new Date(dateRange.end);
+      const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      dateRangeText = `${dateRange.start} to ${dateRange.end}`;
+      daysInRange = `${daysDiff} days`;
+    }
+    
     return `You are a compliance and cybersecurity expert generating ${templateConfig.title} reports for ${projectName}.
 
 CONTEXT:
 - Report Date: ${currentDate}
-- Date Range: ${dateRange ? `${dateRange.start} to ${dateRange.end}` : 'Current period'}
+- Analysis Period: ${dateRangeText} (${daysInRange})
 - Frameworks: ${templateConfig.frameworks.join(', ')}
 - Data Source: Chrome extension prompt monitoring and redaction system
+- Time-based Analysis: All data is filtered to the specified date range
 
 REQUIREMENTS:
-1. Generate professional compliance report sections
-2. Use actual data provided in user prompt
-3. Include specific metrics, counts, and evidence links
-4. Follow compliance reporting standards
-5. Provide actionable recommendations
+1. Generate professional compliance report sections using ONLY the provided time-filtered data
+2. Include specific metrics, counts, and evidence links from the actual date range
+3. Reference the analysis period in your findings (${dateRangeText})
+4. Follow compliance reporting standards for the specified frameworks
+5. Provide actionable recommendations based on trends within this time period
 6. Use markdown formatting for tables and structure
-7. Include risk assessments where appropriate
+7. Include risk assessments and temporal analysis where appropriate
+8. Mention data collection period and any trends over the ${daysInRange} timeframe
+
+TEMPORAL CONTEXT:
+- All metrics and findings should be contextualized within the ${dateRangeText} period
+- Include day-over-day or week-over-week trends where relevant
+- Note any seasonal or periodic patterns in the data
+- Highlight any anomalies or spikes within the analysis window
 
 SECTIONS TO GENERATE:
 ${templateConfig.sections.map((section: string, index: number) => `${index + 1}. ${section}`).join('\n')}
@@ -154,33 +175,67 @@ ${templateConfig.sections.map((section: string, index: number) => `${index + 1}.
 OUTPUT FORMAT:
 Return each section with clear headers using this format:
 ## Section Name
-[Content here with tables, metrics, and analysis]
+[Content here with tables, metrics, and time-based analysis]
 
-Use tables for data presentation and include specific evidence references like "promptlog://uuid-[id]" for traceability.`;
+Use tables for data presentation and include specific evidence references like "promptlog://uuid-[id]" for traceability.
+Always reference the analysis period (${dateRangeText}) in your findings.`;
   }
 
   private buildUserPrompt(template: string, data: any): string {
-    return `Generate a ${template} report using the following real data from our Chrome extension prompt monitoring system:
+    // Calculate some quick stats for the prompt
+    const promptCount = data.promptLogs?.length || 0;
+    const dateRange = data.additionalMetrics?.reportPeriod;
+    const totalCost = data.costData?.total_spend || 0;
+    const riskTypes = Object.keys(data.riskAnalysis?.riskTypes || {}).length;
+    
+    let timeContext = '';
+    if (dateRange?.start && dateRange?.end) {
+      const days = dateRange.days || 'unknown';
+      timeContext = `Time Period: ${dateRange.start} to ${dateRange.end} (${days} days)`;
+    }
+    
+    return `Generate a ${template} report using the following time-filtered data from our Chrome extension prompt monitoring system:
 
-PROMPT LOGS DATA:
-${JSON.stringify(data.promptLogs || [], null, 2)}
+ANALYSIS PERIOD:
+${timeContext}
 
-COST DATA:
+DATA SUMMARY:
+- Total Prompts Analyzed: ${promptCount}
+- Total Cost: $${totalCost.toFixed(2)}
+- Risk Types Identified: ${riskTypes}
+- Data Collection Source: Chrome extension, Desktop agent, API calls
+
+DETAILED DATA:
+
+PROMPT LOGS DATA (Time-filtered):
+${JSON.stringify(data.promptLogs?.slice(0, 20) || [], null, 2)}
+${promptCount > 20 ? `\n[Additional ${promptCount - 20} prompts in dataset...]` : ''}
+
+COST DATA (Period-specific):
 ${JSON.stringify(data.costData || {}, null, 2)}
 
-RISK ANALYSIS:
+RISK ANALYSIS (Time-bounded):
 ${JSON.stringify(data.riskAnalysis || {}, null, 2)}
 
-REDACTION STATS:
+REDACTION STATS (Period metrics):
 ${JSON.stringify(data.redactionStats || {}, null, 2)}
 
-CONTROL MAPPINGS:
+CONTROL MAPPINGS (Compliance framework alignment):
 ${JSON.stringify(data.controlMappings || [], null, 2)}
 
-ADDITIONAL METRICS:
+TEMPORAL METRICS:
 ${JSON.stringify(data.additionalMetrics || {}, null, 2)}
 
-Please analyze this data and generate a comprehensive compliance report with specific metrics, evidence links, and actionable recommendations. Include actual numbers from the data and create professional tables where appropriate.`;
+INSTRUCTIONS:
+Please analyze this TIME-SPECIFIC data and generate a comprehensive compliance report with:
+1. Specific metrics and counts from the ${timeContext} period
+2. Trend analysis within this timeframe
+3. Evidence links using actual prompt IDs from the dataset
+4. Professional tables with real numbers from the filtered data
+5. Actionable recommendations based on patterns observed during this period
+6. Risk assessments contextualized to the analysis timeframe
+
+Focus on the actual data provided - all metrics should reflect the specified time period only.`;
   }
 
   private parseGeneratedContent(content: string, template: string): ReportSection[] {

@@ -202,56 +202,42 @@ function generateHTML(title: string, sections: any[], reportData: any, dateRange
         <strong>Date Range:</strong> ${dateRangeStr}<br>
         <strong>Data Source:</strong> Chrome Extension Prompt Monitoring<br>
         <strong>Prompts Analyzed:</strong> ${reportData.promptLogs.length}
-    </div>
-`;
+    </div>`;
 
   sections.forEach(section => {
-    html += `    <div class="section">
-        <h2>${section.title}</h2>
-        <div>${formatContentForHTML(section.content)}</div>
-    </div>
-`;
+    html += `\n    <div class="section">`;
+    html += `\n        <h2>${section.title}</h2>`;
+    
+    // Convert markdown-style content to HTML
+    let content = section.content;
+    content = content.replace(/### (.+)/g, '<h3>$1</h3>');
+    content = content.replace(/## (.+)/g, '<h2>$1</h2>');
+    content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    content = content.replace(/`(.+?)`/g, '<code>$1</code>');
+    content = content.replace(/\n\n/g, '</p><p>');
+    content = content.replace(/\n/g, '<br>');
+    content = `<p>${content}</p>`;
+    
+    // Handle tables (basic markdown table support)
+    content = content.replace(/\|(.+?)\|/g, (_match: string, cells: string) => {
+      const cellsArray = cells.split('|').map((cell: string) => cell.trim());
+      return `<tr>${cellsArray.map((cell: string) => `<td>${cell}</td>`).join('')}</tr>`;
+    });
+    
+    if (content.includes('<tr>')) {
+      content = `<table>${content}</table>`;
+    }
+    
+    html += `\n        ${content}`;
+    html += `\n    </div>`;
   });
 
-  html += `    <div class="footer">
-        <p>This report was generated automatically using real data from the Complyze Chrome extension and OpenRouter LLM analysis.</p>
+  html += `\n    <div class="footer">
+        <p><em>This report was generated automatically using real data from the Complyze Chrome extension and OpenRouter LLM analysis.</em></p>
     </div>
 </body>
 </html>`;
 
   return html;
-}
-
-function formatContentForHTML(content: string): string {
-  return content
-    .split('\n')
-    .map(line => {
-      // Handle markdown tables
-      if (line.includes('|')) {
-        const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell);
-        if (cells.length > 0) {
-          const isHeader = line.includes('---');
-          if (isHeader) return ''; // Skip separator rows
-          const tag = cells.every(cell => cell.includes('Control') || cell.includes('Framework')) ? 'th' : 'td';
-          return `<tr>${cells.map(cell => `<${tag}>${cell}</${tag}>`).join('')}</tr>`;
-        }
-      }
-      
-      // Handle headers
-      if (line.startsWith('###')) {
-        return `<h4>${line.replace('###', '').trim()}</h4>`;
-      }
-      if (line.startsWith('##')) {
-        return `<h3>${line.replace('##', '').trim()}</h3>`;
-      }
-      
-      // Handle bullet points
-      if (line.trim().startsWith('-')) {
-        return `<li>${line.replace('-', '').trim()}</li>`;
-      }
-      
-      // Regular paragraphs
-      return line.trim() ? `<p>${line}</p>` : '<br>';
-    })
-    .join('\n');
 } 

@@ -58,24 +58,26 @@ class ReportDataService {
 
   private async getPromptLogs(startDate: string, endDate: string, userId?: string) {
     let query = supabase
-      .from('prompt_logs')
+      .from('prompt_events')
       .select(`
         id,
-        original_prompt,
-        redacted_prompt,
-        platform,
-        url,
+        model,
+        usd_cost,
+        prompt_tokens,
+        completion_tokens,
+        integrity_score,
+        risk_type,
         risk_level,
-        status,
-        redaction_details,
-        mapped_controls,
+        captured_at,
+        prompt_text,
+        response_text,
+        source,
         metadata,
-        created_at,
         user_id
       `)
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
-      .order('created_at', { ascending: false });
+      .gte('captured_at', startDate)
+      .lte('captured_at', endDate)
+      .order('captured_at', { ascending: false });
 
     if (userId) {
       query = query.eq('user_id', userId);
@@ -84,7 +86,7 @@ class ReportDataService {
     const { data, error } = await query;
     
     if (error) {
-      console.error('Error fetching prompt logs:', error);
+      console.error('Error fetching prompt events:', error);
       return [];
     }
 
@@ -93,14 +95,73 @@ class ReportDataService {
 
   private async getCostData(startDate: string, endDate: string, userId?: string) {
     try {
-      const response = await fetch(`/api/analytics/cost-summary?user_id=${userId || 'all'}&start_date=${startDate}&end_date=${endDate}`);
-      if (response.ok) {
-        return await response.json();
+      // Fetch cost data directly from prompt_events table
+      let query = supabase
+        .from('prompt_events')
+        .select('id, model, usd_cost, prompt_text, captured_at')
+        .gte('captured_at', startDate)
+        .lte('captured_at', endDate);
+
+      if (userId) {
+        query = query.eq('user_id', userId);
       }
+
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching cost data:', error);
+        return this.getEmptyCostData();
+      }
+
+      const events = data || [];
+      
+      // Calculate total spend
+      const total_spend = events.reduce((sum, event) => sum + (event.usd_cost || 0), 0);
+      
+      // Get top 5 most expensive prompts
+      const top_prompts = events
+        .sort((a, b) => (b.usd_cost || 0) - (a.usd_cost || 0))
+        .slice(0, 5)
+        .map(event => ({
+          id: event.id,
+          cost: event.usd_cost,
+          excerpt: event.prompt_text?.substring(0, 50) + '...' || 'N/A',
+          model: event.model,
+          date: event.captured_at
+        }));
+
+      // Find most used model
+      const modelCounts: Record<string, number> = {};
+      events.forEach(event => {
+        if (event.model) {
+          modelCounts[event.model] = (modelCounts[event.model] || 0) + 1;
+        }
+      });
+      
+      const most_used_model = Object.entries(modelCounts)
+        .sort(([,a], [,b]) => b - a)[0]?.[0] || 'No data';
+
+      // Get user budget (default to 500 if not set)
+      const budget = 500; // TODO: Fetch from users table
+
+      return {
+        total_spend: Math.round(total_spend * 100) / 100,
+        budget_tracker: { 
+          total_spend: Math.round(total_spend * 100) / 100, 
+          budget, 
+          status: total_spend < budget ? 'Under Budget' : 'Over Budget' 
+        },
+        top_prompts,
+        most_used_model
+      };
+      
     } catch (error) {
       console.error('Error fetching cost data:', error);
+      return this.getEmptyCostData();
     }
-    
+  }
+
+  private getEmptyCostData() {
     return {
       total_spend: 0,
       budget_tracker: { total_spend: 0, budget: 500, status: 'Under Budget' },
@@ -118,53 +179,60 @@ class ReportDataService {
     };
 
     const riskTypes: Record<string, number> = {};
-    const platformBreakdown: Record<string, number> = {};
+    const sourceBreakdown: Record<string, number> = {};
     const flaggedPrompts: Array<{
       id: string;
       excerpt: string;
       risk_level: string;
-      risk_types: string[];
-      platform: string;
-      created_at: string;
+      risk_type: string;
+      source: string;
+      captured_at: string;
+      model: string;
+      cost: number;
     }> = [];
 
     promptLogs.forEach(log => {
       // Count risk levels
-      if (log.risk_level && riskCounts.hasOwnProperty(log.risk_level)) {
-        riskCounts[log.risk_level as keyof typeof riskCounts]++;
+      if (log.risk_level) {
+        const riskLevel = log.risk_level.toLowerCase();
+        if (riskCounts.hasOwnProperty(riskLevel)) {
+          riskCounts[riskLevel as keyof typeof riskCounts]++;
+        }
       }
 
-      // Count risk types from redaction details
-      if (log.redaction_details && Array.isArray(log.redaction_details)) {
-        log.redaction_details.forEach((redaction: any) => {
-          const riskType = this.mapRedactionTypeToRisk(redaction.type);
-          riskTypes[riskType] = (riskTypes[riskType] || 0) + 1;
-        });
+      // Count risk types
+      if (log.risk_type) {
+        riskTypes[log.risk_type] = (riskTypes[log.risk_type] || 0) + 1;
       }
 
-      // Platform breakdown
-      if (log.platform) {
-        platformBreakdown[log.platform] = (platformBreakdown[log.platform] || 0) + 1;
+      // Source breakdown (chrome_extension, desktop_agent, api)
+      if (log.source) {
+        sourceBreakdown[log.source] = (sourceBreakdown[log.source] || 0) + 1;
       }
 
-      // Collect flagged prompts
-      if (log.status === 'flagged' || log.status === 'blocked') {
+      // Collect high-risk prompts
+      if (log.risk_level === 'high' || log.risk_level === 'critical') {
         flaggedPrompts.push({
           id: log.id,
-          excerpt: log.original_prompt.substring(0, 50) + '...',
+          excerpt: log.prompt_text?.substring(0, 100) + '...' || 'N/A',
           risk_level: log.risk_level,
-          risk_types: log.redaction_details?.map((r: any) => r.type) || [],
-          platform: log.platform,
-          created_at: log.created_at
+          risk_type: log.risk_type,
+          source: log.source,
+          captured_at: log.captured_at,
+          model: log.model,
+          cost: log.usd_cost || 0
         });
       }
     });
 
+    // Sort flagged prompts by cost (highest first) and take top 20
+    flaggedPrompts.sort((a, b) => b.cost - a.cost);
+
     return {
       riskCounts,
       riskTypes,
-      platformBreakdown,
-      flaggedPrompts: flaggedPrompts.slice(0, 20), // Top 20
+      sourceBreakdown,
+      flaggedPrompts: flaggedPrompts.slice(0, 20), // Top 20 by cost
       totalPrompts: promptLogs.length
     };
   }
@@ -172,29 +240,31 @@ class ReportDataService {
   private async getRedactionStats(promptLogs: any[]) {
     let totalPrompts = promptLogs.length;
     let promptsWithPII = 0;
-    let totalRedactions = 0;
-    const redactionTypes: Record<string, number> = {};
+    let totalPIIEvents = 0;
+    const riskTypeBreakdown: Record<string, number> = {};
     const redactionSamples: Array<{
-      original: string;
-      redacted: string;
-      types: string[];
+      id: string;
+      excerpt: string;
+      risk_type: string;
+      integrity_score: number;
+      model: string;
     }> = [];
 
     promptLogs.forEach(log => {
-      if (log.redaction_details && Array.isArray(log.redaction_details) && log.redaction_details.length > 0) {
+      // Count PII-related risk types
+      if (log.risk_type === 'PII' || log.risk_type === 'Credential Exposure' || log.risk_type === 'Data Leakage') {
         promptsWithPII++;
-        totalRedactions += log.redaction_details.length;
+        totalPIIEvents++;
+        riskTypeBreakdown[log.risk_type] = (riskTypeBreakdown[log.risk_type] || 0) + 1;
 
-        log.redaction_details.forEach((redaction: any) => {
-          redactionTypes[redaction.type] = (redactionTypes[redaction.type] || 0) + 1;
-        });
-
-        // Collect redaction samples
-        if (redactionSamples.length < 5) {
+        // Collect redaction samples (high-risk PII events)
+        if (redactionSamples.length < 10 && (log.risk_level === 'high' || log.risk_level === 'medium')) {
           redactionSamples.push({
-            original: log.original_prompt.substring(0, 100) + '...',
-            redacted: log.redacted_prompt?.substring(0, 100) + '...' || 'N/A',
-            types: log.redaction_details.map((r: any) => r.type)
+            id: log.id,
+            excerpt: log.prompt_text?.substring(0, 150) + '...' || 'N/A',
+            risk_type: log.risk_type,
+            integrity_score: log.integrity_score || 0,
+            model: log.model
           });
         }
       }
@@ -202,54 +272,113 @@ class ReportDataService {
 
     const piiPercentage = totalPrompts > 0 ? (promptsWithPII / totalPrompts) * 100 : 0;
     
-    // Estimate false positive/negative rates (simplified calculation)
-    const falsePositiveRate = 2.1; // Estimated based on typical redaction accuracy
-    const falseNegativeRate = 0.9; // Estimated based on typical redaction accuracy
+    // Calculate average integrity score as proxy for effectiveness
+    const integrityScores = promptLogs.map(log => log.integrity_score || 0).filter(score => score > 0);
+    const averageIntegrityScore = integrityScores.length > 0 
+      ? integrityScores.reduce((sum, score) => sum + score, 0) / integrityScores.length 
+      : 0;
+
+    // Estimate false rates based on integrity scores and risk levels
+    const lowIntegrityCount = promptLogs.filter(log => log.integrity_score && log.integrity_score < 60).length;
+    const falsePositiveRate = totalPrompts > 0 ? (lowIntegrityCount / totalPrompts) * 2.5 : 0; // Estimated
+    const falseNegativeRate = totalPrompts > 0 ? Math.max(0, 5 - averageIntegrityScore / 20) : 0; // Estimated
 
     return {
       totalPrompts,
       promptsWithPII,
       piiPercentage: Math.round(piiPercentage * 10) / 10,
-      totalRedactions,
-      redactionTypes,
+      totalPIIEvents,
+      riskTypeBreakdown,
       redactionSamples,
-      falsePositiveRate,
-      falseNegativeRate,
-      effectivenessScore: Math.round((100 - falsePositiveRate - falseNegativeRate) * 10) / 10
+      averageIntegrityScore: Math.round(averageIntegrityScore * 10) / 10,
+      falsePositiveRate: Math.round(falsePositiveRate * 10) / 10,
+      falseNegativeRate: Math.round(falseNegativeRate * 10) / 10,
+      effectivenessScore: Math.round(averageIntegrityScore * 10) / 10
     };
   }
 
   private async getControlMappings(promptLogs: any[]) {
-    const controlCounts: Record<string, { count: number; status: string; evidence: string[] }> = {};
+    const controlCounts: Record<string, { count: number; status: string; evidence: string[]; framework: string }> = {};
     
     promptLogs.forEach(log => {
-      if (log.mapped_controls && Array.isArray(log.mapped_controls)) {
-        log.mapped_controls.forEach((control: any) => {
-          const controlId = control.controlId || control.id;
-          if (controlId) {
-            if (!controlCounts[controlId]) {
-              controlCounts[controlId] = { count: 0, status: 'Met', evidence: [] };
-            }
-            controlCounts[controlId].count++;
-            controlCounts[controlId].evidence.push(`promptlog://id/${log.id}`);
-            
-            // Determine status based on risk level
-            if (log.risk_level === 'high' || log.risk_level === 'critical') {
-              controlCounts[controlId].status = 'Partially Met';
-            }
-          }
-        });
-      }
+      // Map risk types to compliance controls
+      const controls = this.mapRiskTypeToControls(log.risk_type, log.risk_level);
+      
+      controls.forEach(control => {
+        if (!controlCounts[control.id]) {
+          controlCounts[control.id] = { 
+            count: 0, 
+            status: 'Met', 
+            evidence: [], 
+            framework: control.framework 
+          };
+        }
+        controlCounts[control.id].count++;
+        controlCounts[control.id].evidence.push(`prompt_event://${log.id}`);
+        
+        // Determine status based on risk level
+        if (log.risk_level === 'high' || log.risk_level === 'critical') {
+          controlCounts[control.id].status = 'Partially Met';
+        }
+      });
     });
 
     // Convert to array format
     return Object.entries(controlCounts).map(([controlId, data]) => ({
       controlId,
-      framework: this.getFrameworkFromControlId(controlId),
+      framework: data.framework,
       status: data.status,
       count: data.count,
       evidence: data.evidence.slice(0, 3) // Limit evidence links
     }));
+  }
+
+  private mapRiskTypeToControls(riskType: string, riskLevel: string): Array<{id: string, framework: string}> {
+    const controlMappings: Record<string, Array<{id: string, framework: string}>> = {
+      'PII': [
+        { id: 'NIST-SC-28', framework: 'NIST 800-53' },
+        { id: 'NIST-AC-3', framework: 'NIST 800-53' },
+        { id: 'LLM02', framework: 'OWASP LLM Top 10' },
+        { id: 'CC6.1', framework: 'SOC 2' }
+      ],
+      'Credential Exposure': [
+        { id: 'NIST-IA-5', framework: 'NIST 800-53' },
+        { id: 'NIST-AC-2', framework: 'NIST 800-53' },
+        { id: 'LLM06', framework: 'OWASP LLM Top 10' },
+        { id: 'CC6.2', framework: 'SOC 2' }
+      ],
+      'Data Leakage': [
+        { id: 'NIST-SC-7', framework: 'NIST 800-53' },
+        { id: 'NIST-AU-9', framework: 'NIST 800-53' },
+        { id: 'LLM02', framework: 'OWASP LLM Top 10' },
+        { id: 'CC6.7', framework: 'SOC 2' }
+      ],
+      'Jailbreak': [
+        { id: 'NIST-SC-18', framework: 'NIST 800-53' },
+        { id: 'LLM01', framework: 'OWASP LLM Top 10' },
+        { id: 'AI-RMF-1.1', framework: 'NIST AI RMF' }
+      ],
+      'IP': [
+        { id: 'NIST-AC-4', framework: 'NIST 800-53' },
+        { id: 'LLM02', framework: 'OWASP LLM Top 10' },
+        { id: 'CC6.3', framework: 'SOC 2' }
+      ],
+      'Compliance': [
+        { id: 'NIST-AU-12', framework: 'NIST 800-53' },
+        { id: 'CC4.1', framework: 'SOC 2' },
+        { id: 'AI-RMF-4.1', framework: 'NIST AI RMF' }
+      ],
+      'Regulatory': [
+        { id: 'NIST-PM-1', framework: 'NIST 800-53' },
+        { id: 'CC3.1', framework: 'SOC 2' },
+        { id: 'AI-RMF-1.2', framework: 'NIST AI RMF' }
+      ]
+    };
+
+    return controlMappings[riskType] || [
+      { id: 'NIST-RA-5', framework: 'NIST 800-53' },
+      { id: 'LLM10', framework: 'OWASP LLM Top 10' }
+    ];
   }
 
   private async getAdditionalMetrics(template: string, promptLogs: any[], startDate: string, endDate: string) {
@@ -287,7 +416,7 @@ class ReportDataService {
     const weeklyData: Record<string, { total: number; high: number; medium: number; low: number }> = {};
     
     promptLogs.forEach(log => {
-      const week = this.getWeekKey(new Date(log.created_at));
+      const week = this.getWeekKey(new Date(log.captured_at));
       if (!weeklyData[week]) {
         weeklyData[week] = { total: 0, high: 0, medium: 0, low: 0 };
       }
@@ -306,20 +435,20 @@ class ReportDataService {
   }
 
   private async getDailyUsage(promptLogs: any[]) {
-    const dailyUsage: Record<string, { prompts: number; estimatedCost: number; models: Record<string, number> }> = {};
+    const dailyUsage: Record<string, { prompts: number; cost: number; models: Record<string, number> }> = {};
     
     promptLogs.forEach(log => {
-      const day = log.created_at.split('T')[0];
+      const day = log.captured_at.split('T')[0];
       if (!dailyUsage[day]) {
-        dailyUsage[day] = { prompts: 0, estimatedCost: 0, models: {} };
+        dailyUsage[day] = { prompts: 0, cost: 0, models: {} };
       }
       
       dailyUsage[day].prompts++;
+      dailyUsage[day].cost += log.usd_cost || 0;
       
-      // Estimate cost (simplified)
-      const model = log.metadata?.model_used || log.platform || 'GPT-4o';
+      // Count model usage
+      const model = log.model || 'Unknown';
       dailyUsage[day].models[model] = (dailyUsage[day].models[model] || 0) + 1;
-      dailyUsage[day].estimatedCost += this.estimatePromptCost(log.original_prompt, model);
     });
 
     return dailyUsage;
@@ -329,13 +458,10 @@ class ReportDataService {
     const owaspCounts: Record<string, number> = {};
     
     promptLogs.forEach(log => {
-      if (log.mapped_controls && Array.isArray(log.mapped_controls)) {
-        log.mapped_controls.forEach((control: any) => {
-          const controlId = control.controlId || control.id;
-          if (controlId && controlId.includes('LLM')) {
-            owaspCounts[controlId] = (owaspCounts[controlId] || 0) + 1;
-          }
-        });
+      // Map risk types to OWASP LLM categories
+      const owaspCategory = this.mapRiskTypeToOWASP(log.risk_type);
+      if (owaspCategory) {
+        owaspCounts[owaspCategory] = (owaspCounts[owaspCategory] || 0) + 1;
       }
     });
 
@@ -351,26 +477,24 @@ class ReportDataService {
     }> = [];
     const highRiskPrompts = promptLogs.filter(log => log.risk_level === 'high' || log.risk_level === 'critical');
     
-    // Group by control and create POAM items
-    const controlIssues: Record<string, number> = {};
+    // Group by risk type and create POAM items
+    const riskTypeCounts: Record<string, number> = {};
     highRiskPrompts.forEach(log => {
-      if (log.mapped_controls && Array.isArray(log.mapped_controls)) {
-        log.mapped_controls.forEach((control: any) => {
-          const controlId = control.controlId || control.id;
-          if (controlId) {
-            controlIssues[controlId] = (controlIssues[controlId] || 0) + 1;
-          }
-        });
+      if (log.risk_type) {
+        riskTypeCounts[log.risk_type] = (riskTypeCounts[log.risk_type] || 0) + 1;
       }
     });
 
-    Object.entries(controlIssues).forEach(([controlId, count]) => {
-      if (count > 2) { // Only create POAM for controls with multiple issues
-        poamItems.push({
-          controlId,
-          issue: `${count} high-risk prompts detected`,
-          targetDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 90 days from now
-          priority: count > 5 ? 'High' : 'Medium'
+    Object.entries(riskTypeCounts).forEach(([riskType, count]) => {
+      if (count > 2) { // Only create POAM for risk types with multiple issues
+        const controls = this.mapRiskTypeToControls(riskType, 'high');
+        controls.forEach(control => {
+          poamItems.push({
+            controlId: control.id,
+            issue: `${count} high-risk ${riskType} prompts detected`,
+            targetDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 90 days from now
+            priority: count > 5 ? 'High' : 'Medium'
+          });
         });
       }
     });
@@ -421,12 +545,26 @@ class ReportDataService {
     return tokenCount * (pricing[model] || 0.000003);
   }
 
+  private mapRiskTypeToOWASP(riskType: string): string | null {
+    const mapping: Record<string, string> = {
+      'Jailbreak': 'LLM01',
+      'PII': 'LLM02', 
+      'Data Leakage': 'LLM02',
+      'IP': 'LLM02',
+      'Credential Exposure': 'LLM06',
+      'Compliance': 'LLM09',
+      'Regulatory': 'LLM09'
+    };
+    
+    return mapping[riskType] || null;
+  }
+
   private getEmptyReportData(): ReportData {
     return {
       promptLogs: [],
       costData: { total_spend: 0, budget_tracker: { total_spend: 0, budget: 500, status: 'Under Budget' }, top_prompts: [], most_used_model: 'No data' },
-      riskAnalysis: { riskCounts: { critical: 0, high: 0, medium: 0, low: 0 }, riskTypes: {}, platformBreakdown: {}, flaggedPrompts: [], totalPrompts: 0 },
-      redactionStats: { totalPrompts: 0, promptsWithPII: 0, piiPercentage: 0, totalRedactions: 0, redactionTypes: {}, redactionSamples: [], falsePositiveRate: 0, falseNegativeRate: 0, effectivenessScore: 0 },
+      riskAnalysis: { riskCounts: { critical: 0, high: 0, medium: 0, low: 0 }, riskTypes: {}, sourceBreakdown: {}, flaggedPrompts: [], totalPrompts: 0 },
+      redactionStats: { totalPrompts: 0, promptsWithPII: 0, piiPercentage: 0, totalPIIEvents: 0, riskTypeBreakdown: {}, redactionSamples: [], averageIntegrityScore: 0, falsePositiveRate: 0, falseNegativeRate: 0, effectivenessScore: 0 },
       controlMappings: [],
       additionalMetrics: {}
     };

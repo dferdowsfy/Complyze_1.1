@@ -96,7 +96,6 @@ CREATE INDEX IF NOT EXISTS idx_prompt_events_captured_at ON public.prompt_events
 CREATE INDEX IF NOT EXISTS idx_prompt_events_model ON public.prompt_events(model);
 CREATE INDEX IF NOT EXISTS idx_prompt_events_risk_type ON public.prompt_events(risk_type);
 CREATE INDEX IF NOT EXISTS idx_prompt_events_risk_level ON public.prompt_events(risk_level);
-CREATE INDEX IF NOT EXISTS idx_prompt_events_user_month ON public.prompt_events(user_id, date_trunc('month', captured_at));
 
 -- Create updated_at triggers
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -106,6 +105,13 @@ BEGIN
     RETURN NEW;
 END;
 $$ language 'plpgsql';
+
+-- Drop existing triggers if they exist before creating new ones
+DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
+DROP TRIGGER IF EXISTS update_projects_updated_at ON public.projects;
+DROP TRIGGER IF EXISTS update_prompt_logs_updated_at ON public.prompt_logs;
+DROP TRIGGER IF EXISTS update_prompt_events_updated_at ON public.prompt_events;
+DROP TRIGGER IF EXISTS update_governance_settings_updated_at ON public.governance_settings;
 
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -128,6 +134,23 @@ ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prompt_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prompt_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.governance_settings ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist before creating new ones
+DROP POLICY IF EXISTS "Users can view own profile" ON public.users;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+DROP POLICY IF EXISTS "Users can view own projects" ON public.projects;
+DROP POLICY IF EXISTS "Users can create projects" ON public.projects;
+DROP POLICY IF EXISTS "Users can update own projects" ON public.projects;
+DROP POLICY IF EXISTS "Users can delete own projects" ON public.projects;
+DROP POLICY IF EXISTS "Users can view own prompt logs" ON public.prompt_logs;
+DROP POLICY IF EXISTS "Users can create prompt logs" ON public.prompt_logs;
+DROP POLICY IF EXISTS "Users can update own prompt logs" ON public.prompt_logs;
+DROP POLICY IF EXISTS "Users can view own prompt events" ON public.prompt_events;
+DROP POLICY IF EXISTS "Users can create prompt events" ON public.prompt_events;
+DROP POLICY IF EXISTS "Users can update own prompt events" ON public.prompt_events;
+DROP POLICY IF EXISTS "Users can view own governance settings" ON public.governance_settings;
+DROP POLICY IF EXISTS "Users can create governance settings" ON public.governance_settings;
+DROP POLICY IF EXISTS "Users can update own governance settings" ON public.governance_settings;
 
 -- Users can only see their own data
 CREATE POLICY "Users can view own profile" ON public.users
@@ -194,45 +217,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Drop existing trigger if it exists before creating new one
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
 -- Trigger for new user registration
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Dashboard materialized view for better performance
-CREATE MATERIALIZED VIEW IF NOT EXISTS public.dashboard_metrics AS
-SELECT 
-  user_id,
-  date_trunc('month', captured_at) as month,
-  date_trunc('day', captured_at) as day,
-  COUNT(*) as total_prompts,
-  SUM(usd_cost) as total_cost,
-  AVG(integrity_score) as avg_integrity_score,
-  COUNT(*) FILTER (WHERE risk_level = 'high') as high_risk_count,
-  COUNT(*) FILTER (WHERE risk_level = 'medium') as medium_risk_count,
-  COUNT(*) FILTER (WHERE risk_level = 'low') as low_risk_count,
-  mode() WITHIN GROUP (ORDER BY model) as most_used_model,
-  jsonb_object_agg(risk_type, risk_type_count) as risk_type_frequencies
-FROM (
-  SELECT *,
-    COUNT(*) OVER (PARTITION BY user_id, date_trunc('month', captured_at), risk_type) as risk_type_count
-  FROM public.prompt_events
-) pe
-GROUP BY user_id, date_trunc('month', captured_at), date_trunc('day', captured_at);
-
--- Index for materialized view
-CREATE INDEX IF NOT EXISTS idx_dashboard_metrics_user_month ON public.dashboard_metrics(user_id, month);
-
--- Function to refresh dashboard metrics
-CREATE OR REPLACE FUNCTION refresh_dashboard_metrics()
-RETURNS void AS $$
-BEGIN
-  REFRESH MATERIALIZED VIEW CONCURRENTLY public.dashboard_metrics;
-END;
-$$ LANGUAGE plpgsql;
-
--- Insert some sample data for testing (optional)
--- You can remove this section if you don't want sample data
-
--- Sample user (this will be created automatically when someone signs up)
--- Sample project and prompt logs will be created through the application 
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user(); 

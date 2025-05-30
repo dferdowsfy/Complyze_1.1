@@ -123,7 +123,7 @@ interface ExportBarProps {
 }
 function ExportBar({ onExport, isGenerating }: ExportBarProps) {
   return (
-    <div className="sticky bottom-0 left-0 w-full bg-white border-t border-slate-200 flex flex-wrap sm:flex-nowrap justify-center sm:justify-end gap-2 sm:gap-4 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 z-40 shadow-lg">
+    <div className="bg-white border-t border-slate-200 flex flex-wrap sm:flex-nowrap justify-center sm:justify-end gap-2 sm:gap-4 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 z-40 shadow-lg">
       <button 
         className="bg-[#6366F1] text-white px-3 sm:px-4 py-2 rounded font-semibold disabled:opacity-50 text-sm sm:text-base flex-1 sm:flex-none"
         onClick={() => onExport('pdf')}
@@ -168,8 +168,9 @@ interface ReportSection {
 interface PreviewAccordionProps {
   sections: ReportSection[];
   isGenerating: boolean;
+  dataInfo?: any;
 }
-function PreviewAccordion({ sections, isGenerating }: PreviewAccordionProps) {
+function PreviewAccordion({ sections, isGenerating, dataInfo }: PreviewAccordionProps) {
   const [open, setOpen] = useState(0);
   
   if (isGenerating) {
@@ -177,9 +178,14 @@ function PreviewAccordion({ sections, isGenerating }: PreviewAccordionProps) {
       <div className="rounded-xl border border-slate-200 bg-white shadow p-8 text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-4"></div>
         <div className="text-lg font-semibold text-slate-700 mb-2">Generating Report with AI</div>
-        <div className="text-sm text-slate-500">
+        <div className="text-sm text-slate-500 mb-2">
           Analyzing extension data and generating compliance report using OpenRouter LLM...
         </div>
+        {dataInfo && (
+          <div className="text-xs text-slate-400">
+            Date Range: {dataInfo.dateRange} • Expected Prompts: {dataInfo.expectedPrompts || 'Loading...'}
+          </div>
+        )}
       </div>
     );
   }
@@ -197,6 +203,16 @@ function PreviewAccordion({ sections, isGenerating }: PreviewAccordionProps) {
   
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow divide-y divide-slate-100">
+      {/* Data Source Info */}
+      {dataInfo && (
+        <div className="px-6 py-3 bg-green-50 border-b border-green-200">
+          <div className="text-sm text-green-800">
+            ✅ <strong>Report Generated:</strong> {dataInfo.promptCount} prompts from {dataInfo.dateRange} 
+            {dataInfo.totalCost && ` • $${dataInfo.totalCost.toFixed(2)} total cost`}
+          </div>
+        </div>
+      )}
+      
       {sections.map((s, i) => (
         <div key={i}>
           <button
@@ -262,6 +278,7 @@ export default function Reports() {
   const { user } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId | null>(null);
   const [reportSections, setReportSections] = useState<ReportSection[]>([]);
+  const [dataInfo, setDataInfo] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [dateRange, setDateRange] = useState({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
@@ -272,9 +289,16 @@ export default function Reports() {
   const generateReport = async (templateId: string) => {
     setIsGenerating(true);
     setReportSections([]);
+    setDataInfo(null);
     
     try {
-      console.log(`Generating ${templateId} report...`);
+      console.log(`Generating ${templateId} report for date range: ${dateRange.start} to ${dateRange.end}`);
+      
+      // Set expected data info during generation
+      setDataInfo({
+        dateRange: `${dateRange.start} to ${dateRange.end}`,
+        expectedPrompts: 'Loading...'
+      });
       
       const response = await fetch('/api/reports/generate', {
         method: 'POST',
@@ -283,10 +307,13 @@ export default function Reports() {
         },
         body: JSON.stringify({
           template: templateId,
-          dateRange,
+          dateRange: {
+            start: dateRange.start,
+            end: dateRange.end
+          },
           project: projectName,
           format: 'sections',
-          userId: user?.id || 'anonymous'
+          userId: user?.id || "fa166056-023d-4822-b250-b5b5a47f9df8" // Use seeded user ID as fallback
         }),
       });
 
@@ -299,6 +326,15 @@ export default function Reports() {
       
       if (result.sections && Array.isArray(result.sections)) {
         setReportSections(result.sections);
+        
+        // Set actual data info from response
+        setDataInfo({
+          dateRange: `${dateRange.start} to ${dateRange.end}`,
+          promptCount: result.dataSource?.promptCount || 0,
+          totalCost: result.dataSource?.totalCost,
+          riskBreakdown: result.dataSource?.riskBreakdown,
+          usingDatabase: !result.dataSource?.usingDashboardData
+        });
       } else {
         throw new Error('Invalid report format received');
       }
@@ -308,10 +344,16 @@ export default function Reports() {
       setReportSections([
         {
           title: 'Error',
-          content: `Failed to generate report: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease check your OpenRouter API configuration and try again.`,
+          content: `Failed to generate report: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease check your OpenRouter API configuration and database connection.`,
           data: {}
         }
       ]);
+      
+      setDataInfo({
+        dateRange: `${dateRange.start} to ${dateRange.end}`,
+        promptCount: 0,
+        error: true
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -334,8 +376,8 @@ export default function Reports() {
         return;
       }
       
-      // For other formats, call the export API
-      const response = await fetch(`/api/reports/export?id=${selectedTemplate}&format=${format}&start=${dateRange.start}&end=${dateRange.end}`, {
+      // For other formats, call the export API with date range
+      const response = await fetch(`/api/reports/export?id=${selectedTemplate}&format=${format}&start=${dateRange.start}&end=${dateRange.end}&userId=${user?.id || "fa166056-023d-4822-b250-b5b5a47f9df8"}`, {
         method: 'GET',
       });
       
@@ -361,19 +403,21 @@ export default function Reports() {
     }
   };
 
-  // Click outside handler
+  // Auto-regenerate report when date range changes
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      // Handle any click outside logic if needed
+    if (selectedTemplate) {
+      const timeoutId = setTimeout(() => {
+        generateReport(selectedTemplate);
+      }, 1000); // Debounce 1 second
+      
+      return () => clearTimeout(timeoutId);
     }
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, []);
+  }, [dateRange.start, dateRange.end, projectName]);
 
   return (
-    <div className="min-h-screen bg-[#0E1E36] font-sans">
+    <div className="h-screen bg-[#0E1E36] font-sans flex flex-col overflow-hidden">
       {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex flex-col sm:flex-row px-4 sm:px-8 py-3 sm:py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
+      <nav className="flex-shrink-0 flex flex-col sm:flex-row px-4 sm:px-8 py-3 sm:py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
         {/* Left: Branding */}
         <div className="flex items-center gap-6 sm:gap-12 min-w-[180px] w-full sm:w-auto justify-between sm:justify-start">
           <span className="text-xl sm:text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
@@ -410,10 +454,10 @@ export default function Reports() {
       </nav>
 
       {/* Main Content */}
-      <div className="flex flex-col lg:flex-row min-h-[calc(100vh-120px)]">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left Sidebar - Templates */}
-        <div className="w-full lg:w-1/3 bg-slate-50 border-r border-slate-200 overflow-y-auto max-h-[50vh] lg:max-h-none">
-          <div className="p-4 sm:p-6">
+        <div className="w-full lg:w-1/3 bg-slate-50 border-r border-slate-200 flex flex-col max-h-[40vh] lg:max-h-full">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             <h2 className="text-lg sm:text-xl font-bold mb-4 text-slate-800">Compliance Report Templates</h2>
             
             {/* Date Range Selector */}
@@ -450,6 +494,13 @@ export default function Reports() {
                     />
                   </div>
                 </div>
+                
+                {/* Date Range Preview */}
+                <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
+                  <strong>Report Period:</strong> {Math.ceil((new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / (1000 * 60 * 60 * 24))} days
+                  <br />
+                  <strong>Data Source:</strong> prompt_events table • Time-filtered
+                </div>
               </div>
             </div>
 
@@ -466,8 +517,8 @@ export default function Reports() {
         </div>
 
         {/* Right Content - Preview */}
-        <div className="flex-1 bg-white overflow-y-auto">
-          <div className="p-4 sm:p-6 lg:p-8">
+        <div className="flex-1 bg-white flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <div className="mb-4 sm:mb-6">
               <h1 className="text-xl sm:text-2xl font-bold text-slate-800 mb-2">
                 {selectedTemplate ? 
@@ -477,19 +528,27 @@ export default function Reports() {
               </h1>
               <p className="text-slate-600 text-sm sm:text-base">
                 {selectedTemplate ? 
-                  'Generated using real data from your Chrome extension and OpenRouter LLM' :
-                  'Select a template to generate a compliance report with real extension data'
+                  `Time-based report for ${dateRange.start} to ${dateRange.end} using OpenRouter LLM` :
+                  'Select a template to generate a time-based compliance report with real extension data'
                 }
               </p>
             </div>
             
-            <PreviewAccordion sections={reportSections} isGenerating={isGenerating} />
+            <PreviewAccordion 
+              sections={reportSections} 
+              isGenerating={isGenerating}
+              dataInfo={dataInfo}
+            />
           </div>
+          
+          {/* Export Bar - Inside the right content area */}
+          {selectedTemplate && (
+            <div className="flex-shrink-0">
+              <ExportBar onExport={handleExport} isGenerating={isGenerating} />
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Export Bar */}
-      {selectedTemplate && <ExportBar onExport={handleExport} isGenerating={isGenerating} />}
     </div>
   );
 } 
