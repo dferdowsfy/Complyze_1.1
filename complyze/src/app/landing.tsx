@@ -480,24 +480,66 @@ export default function Landing() {
         {/* <a href="#how-it-works" className="bg-[#FF6F3C] text-white font-bold text-lg px-8 py-4 rounded-lg shadow-lg hover:bg-[#ff8a5c] transition">See how it works</a> */}
       </section>
 
-      {/* Desktop App and Chrome Extension Side-by-Side Section */}
+      {/* Desktop App Download Section */}
       <section className="bg-gradient-to-r from-[#0E1E36] to-[#1a2b4a] py-16 sm:py-20 px-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
-              Choose Your Protection
+              Complyze Desktop
             </h2>
             <p className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto">
-              Comprehensive AI prompt security across all your platforms. Use one or both to protect your organization.
-            </p>
+            Invisible AI prompt security for your native apps and browsers. Runs quietly in your menu bar and browser—protects every prompt, everywhere you type. </p>
           </div>
           
-          <div className="grid lg:grid-cols-2 gap-8 sm:gap-12">
-            {/* Desktop App */}
+          <div className="grid md:grid-cols-2 gap-8 sm:gap-12 items-center">
+            {/* Features */}
+            <div className="space-y-6">
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">⚡</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Native App Monitoring</h3>
+                  <p className="text-gray-300">Native App Monitoring – Secure prompts across ChatGPT, Claude, and other desktop LLMs</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🛡️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Menu Bar Integration</h3>
+                  <p className="text-gray-300">Lives quietly in your macOS menu bar with instant access to your dashboard and settings.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">📊</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Real-Time Risk Alerts</h3>
+                  <p className="text-gray-300">Flag compliance issues before prompts are submitted.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🔒</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Context-Aware Redaction</h3>
+                  <p className="text-gray-300">Strip sensitive info without breaking your workflow.</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Download Section */}
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
               <div className="text-center mb-8">
-                <h3 className="text-3xl font-bold text-white mb-4">Complyze Desktop</h3>
-                <p className="text-gray-300 mb-6">Real-time AI prompt monitoring that lives in your menu bar. Never miss a risky prompt again.</p>
+                <h3 className="text-2xl font-bold text-white mb-4">Download for macOS</h3>
+                <p className="text-gray-300 mb-6">Compatible with macOS 10.15 or later</p>
                 
                 <div className="space-y-4">
                   {/* Apple Silicon Download */}
@@ -509,7 +551,7 @@ export default function Landing() {
                     <div className="flex items-center justify-center space-x-3">
                       <span className="text-xl">🍎</span>
                       <div className="text-left">
-                        <div className="text-lg">Download for macOS</div>
+                        <div className="text-lg">Download for Mac</div>
                         <div className="text-sm opacity-90">Apple Silicon (M1, M2, M3)</div>
                       </div>
                     </div>
@@ -519,12 +561,12 @@ export default function Landing() {
                   <a 
                     href="/downloads/ComplyzeDesktop-macOS-Intel.dmg"
                     download
-                    className="block w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                    className="block w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-lg transition-colors"
                   >
                     <div className="flex items-center justify-center space-x-3">
-                      <span className="text-lg">💻</span>
+                      <span className="text-xl">💻</span>
                       <div className="text-left">
-                        <div className="text-base">Download for Mac</div>
+                        <div className="text-lg">Download for Mac</div>
                         <div className="text-sm opacity-90">Intel Processor</div>
                       </div>
                     </div>
@@ -535,49 +577,56 @@ export default function Landing() {
                   <p className="mb-2">
                     <strong>Version 1.0.0</strong> • Free with Complyze account
                   </p>
-                  <p>Compatible with macOS 10.15 or later</p>
+                  <p>
+                    Not sure which version? Most newer Macs use Apple Silicon.
+                  </p>
                 </div>
               </div>
               
-              {/* Desktop Features */}
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center mt-0.5">
-                    <span className="text-white font-bold text-xs">✓</span>
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Desktop Integration</h4>
-                    <p className="text-gray-300 text-sm">Monitors AI prompts in ChatGPT, Claude, and desktop apps</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center mt-0.5">
-                    <span className="text-white font-bold text-xs">✓</span>
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Risk Warnings</h4>
-                    <p className="text-gray-300 text-sm">Alerts you to issues such as compliance or security risks</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center mt-0.5">
-                    <span className="text-white font-bold text-xs">✓</span>
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Automated Redaction</h4>
-                    <p className="text-gray-300 text-sm">Redacts sensitive data before it's submitted</p>
-                  </div>
-                </div>
+              {/* Installation Steps */}
+              <div className="border-t border-white/20 pt-6">
+                <h4 className="text-lg font-semibold text-white mb-4">Quick Install:</h4>
+                <ol className="text-sm text-gray-300 space-y-2">
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">1.</span>
+                    <span>Download and open the DMG file</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">2.</span>
+                    <span>Drag Complyze Desktop to Applications</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">3.</span>
+                    <span>Launch and login with your Complyze account</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">4.</span>
+                    <span>Look for the Complyze icon in your menu bar</span>
+                  </li>
+                </ol>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
 
-            {/* Chrome Extension */}
+      {/* Chrome Extension Section */}
+      <section className="bg-gradient-to-r from-[#1a2b4a] to-[#0E1E36] py-16 sm:py-20 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+              Complyze Chrome Extension
+            </h2>
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto">
+            AI prompt security in every tab. Protect your prompts inside any web-based AI platform—from OpenAI to Perplexity. </p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-8 sm:gap-12 items-center">
+            {/* Download Section */}
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
               <div className="text-center mb-8">
-                <h3 className="text-3xl font-bold text-white mb-4">Complyze Chrome Extension</h3>
-                <p className="text-gray-300 mb-6">Browser-based AI prompt security that works wherever you work. Protect your prompts across any web-based AI tool.</p>
+                <h3 className="text-2xl font-bold text-white mb-4">Install for Chrome</h3>
+                <p className="text-gray-300 mb-6">Works with Chrome, Edge, Brave, and other Chromium browsers</p>
                 
                 <div className="space-y-4">
                   {/* Chrome Web Store */}
@@ -600,12 +649,12 @@ export default function Landing() {
                   <a 
                     href="/downloads/complyze-extension-v2.zip"
                     download
-                    className="block w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                    className="block w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-lg transition-colors"
                   >
                     <div className="flex items-center justify-center space-x-3">
-                      <span className="text-lg">📦</span>
+                      <span className="text-xl">📦</span>
                       <div className="text-left">
-                        <div className="text-base">Manual Install</div>
+                        <div className="text-lg">Manual Install</div>
                         <div className="text-sm opacity-90">For enterprise deployments</div>
                       </div>
                     </div>
@@ -616,40 +665,85 @@ export default function Landing() {
                   <p className="mb-2">
                     <strong>Version 2.0</strong> • Free with Complyze account
                   </p>
-                  <p>Works with Chrome, Edge, Brave, and other Chromium browsers</p>
+                  <p>
+                    Compatible with all Chromium-based browsers
+                  </p>
                 </div>
               </div>
               
-              {/* Chrome Features */}
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center mt-0.5">
-                    <span className="text-white font-bold text-xs">✓</span>
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Universal Detection</h4>
-                    <p className="text-gray-300 text-sm">Works with ChatGPT, Claude, Gemini, Perplexity, and more</p>
-                  </div>
+              {/* Installation Steps */}
+              <div className="border-t border-white/20 pt-6">
+                <h4 className="text-lg font-semibold text-white mb-4">Quick Install:</h4>
+                <ol className="text-sm text-gray-300 space-y-2">
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">1.</span>
+                    <span>Click "Add to Chrome" above</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">2.</span>
+                    <span>Click "Add Extension" in the popup</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">3.</span>
+                    <span>Pin the extension to your toolbar</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#FF6F3C] font-bold">4.</span>
+                    <span>Login with your Complyze account</span>
+                  </li>
+                </ol>
+              </div>
+            </div>
+
+            {/* Features */}
+            <div className="space-y-6">
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🔍</span>
                 </div>
-                
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center mt-0.5">
-                    <span className="text-white font-bold text-xs">✓</span>
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Instant Alerts</h4>
-                    <p className="text-gray-300 text-sm">Notifies you when sensitive data is detected in prompts</p>
-                  </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Cross-Platform Detection</h3>
+                  <p className="text-gray-300">Supports ChatGPT, Claude, Gemini, Perplexity & updated frequently.</p>
                 </div>
-                
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center mt-0.5">
-                    <span className="text-white font-bold text-xs">✓</span>
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Smart Redaction</h4>
-                    <p className="text-gray-300 text-sm">Replaces confidential information with safe placeholders</p>
-                  </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">⚠️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Instant Redaction Alerts</h3>
+                  <p className="text-gray-300">Auto-sanitizes sensitive data in real time.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">✨</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Seamless Web Integration</h3>
+                  <p className="text-gray-300">Invisible security layer that travels with your browser</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🔗</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Seamless Integration</h3>
+                  <p className="text-gray-300">Works invisibly in the background, syncing all activity to your Complyze dashboard.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-[#FF6F3C] rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">⚙️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Customizable Rules</h3>
+                  <p className="text-gray-300">Configure detection patterns and redaction rules to match your organization's security policies.</p>
                 </div>
               </div>
             </div>
