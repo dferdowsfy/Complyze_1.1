@@ -276,30 +276,23 @@ export default function Landing() {
     
     return (
       <div ref={ref} className="flex items-center justify-center gap-8 md:gap-12">
-        <div className="text-left max-w-md">
-          <p className="text-3xl md:text-4xl text-red-600 leading-tight font-bold mb-3">
-            Don't be part of the
-          </p>
-          <p className="text-2xl md:text-3xl text-gray-800 leading-tight font-bold mb-4">
-            of organizations wasting their AI investment
+        <div className="text-left max-w-lg">
+          <div className="flex flex-wrap items-baseline gap-2 mb-4">
+            <span className="text-2xl md:text-3xl text-red-600 font-bold">Don't be part of the</span>
+            <span 
+              className="text-6xl md:text-7xl font-bold tabular-nums"
+              style={{ color: '#0e1f36' }}
+            >
+              {count}%
+            </span>
+            <span className="text-2xl md:text-3xl text-gray-800 font-bold">of organizations</span>
+          </div>
+          <p className="text-2xl md:text-3xl text-gray-800 font-bold mb-4">
+            underutilizing their AI
           </p>
           <p className="text-base md:text-lg text-gray-600 leading-relaxed">
-            85% of teams are leaving massive AI value on the table through poor prompts, security vulnerabilities, and missed optimization opportunities.
+            Most teams are leaving massive value on the table through poor prompts, security vulnerabilities, and missed optimization opportunities.
           </p>
-        </div>
-        <div className="flex items-center">
-          <span 
-            className="text-8xl md:text-9xl font-bold tabular-nums"
-            style={{ color: '#0e1f36' }}
-          >
-            {count}
-          </span>
-          <span 
-            className="text-4xl md:text-5xl font-bold ml-2"
-            style={{ color: '#0e1f36' }}
-          >
-            %
-          </span>
         </div>
       </div>
     );
