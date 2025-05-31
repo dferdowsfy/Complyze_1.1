@@ -2496,9 +2496,17 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
     
     console.log(`Complyze Debug: Risk score: ${riskScore}, Redactions: ${redactionResult.redactionDetails.length}`);
     
-    // Generate enhancement for all prompts
+    // Use local optimization first (matching Chrome extension), then enhance if needed
+    const localOptimizedPrompt = redactionResult.optimizedText;
+    console.log(`Complyze Debug: Local optimization: "${localOptimizedPrompt.substring(0, 100)}..."`);
+    
+    // Generate enhancement for all prompts (fallback to API enhancement)
     const enhancementResult = await enhancePrompt(promptText);
-    console.log(`Complyze Debug: Enhancement generated: ${enhancementResult.enhancedPrompt ? 'YES' : 'NO'}`);
+    console.log(`Complyze Debug: API Enhancement generated: ${enhancementResult.enhancedPrompt ? 'YES' : 'NO'}`);
+    
+    // Use local optimization as primary, API enhancement as fallback
+    const finalOptimizedPrompt = localOptimizedPrompt !== promptText ? localOptimizedPrompt : enhancementResult.enhancedPrompt;
+    console.log(`Complyze Debug: Using ${localOptimizedPrompt !== promptText ? 'LOCAL' : 'API'} optimization`);
     
     // Expanded sensitive data detection
     const allSensitivePatterns = [
@@ -2550,9 +2558,12 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
           riskScore: Math.max(riskScore, 60), // Ensure visibility
           redactionDetails: redactionResult.redactionDetails,
           sourceApp: sourceApp,
-          enhancedPrompt: enhancementResult.enhancedPrompt,
+          enhancedPrompt: finalOptimizedPrompt,
           blockingMode: true,
-          enhancementResult,
+          enhancementResult: {
+            ...enhancementResult,
+            enhancedPrompt: finalOptimizedPrompt // Use local optimization
+          },
           isLiveInput: true,
           securityInsights: securityInsights ?? null,
           enhancedRedactionDetails: enhancedRedactionDetails ?? []
@@ -2561,8 +2572,8 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
         console.log(`Complyze Debug: BLOCKING notification shown, user choice: ${userChoice}`);
         
         // If user chose to replace, update the text field
-        if (userChoice === 'replace' && enhancementResult.enhancedPrompt) {
-          await replaceTextInActiveApp(enhancementResult.enhancedPrompt, sourceApp);
+        if (userChoice === 'replace' && finalOptimizedPrompt) {
+          await replaceTextInActiveApp(finalOptimizedPrompt, sourceApp);
         }
       } else {
         // For all other content, show non-blocking notification
@@ -2571,9 +2582,12 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
           riskScore: Math.max(riskScore, 35), // Ensure visibility
           redactionDetails: redactionResult.redactionDetails,
           sourceApp: sourceApp,
-          enhancedPrompt: enhancementResult.enhancedPrompt,
+          enhancedPrompt: finalOptimizedPrompt,
           blockingMode: false,
-          enhancementResult,
+          enhancementResult: {
+            ...enhancementResult,
+            enhancedPrompt: finalOptimizedPrompt // Use local optimization
+          },
           isLiveInput: true
         });
         
@@ -2589,10 +2603,10 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
           riskScore: 50,
           redactionDetails: [],
           sourceApp: sourceApp,
-          enhancedPrompt: 'Error processing prompt - please check console',
+          enhancedPrompt: localOptimizedPrompt || 'Error processing prompt - please check console',
           blockingMode: false,
           enhancementResult: {
-            enhancedPrompt: 'Error processing prompt',
+            enhancedPrompt: localOptimizedPrompt || 'Error processing prompt',
             improvements: ['Error occurred during processing'],
             detectedIntent: 'Unknown',
             optimizationReason: 'Error occurred',

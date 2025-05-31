@@ -13,18 +13,29 @@ export interface RedactionResult {
   }>;
 }
 
-// Comprehensive regex patterns for PII/PHI/PCI and enterprise-specific data
+// Comprehensive regex patterns for PII/PHI/PCI and enterprise-specific data with HIPAA compliance
 const piiPatterns: Record<string, RegExp> = {
   // Core PII/PHI/PCI (Standard Compliance)
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
   phone: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g,
-  fullName: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g,
+  fullName: /\b[A-Z][a-z]{2,}(?:\s[A-Z][a-z]{2,})+\b/g,
   
   // Financial Data
   ssn: /\b\d{3}-?\d{2}-?\d{4}\b/g,
   creditcard: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b/g,
   bank_account: /\b\d{8,17}\b/g,
   routing_number: /\b[0-9]{9}\b/g,
+  
+  // HIPAA Employee/Medical Record Numbers
+  employeeId: /\b(?:employee\s+id|emp\s+id|employee\s+number|emp\s+#)[\s:]*\d{4,8}\b/gi,
+  medicalRecordNumber: /\b(?:mrn|medical\s+record\s+number|patient\s+id)[\s:]*\d{4,10}\b/gi,
+  
+  // HIPAA Financial Information
+  salary: /\$[\d,]+(?:\.\d{2})?\s*(?:annually|per\s+year|yearly|salary)/gi,
+  
+  // HIPAA Dates (except year) - Critical for HIPAA compliance
+  specificDates: /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b/gi,
+  numericDates: /\b\d{1,2}\/\d{1,2}\/\d{4}\b/g,
   
   // Government IDs
   drivers_license: /\b[A-Z]{1,2}\d{6,8}\b/g,
@@ -40,9 +51,20 @@ const piiPatterns: Record<string, RegExp> = {
   oauthSecret: /\b(?:client_secret|oauth_token|access_token|refresh_token)[\s:=]+[a-zA-Z0-9_-]+/gi,
   sshKey: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g,
   
+  // HIPAA URLs and Links
+  zoomLinks: /https?:\/\/(?:[\w-]+\.)?zoom\.us\/[^\s]+/gi,
+  shareLinks: /https?:\/\/[^\s]+\/(?:share|rec|recording)[^\s]*/gi,
+  
   // Internal URLs and Services
   internalUrl: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g,
   internalService: /\b(?:ServiceNow|Snowflake|Redshift|Databricks|Splunk|Tableau)\s+(?:instance|database|server)/gi,
+  
+  // HIPAA Internal Policy References
+  policyNumbers: /\b[A-Z]{2,4}-\d{2,4}-[A-Z]\b/g,
+  
+  // HIPAA Team/Department References
+  teamReferences: /\b[A-Z][a-z]+\'s\s+team\b/g,
+  departmentNames: /\b(?:AML\s+compliance|compliance\s+department|audit\s+department|legal\s+department)\b/gi,
   
   // Project and Code Names
   projectName: /\b(?:Project|Operation|Initiative)\s+[A-Z][a-zA-Z]+\b/g,
@@ -64,8 +86,9 @@ const piiPatterns: Record<string, RegExp> = {
 // Redaction placeholder generator (for backward compatibility)
 const redactionPlaceholder = (type: string) => `[REDACTED_${type.toUpperCase()}]`;
 
-// NEW: Optimization patterns that rephrase instead of redact (matching Chrome extension)
+// NEW: Enhanced optimization patterns with HIPAA compliance (matching Chrome extension)
 const optimizationPatterns: Record<string, { pattern: RegExp; replacement: string | ((match: string) => string) }> = {
+  // HIPAA Personal Identifiers
   email: { 
     pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, 
     replacement: (match: string) => {
@@ -84,9 +107,9 @@ const optimizationPatterns: Record<string, { pattern: RegExp; replacement: strin
     replacement: 'a phone number'
   },
   fullName: { 
-    pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, 
+    pattern: /\b[A-Z][a-z]{2,}(?:\s[A-Z][a-z]{2,})+\b/g, 
     replacement: (match: string) => {
-      // Try to preserve context
+      // Enhanced name detection - more specific patterns
       const words = match.split(' ');
       if (words.length === 2) {
         return 'a person\'s name';
@@ -99,6 +122,60 @@ const optimizationPatterns: Record<string, { pattern: RegExp; replacement: strin
     pattern: /\b\d{3}-?\d{2}-?\d{4}\b/g, 
     replacement: 'a social security number'
   },
+  
+  // HIPAA Employee/Medical Record Numbers
+  employeeId: {
+    pattern: /\b(?:employee\s+id|emp\s+id|employee\s+number|emp\s+#)[\s:]*\d{4,8}\b/gi,
+    replacement: 'an employee identification number'
+  },
+  medicalRecordNumber: {
+    pattern: /\b(?:mrn|medical\s+record\s+number|patient\s+id)[\s:]*\d{4,10}\b/gi,
+    replacement: 'a medical record number'
+  },
+  
+  // HIPAA Financial Information
+  salary: {
+    pattern: /\$[\d,]+(?:\.\d{2})?\s*(?:annually|per\s+year|yearly|salary)/gi,
+    replacement: 'salary information'
+  },
+  
+  // HIPAA Dates (except year)
+  specificDates: {
+    pattern: /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b/gi,
+    replacement: 'a specific date'
+  },
+  numericDates: {
+    pattern: /\b\d{1,2}\/\d{1,2}\/\d{4}\b/g,
+    replacement: 'a specific date'
+  },
+  
+  // HIPAA URLs and Links
+  zoomLinks: {
+    pattern: /https?:\/\/(?:[\w-]+\.)?zoom\.us\/[^\s]+/gi,
+    replacement: 'a video conference link'
+  },
+  shareLinks: {
+    pattern: /https?:\/\/[^\s]+\/(?:share|rec|recording)[^\s]*/gi,
+    replacement: 'a shared document or recording link'
+  },
+  
+  // HIPAA Internal Policy References
+  policyNumbers: {
+    pattern: /\b[A-Z]{2,4}-\d{2,4}-[A-Z]\b/g,
+    replacement: 'an internal policy reference'
+  },
+  
+  // HIPAA Team/Department References
+  teamReferences: {
+    pattern: /\b[A-Z][a-z]+\'s\s+team\b/g,
+    replacement: 'a team reference'
+  },
+  departmentNames: {
+    pattern: /\b(?:AML\s+compliance|compliance\s+department|audit\s+department|legal\s+department)\b/gi,
+    replacement: 'a department'
+  },
+  
+  // Standard Technical Identifiers
   passport: { 
     pattern: /\b[A-Z]{1,2}\d{6,9}\b/g, 
     replacement: 'a passport number'
