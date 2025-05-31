@@ -3,6 +3,7 @@
 
 export interface RedactionResult {
   redactedText: string;
+  optimizedText: string;
   redactionDetails: Array<{
     original: string;
     redacted: string;
@@ -60,11 +61,154 @@ const piiPatterns: Record<string, RegExp> = {
   legal: /\b(?:attorney.client|privileged|litigation|settlement|NDA)\b/gi,
 };
 
-// Redaction placeholder generator
+// Redaction placeholder generator (for backward compatibility)
 const redactionPlaceholder = (type: string) => `[REDACTED_${type.toUpperCase()}]`;
 
+// NEW: Optimization patterns that rephrase instead of redact (matching Chrome extension)
+const optimizationPatterns: Record<string, { pattern: RegExp; replacement: string | ((match: string) => string) }> = {
+  email: { 
+    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, 
+    replacement: (match: string) => {
+      // Extract domain for context if it's a common service
+      const domain = match.split('@')[1];
+      if (domain.includes('gmail') || domain.includes('yahoo') || domain.includes('outlook')) {
+        return 'a personal email address';
+      } else if (domain.includes('company') || domain.includes('corp') || domain.includes('enterprise')) {
+        return 'a corporate email address';
+      }
+      return 'an email address';
+    }
+  },
+  phone: { 
+    pattern: /(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g, 
+    replacement: 'a phone number'
+  },
+  fullName: { 
+    pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, 
+    replacement: (match: string) => {
+      // Try to preserve context
+      const words = match.split(' ');
+      if (words.length === 2) {
+        return 'a person\'s name';
+      } else {
+        return 'someone\'s full name';
+      }
+    }
+  },
+  ssn: { 
+    pattern: /\b\d{3}-?\d{2}-?\d{4}\b/g, 
+    replacement: 'a social security number'
+  },
+  passport: { 
+    pattern: /\b[A-Z]{1,2}\d{6,9}\b/g, 
+    replacement: 'a passport number'
+  },
+  ip_address: { 
+    pattern: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, 
+    replacement: (match: string) => {
+      // Preserve context for internal vs external IPs
+      if (match.startsWith('192.168.') || match.startsWith('10.') || match.startsWith('172.')) {
+        return 'an internal IP address';
+      }
+      return 'an IP address';
+    }
+  },
+  api_key: { 
+    pattern: /\b(?:sk-[a-zA-Z0-9]{32,}|pk_[a-zA-Z0-9]{24,}|[a-zA-Z0-9]{32,})\b/g, 
+    replacement: 'an API key'
+  },
+  oauthSecret: { 
+    pattern: /\b(?:client_secret|oauth_token|access_token|refresh_token)[\s:=]+[a-zA-Z0-9_-]+/gi, 
+    replacement: 'authentication credentials'
+  },
+  sshKey: { 
+    pattern: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g, 
+    replacement: 'SSH private key credentials'
+  },
+  internalUrl: { 
+    pattern: /https?:\/\/(?:dev-|staging-|internal-|admin-)[a-zA-Z0-9.-]+/g, 
+    replacement: (match: string) => {
+      if (match.includes('dev-')) return 'a development environment URL';
+      if (match.includes('staging-')) return 'a staging environment URL';
+      if (match.includes('internal-')) return 'an internal system URL';
+      if (match.includes('admin-')) return 'an admin panel URL';
+      return 'an internal URL';
+    }
+  },
+  projectName: { 
+    pattern: /\b(?:Project|Operation|Initiative)\s+[A-Z][a-zA-Z]+\b/g, 
+    replacement: 'a project codename'
+  },
+  codeNames: { 
+    pattern: /\b[A-Z][a-zA-Z]+(?:DB|API|Service|Platform)\b/g, 
+    replacement: (match: string) => {
+      if (match.includes('DB')) return 'a database system';
+      if (match.includes('API')) return 'an API service';
+      if (match.includes('Service')) return 'a service component';
+      if (match.includes('Platform')) return 'a platform system';
+      return 'an internal system';
+    }
+  },
+  cidrRange: { 
+    pattern: /\b(?:10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\/\d{1,2}\b/g, 
+    replacement: 'a private network range'
+  }
+};
+
 /**
- * Redacts PII from text using regex patterns
+ * NEW: Generate safe prompt by rephrasing sensitive content (matching Chrome extension)
+ */
+export function generateSafePrompt(originalPrompt: string): string {
+  let safePrompt = originalPrompt;
+
+  // Apply optimization patterns (rephrase instead of redact)
+  for (const [type, config] of Object.entries(optimizationPatterns)) {
+    if (typeof config.replacement === 'function') {
+      safePrompt = safePrompt.replace(config.pattern, config.replacement);
+    } else {
+      safePrompt = safePrompt.replace(config.pattern, config.replacement);
+    }
+  }
+
+  // Additional optimization: improve prompt structure and clarity
+  safePrompt = optimizePromptStructure(safePrompt);
+
+  return safePrompt;
+}
+
+/**
+ * NEW: Helper function to optimize prompt structure (matching Chrome extension)
+ */
+function optimizePromptStructure(prompt: string): string {
+  let optimized = prompt;
+  
+  // Remove redundant phrases
+  const redundantPhrases = [
+    /\b(?:please|kindly|if you could|would you mind)\b/gi,
+    /\b(?:as an AI|as a language model|I understand that you are)\b/gi
+  ];
+  
+  redundantPhrases.forEach(pattern => {
+    optimized = optimized.replace(pattern, '');
+  });
+
+  // Improve clarity and specificity
+  optimized = optimized
+    .replace(/\bthing\b/gi, 'item')
+    .replace(/\bstuff\b/gi, 'content')
+    .replace(/\bdo this\b/gi, 'complete this task');
+
+  // Clean up extra whitespace
+  optimized = optimized
+    .replace(/\s+/g, ' ')
+    .replace(/\n\s*\n/g, '\n\n')
+    .trim();
+  
+  return optimized;
+}
+
+/**
+ * Redacts PII from text using regex patterns (for backward compatibility)
  */
 export function redactPII(text: string): RedactionResult {
   let redactedText = text;
@@ -93,7 +237,10 @@ export function redactPII(text: string): RedactionResult {
   // Sort details by start index
   redactionDetails.sort((a, b) => a.startIndex - b.startIndex);
 
-  return { redactedText, redactionDetails };
+  // NEW: Generate optimized version
+  const optimizedText = generateSafePrompt(text);
+
+  return { redactedText, optimizedText, redactionDetails };
 }
 
 /**
@@ -102,7 +249,7 @@ export function redactPII(text: string): RedactionResult {
 export async function comprehensiveRedact(text: string): Promise<RedactionResult> {
   const regexResult = redactPII(text);
   
-  // For now, just return regex results
+  // For now, just return regex results with optimization
   // Can be extended with LLM Guard or other AI-based redaction
   return regexResult;
 }
