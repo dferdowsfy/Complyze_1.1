@@ -1222,49 +1222,40 @@ class PromptWatcher {
   //   this.createSafePromptPanel(promptElement, analysis);
   // }
 
-  // NEW: Create modal popup with safe prompt
+  // NEW: Create side panel with safe prompt
   createSafePromptPanel(promptElement, analysis) {
-    console.log('Complyze: Creating safe prompt modal...', { promptElement, analysis });
+    console.log('Complyze: Creating safe prompt panel...', { promptElement, analysis });
     
     try {
-      // Remove existing modal if any
-      const existingModal = document.querySelector('#complyze-safe-prompt-modal');
-      if (existingModal) {
-        console.log('Complyze: Removing existing modal');
-        existingModal.remove();
+      // Remove existing panel if any
+      const existingPanel = document.querySelector('#complyze-safe-prompt-panel');
+      if (existingPanel) {
+        console.log('Complyze: Removing existing panel');
+        existingPanel.remove();
       }
 
-      const modal = document.createElement('div');
-      modal.id = 'complyze-safe-prompt-modal';
-      
-      // Full-screen modal overlay styling
-      modal.style.cssText = `
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-        background: rgba(0, 0, 0, 0.8) !important;
-        z-index: 2147483647 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-        animation: fadeIn 0.3s ease-out !important;
-      `;
-
       const panel = document.createElement('div');
+      panel.id = 'complyze-safe-prompt-panel';
+      
+      // Enhanced styling with better visibility and positioning
       panel.style.cssText = `
-        background: white !important;
+        position: fixed !important;
+        top: 20px !important;
+        right: 20px !important;
+        width: 450px !important;
+        max-height: 85vh !important;
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+        border: 2px solid #3b82f6 !important;
         border-radius: 12px !important;
-        padding: 24px !important;
-        max-width: 600px !important;
-        width: 90% !important;
-        max-height: 80vh !important;
-        overflow-y: auto !important;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
-        color: #1f2937 !important;
-        animation: slideIn 0.3s ease-out !important;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5) !important;
+        z-index: 2147483647 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        color: white !important;
+        animation: slideInRight 0.3s ease-out !important;
+        overflow: hidden !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
       `;
 
       const originalPrompt = this.getPromptText(promptElement);
@@ -1275,116 +1266,136 @@ class PromptWatcher {
       console.log('Complyze: Safe prompt (optimized):', safePrompt.substring(0, 100));
 
     panel.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
-        <div style="width: 40px; height: 40px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">⚠️</div>
-        <div>
-          <h2 style="margin: 0; color: #1f2937; font-size: 20px; font-weight: 600;">Security Risk Detected</h2>
-          <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">Sensitive information found in your prompt</p>
+      <div style="padding: 20px; border-bottom: 1px solid rgba(59, 130, 246, 0.3);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #3b82f6;">
+            🛡️ Security Analysis Results
+          </h3>
+          <button id="complyze-close-panel" style="background: none; border: none; color: #9ca3af; font-size: 20px; cursor: pointer; padding: 4px;">
+            ×
+          </button>
         </div>
-        <button id="complyze-close-panel" style="background: none; border: none; color: #9ca3af; font-size: 24px; cursor: pointer; padding: 4px; margin-left: auto;">×</button>
+        <p style="margin: 0; font-size: 14px; color: #9ca3af; line-height: 1.4;">
+          We've created an optimized version of your prompt by rephrasing it to remove sensitive information.
+        </p>
       </div>
-      
-      ${analysis.detectedPII && analysis.detectedPII.length > 0 ? `
-      <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
-        <h3 style="margin: 0 0 8px 0; color: #dc2626; font-size: 16px;">Detected Issues:</h3>
-        <ul style="margin: 0; padding-left: 20px; color: #7f1d1d;">
-          ${analysis.detectedPII.map(type => `<li>${type.toUpperCase().replace('_', ' ')}</li>`).join('')}
-        </ul>
-      </div>
-      ` : ''}
-      
-      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <h3 style="margin: 0 0 12px 0; color: #16a34a; font-size: 16px;">✅ Optimized Prompt:</h3>
-        <div style="background: white; border: 1px solid #d1d5db; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 14px; line-height: 1.5; color: #374151; max-height: 200px; overflow-y: auto;">
-          ${safePrompt || 'Processing...'}
+
+      <div style="padding: 20px; max-height: 50vh; overflow-y: auto;">
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 12px; font-weight: 600; color: #3b82f6; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+            Optimized Prompt (Ready to Use)
+          </label>
+          <textarea id="complyze-safe-text" style="
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            font-family: inherit;
+          " readonly>${safePrompt}</textarea>
         </div>
-      </div>
-      
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button id="complyze-cancel" style="padding: 10px 20px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
-          Cancel
-        </button>
-        <button id="complyze-copy-safe" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
-          📋 Copy Optimized
-        </button>
-        <button id="complyze-use-safe" style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
-          ✅ Use Optimized Version
-        </button>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+          <button id="complyze-copy-safe" style="
+            flex: 1;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">
+            📋 Copy Optimized Version
+          </button>
+          <button id="complyze-use-safe" style="
+            flex: 1;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">
+            ✅ Use This Version
+          </button>
+        </div>
+
+        ${analysis.detectedPII && analysis.detectedPII.length > 0 ? `
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+          <div style="font-size: 12px; font-weight: 600; color: #ef4444; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
+            Removed Sensitive Data
+          </div>
+          <div style="font-size: 13px; color: #fca5a5;">
+            ${analysis.detectedPII.map(pii => `• ${pii.replace('_', ' ')}`).join('<br>')}
+          </div>
+        </div>
+        ` : ''}
+
+        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 12px;">
+          <div style="font-size: 12px; font-weight: 600; color: #3b82f6; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
+            💡 How to Use
+          </div>
+          <div style="font-size: 13px; color: #93c5fd; line-height: 1.4;">
+            1. Click "Use This Version" to replace your current prompt<br>
+            2. Or copy the optimized version and paste it manually<br>
+            3. The submit button will be re-enabled automatically
+          </div>
+        </div>
       </div>
     `;
 
     // Add animation styles
-    if (!document.querySelector('#complyze-modal-styles')) {
+    if (!document.querySelector('#complyze-panel-styles')) {
       const style = document.createElement('style');
-      style.id = 'complyze-modal-styles';
+      style.id = 'complyze-panel-styles';
       style.textContent = `
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { transform: translateY(-20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
+        @keyframes slideInRight {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
         #complyze-copy-safe:hover {
-          background: #2563eb !important;
           transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         }
         #complyze-use-safe:hover {
-          background: #059669 !important;
           transform: translateY(-1px);
-        }
-        #complyze-cancel:hover {
-          background: #e5e7eb !important;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
         }
       `;
       document.head.appendChild(style);
     }
 
-      modal.appendChild(panel);
-      document.body.appendChild(modal);
-      console.log('Complyze: Modal added to DOM');
+      document.body.appendChild(panel);
+      console.log('Complyze: Panel added to DOM');
 
       // Add event listeners
-      const closeButton = panel.querySelector('#complyze-close-panel');
-      const cancelButton = panel.querySelector('#complyze-cancel');
-      const copyButton = panel.querySelector('#complyze-copy-safe');
-      const useButton = panel.querySelector('#complyze-use-safe');
-
-      // Close modal handlers
-      const closeModal = () => {
-        console.log('Complyze: Modal closed');
-        modal.remove();
-      };
-
-      closeButton.addEventListener('click', closeModal);
-      cancelButton.addEventListener('click', closeModal);
-
-      // Close on background click
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-          closeModal();
-        }
+      panel.querySelector('#complyze-close-panel').addEventListener('click', () => {
+        console.log('Complyze: Close button clicked');
+        panel.remove();
       });
 
-      // Close on ESC key
-      const escHandler = (e) => {
-        if (e.key === 'Escape') {
-          closeModal();
-          document.removeEventListener('keydown', escHandler);
-        }
-      };
-      document.addEventListener('keydown', escHandler);
-
-      copyButton.addEventListener('click', async () => {
+      panel.querySelector('#complyze-copy-safe').addEventListener('click', async () => {
+        const safeText = panel.querySelector('#complyze-safe-text').value;
         try {
-          await navigator.clipboard.writeText(safePrompt);
-          const originalText = copyButton.textContent;
-          copyButton.textContent = '✅ Copied!';
-          copyButton.style.background = '#10b981';
+          await navigator.clipboard.writeText(safeText);
+          const button = panel.querySelector('#complyze-copy-safe');
+          const originalText = button.textContent;
+          button.textContent = '✅ Copied!';
+          button.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
           setTimeout(() => {
-            copyButton.textContent = originalText;
-            copyButton.style.background = '#3b82f6';
+            button.textContent = originalText;
+            button.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
           }, 2000);
           console.log('Complyze: Text copied to clipboard');
         } catch (err) {
@@ -1392,9 +1403,9 @@ class PromptWatcher {
         }
       });
 
-      useButton.addEventListener('click', () => {
+      panel.querySelector('#complyze-use-safe').addEventListener('click', () => {
         console.log('Complyze: Use safe version clicked');
-        const safeText = safePrompt;
+        const safeText = panel.querySelector('#complyze-safe-text').value;
         
         // ENHANCED: Mark this safe prompt to avoid re-analysis
         const safeHash = this.createSafeHash(safeText);
@@ -1420,8 +1431,8 @@ class PromptWatcher {
         // ENHANCED: Force clear any existing warnings and show success indicator
         this.showSafePromptConfirmation(promptElement);
 
-        // Close modal
-        closeModal();
+        // Close panel
+        panel.remove();
 
         // Focus back on the prompt element
         promptElement.focus();
@@ -1439,13 +1450,21 @@ class PromptWatcher {
           selection.addRange(range);
         }
         
-        console.log('Complyze: Safe text applied, warnings cleared, and modal closed');
+        console.log('Complyze: Safe text applied, warnings cleared, and panel closed');
       });
+
+      // Close panel when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!panel.contains(e.target) && !e.target.closest('#complyze-realtime-warning')) {
+          console.log('Complyze: Clicked outside panel, closing');
+          panel.remove();
+        }
+      }, { once: true });
       
-      console.log('Complyze: Modal created successfully!');
+      console.log('Complyze: Side panel created successfully!');
       
     } catch (error) {
-      console.error('Complyze: Error creating modal:', error);
+      console.error('Complyze: Error creating side panel:', error);
       // Fallback: show alert with safe prompt
       const originalPrompt = this.getPromptText(promptElement);
       const safePrompt = this.generateSafePrompt(originalPrompt, analysis);
