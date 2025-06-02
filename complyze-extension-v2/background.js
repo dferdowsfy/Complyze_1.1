@@ -289,6 +289,31 @@ class ComplyzeBackground {
             user: this.user 
           });
           break;
+          
+        case 'set_auth_data':
+          try {
+            console.log('Complyze: Received auth data from content script:', message.data);
+            
+            if (message.data.accessToken) {
+              this.accessToken = message.data.accessToken;
+            }
+            if (message.data.user) {
+              this.user = message.data.user;
+            }
+            
+            // Store in Chrome storage
+            await chrome.storage.local.set({
+              accessToken: this.accessToken,
+              user: this.user
+            });
+            
+            console.log('Complyze: Auth data updated successfully');
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('Complyze: Error setting auth data:', error);
+            sendResponse({ success: false, error: error.message });
+          }
+          break;
 
         case 'get_dashboard_url':
           sendResponse({ 
