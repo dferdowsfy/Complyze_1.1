@@ -17,6 +17,7 @@ declare global {
       getRecentActivity: () => Promise<any>;
       onAppDetected: (callback: (data: any) => void) => void;
       onPromptProcessed: (callback: (data: any) => void) => void;
+      onMonitoringToggled: (callback: (data: any) => void) => void;
       testSimpleNotification: () => Promise<any>;
       testInputDetection: () => Promise<any>;
       testNotification: () => Promise<any>;
@@ -148,10 +149,30 @@ function App() {
       setRecentActivity(prev => [clipboardActivity, ...prev.slice(0, 9)]);
     };
     
+    const handleMonitoringToggled = (data: any) => {
+      console.log('Monitoring toggled:', data);
+      setMonitoringEnabled(data.enabled);
+      
+      // Update active monitoring status
+      window.electronAPI.getActiveMonitoring().then(setActiveMonitoring);
+      
+      // Add to recent activity
+      const monitoringActivity = {
+        sourceApp: 'System',
+        timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString(),
+        data: {
+          action: `Monitoring ${data.enabled ? 'enabled' : 'disabled'}`,
+          source: 'Tray Menu or Settings'
+        }
+      };
+      setRecentActivity(prev => [monitoringActivity, ...prev.slice(0, 9)]);
+    };
+    
     // Add event listeners
     if (window.electronAPI) {
       window.electronAPI.onAppDetected(handleAppDetected);
       window.electronAPI.onPromptProcessed(handlePromptProcessed);
+      window.electronAPI.onMonitoringToggled(handleMonitoringToggled);
     }
     
     // Cleanup function

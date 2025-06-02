@@ -258,7 +258,7 @@ function createMainWindow(): void {
  */
 function createTray(): void {
   try {
-    const iconPath = getIconPath();
+    const iconPath = getIconPath(true); // true = for tray use
     if (!iconPath) {
       console.warn('No icon path available, skipping tray creation');
       return;
@@ -285,16 +285,36 @@ function createTray(): void {
           }
         },
       },
-      {
-        label: isMonitoringEnabled() ? 'Disable Monitoring' : 'Enable Monitoring',
-        type: 'normal',
-        click: () => {
-          const currentStatus = isMonitoringEnabled();
-          store.set('monitoring.enabled', !currentStatus);
-          updateTrayMenu();
-          log.info(`Monitoring ${!currentStatus ? 'enabled' : 'disabled'}`);
-        },
+          {
+      label: isMonitoringEnabled() ? 'Disable Monitoring' : 'Enable Monitoring',
+      type: 'normal',
+      click: () => {
+        const currentStatus = isMonitoringEnabled();
+        const newStatus = !currentStatus;
+        
+        store.set('monitoring.enabled', newStatus);
+        
+        // Actually start/stop monitoring system
+        if (newStatus) {
+          startMonitoring();
+        } else {
+          stopMonitoring();
+        }
+        
+        // Update tray menu to reflect new state
+        updateTrayMenu();
+        
+        // Notify main window of monitoring state change
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('monitoring-toggled', {
+            enabled: newStatus,
+            timestamp: Date.now()
+          });
+        }
+        
+        log.info(`Monitoring ${newStatus ? 'enabled' : 'disabled'} via tray menu`);
       },
+    },
       { type: 'separator' },
       {
         label: 'Quit',
@@ -358,9 +378,29 @@ function updateTrayMenu(): void {
       type: 'normal',
       click: () => {
         const currentStatus = isMonitoringEnabled();
-        store.set('monitoring.enabled', !currentStatus);
+        const newStatus = !currentStatus;
+        
+        store.set('monitoring.enabled', newStatus);
+        
+        // Actually start/stop monitoring system
+        if (newStatus) {
+          startMonitoring();
+        } else {
+          stopMonitoring();
+        }
+        
+        // Update tray menu to reflect new state
         updateTrayMenu();
-        log.info(`Monitoring ${!currentStatus ? 'enabled' : 'disabled'}`);
+        
+        // Notify main window of monitoring state change
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('monitoring-toggled', {
+            enabled: newStatus,
+            timestamp: Date.now()
+          });
+        }
+        
+        log.info(`Monitoring ${newStatus ? 'enabled' : 'disabled'} via tray menu`);
       },
     },
     { type: 'separator' },
@@ -379,12 +419,19 @@ function updateTrayMenu(): void {
 }
 
 /**
- * Get icon path based on platform
+ * Get icon path based on platform and usage (tray vs window)
  */
-function getIconPath(): string {
+function getIconPath(forTray: boolean = false): string {
   const isDevelopment = process.env.NODE_ENV === 'development';
-  // Use 512px icon for better quality in dock
-  const iconName = os.platform() === 'darwin' ? 'icon-512.png' : 'icon.png';
+  
+  let iconName: string;
+  if (forTray) {
+    // Use appropriately sized tray icons for menu bar
+    iconName = os.platform() === 'darwin' ? 'tray-icon-36px.png' : 'tray-icon.png';
+  } else {
+    // Use high-res icon for dock/window
+    iconName = os.platform() === 'darwin' ? 'icon-512.png' : 'icon.png';
+  }
   
   // In development, use the absolute path to the assets directory
   const iconPath = path.join(__dirname, '..', 'assets', iconName);
@@ -615,7 +662,16 @@ ipcMain.handle('toggle-monitoring', () => {
   }
   
   updateTrayMenu();
-  log.info(`Monitoring ${newStatus ? 'enabled' : 'disabled'}`);
+  
+  // Notify main window of monitoring state change
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('monitoring-toggled', {
+      enabled: newStatus,
+      timestamp: Date.now()
+    });
+  }
+  
+  log.info(`Monitoring ${newStatus ? 'enabled' : 'disabled'} via IPC`);
   
   return newStatus;
 });
@@ -887,36 +943,46 @@ ipcMain.on('close-notification', (event) => {
   }
 });
 
-ipcMain.on('clipboard-action', (event, data) => {
-  console.log('Complyze Debug: Received clipboard-action:', data);
+// Add handler for clipboard actions
+ipcMain.on('clipboard-action', (event, actionData) => {
+  console.log('Complyze Debug: Received clipboard action:', actionData);
+  
   try {
-    switch (data.action) {
+    switch (actionData.action) {
       case 'clear':
         clipboard.writeText('');
         console.log('Complyze Debug: Clipboard cleared by user choice');
         break;
       case 'replace':
-        if (data.content) {
-          clipboard.writeText(data.content);
-          console.log('Complyze Debug: Clipboard replaced with safe version');
-          console.log('Complyze Debug: New clipboard content:', data.content.substring(0, 100) + '...');
+        if (actionData.content) {
+          clipboard.writeText(actionData.content);
+          console.log('Complyze Debug: Clipboard replaced with enhanced version');
         }
         break;
       case 'keep':
-        // Do nothing - just keep the original content as is
-        console.log('Complyze Debug: User chose to keep original clipboard content (no action taken)');
+        console.log('Complyze Debug: User chose to keep original clipboard content');
         break;
       default:
-        console.log('Complyze Debug: Unknown clipboard action:', data.action);
+        console.log('Complyze Debug: Unknown clipboard action:', actionData.action);
     }
   } catch (error) {
     console.error('Complyze Debug: Error handling clipboard action:', error);
   }
 });
 
+// Add handler for dashboard opening
 ipcMain.on('open-dashboard-from-notification', async (event) => {
   try {
-    await shell.openExternal(`${AUTH_CONFIG.DASHBOARD_URL}?token=${store.get('auth.token')}`);
+    const auth = store.get('auth');
+    
+    if (auth.token && auth.user) {
+      const dashboardUrl = `${AUTH_CONFIG.DASHBOARD_URL}?token=${auth.token}`;
+      await shell.openExternal(dashboardUrl);
+      console.log('Complyze Debug: Dashboard opened from notification');
+    } else {
+      console.log('Complyze Debug: No auth token available, opening main dashboard');
+      await shell.openExternal(AUTH_CONFIG.DASHBOARD_URL);
+    }
   } catch (error) {
     console.error('Failed to open dashboard from notification:', error);
   }
@@ -927,6 +993,9 @@ app.whenReady().then(() => {
   // Initialize logging
   log.initialize();
   log.info('Complyze Desktop Agent starting...');
+
+  // Initialize API clients with production endpoints
+  initializeAPIClients();
 
   // Create tray first (always visible)
   createTray();
@@ -2496,17 +2565,9 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
     
     console.log(`Complyze Debug: Risk score: ${riskScore}, Redactions: ${redactionResult.redactionDetails.length}`);
     
-    // Use local optimization first (matching Chrome extension), then enhance if needed
-    const localOptimizedPrompt = redactionResult.optimizedText;
-    console.log(`Complyze Debug: Local optimization: "${localOptimizedPrompt.substring(0, 100)}..."`);
-    
-    // Generate enhancement for all prompts (fallback to API enhancement)
+    // Generate enhancement for all prompts
     const enhancementResult = await enhancePrompt(promptText);
-    console.log(`Complyze Debug: API Enhancement generated: ${enhancementResult.enhancedPrompt ? 'YES' : 'NO'}`);
-    
-    // Use local optimization as primary, API enhancement as fallback
-    const finalOptimizedPrompt = localOptimizedPrompt !== promptText ? localOptimizedPrompt : enhancementResult.enhancedPrompt;
-    console.log(`Complyze Debug: Using ${localOptimizedPrompt !== promptText ? 'LOCAL' : 'API'} optimization`);
+    console.log(`Complyze Debug: Enhancement generated: ${enhancementResult.enhancedPrompt ? 'YES' : 'NO'}`);
     
     // Expanded sensitive data detection
     const allSensitivePatterns = [
@@ -2558,12 +2619,9 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
           riskScore: Math.max(riskScore, 60), // Ensure visibility
           redactionDetails: redactionResult.redactionDetails,
           sourceApp: sourceApp,
-          enhancedPrompt: finalOptimizedPrompt,
+          enhancedPrompt: enhancementResult.enhancedPrompt,
           blockingMode: true,
-          enhancementResult: {
-            ...enhancementResult,
-            enhancedPrompt: finalOptimizedPrompt // Use local optimization
-          },
+          enhancementResult,
           isLiveInput: true,
           securityInsights: securityInsights ?? null,
           enhancedRedactionDetails: enhancedRedactionDetails ?? []
@@ -2572,8 +2630,8 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
         console.log(`Complyze Debug: BLOCKING notification shown, user choice: ${userChoice}`);
         
         // If user chose to replace, update the text field
-        if (userChoice === 'replace' && finalOptimizedPrompt) {
-          await replaceTextInActiveApp(finalOptimizedPrompt, sourceApp);
+        if (userChoice === 'replace' && enhancementResult.enhancedPrompt) {
+          await replaceTextInActiveApp(enhancementResult.enhancedPrompt, sourceApp);
         }
       } else {
         // For all other content, show non-blocking notification
@@ -2582,12 +2640,9 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
           riskScore: Math.max(riskScore, 35), // Ensure visibility
           redactionDetails: redactionResult.redactionDetails,
           sourceApp: sourceApp,
-          enhancedPrompt: finalOptimizedPrompt,
+          enhancedPrompt: enhancementResult.enhancedPrompt,
           blockingMode: false,
-          enhancementResult: {
-            ...enhancementResult,
-            enhancedPrompt: finalOptimizedPrompt // Use local optimization
-          },
+          enhancementResult,
           isLiveInput: true
         });
         
@@ -2603,10 +2658,10 @@ async function processDetectedPrompt(promptText: string, sourceApp: string): Pro
           riskScore: 50,
           redactionDetails: [],
           sourceApp: sourceApp,
-          enhancedPrompt: localOptimizedPrompt || 'Error processing prompt - please check console',
+          enhancedPrompt: 'Error processing prompt - please check console',
           blockingMode: false,
           enhancementResult: {
-            enhancedPrompt: localOptimizedPrompt || 'Error processing prompt',
+            enhancedPrompt: 'Error processing prompt',
             improvements: ['Error occurred during processing'],
             detectedIntent: 'Unknown',
             optimizationReason: 'Error occurred',
@@ -2700,6 +2755,33 @@ async function replaceTextInActiveApp(newText: string, appName: string): Promise
 
 log.info('Complyze Desktop Agent initialized'); 
 
+/**
+ * Initialize API clients with production endpoints
+ */
+function initializeAPIClients(): void {
+  try {
+    // Initialize the dispatch API client with production endpoint
+    const dispatchAPI = require('./shared/dispatch');
+    if (dispatchAPI && dispatchAPI.APIDispatcher) {
+      // Force production API URL
+      process.env.COMPLYZE_API_URL = 'https://complyze.co/api';
+      console.log('Complyze Debug: API clients initialized with production endpoint:', process.env.COMPLYZE_API_URL);
+    }
+    
+    // Ensure OpenRouter API key is available
+    if (!process.env.OPENROUTER_API_KEY) {
+      console.warn('Complyze Debug: OPENROUTER_API_KEY not found in environment - will use fallback key');
+    } else {
+      console.log('Complyze Debug: OpenRouter API key found in environment');
+    }
+    
+    log.info('API clients initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize API clients:', error);
+    log.error('API client initialization failed:', error);
+  }
+}
+
 // Test input detection from main window
 ipcMain.handle('test-input-detection', async (event) => {
   try {
@@ -2747,6 +2829,57 @@ ipcMain.handle('test-simple-notification', async (event) => {
     return { success: false, error: (error as Error).message };
   }
 });
+
+// Test prompt optimization logic
+ipcMain.handle('test-prompt-optimization', async (event) => {
+  try {
+    console.log('Complyze Debug: *** TESTING PROMPT OPTIMIZATION LOGIC ***');
+    
+    await testPromptOptimization();
+    
+    return { success: true, message: 'Prompt optimization test completed - check console for results' };
+  } catch (error) {
+    console.error('Prompt optimization test error:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+// Debug function to test prompt optimization without full pipeline
+async function testPromptOptimization(): Promise<void> {
+  try {
+    console.log('Complyze Debug: Testing prompt enhancement directly...');
+    
+    const testPrompt = "Can you help me send an email to john.doe@company.com about account ssn 123-45-6789?";
+    console.log(`Complyze Debug: Test prompt: "${testPrompt}"`);
+    
+    // Import and test the prompt enhancer directly
+    const { optimizePrompt } = require('./shared/promptEnhancer');
+    
+    console.log('Complyze Debug: Calling optimizePrompt...');
+    const result = await optimizePrompt(testPrompt);
+    
+    console.log('Complyze Debug: Enhancement result:', JSON.stringify(result, null, 2));
+    
+    // Test notification creation with this result
+    console.log('Complyze Debug: Creating test notification...');
+    const notificationResult = await createNotificationWindow({
+      prompt: testPrompt,
+      riskScore: result.risk_score || 75,
+      redactionDetails: result.redaction_details || [],
+      sourceApp: 'Test System',
+      enhancedPrompt: result.enhanced_prompt || testPrompt,
+      blockingMode: result.risk_score > 70,
+      enhancementResult: result,
+      isLiveInput: true
+    });
+    
+    console.log('Complyze Debug: Notification result:', notificationResult);
+    
+  } catch (error) {
+    console.error('Complyze Debug: Test optimization error:', error);
+    throw error;
+  }
+}
 
 /**
  * Generate a simple hash for content to track notifications

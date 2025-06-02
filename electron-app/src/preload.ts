@@ -25,10 +25,20 @@ export interface ElectronAPI {
 
   // Events
   onPromptProcessed: (callback: (data: any) => void) => void;
+  onMonitoringToggled: (callback: (data: any) => void) => void;
   removeAllListeners: (channel: string) => void;
 
   // Internal monitoring (for capturing prompts)
   reportPrompt: (data: { prompt: string; sourceApp: string }) => Promise<void>;
+
+  // Tray dropdown methods
+  getFlaggedPrompts: () => Promise<any[]>;
+  copyToClipboard: (text: string) => Promise<{ success: boolean; error?: string }>;
+  markPromptAsSafe: (promptId: string) => Promise<{ success: boolean; error?: string }>;
+  dismissPrompt: (promptId: string) => Promise<{ success: boolean; error?: string }>;
+  openSettings: () => Promise<{ success: boolean; error?: string }>;
+  closeTrayDropdown: () => void;
+  showMainWindow: () => void;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -43,7 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Add the missing test notification handlers
   testSimpleNotification: () => ipcRenderer.invoke('test-simple-notification'),
   testInputDetection: () => ipcRenderer.invoke('test-input-detection'),
-  testNotification: () => ipcRenderer.invoke('test-notification'),
+  testNotification: () => ipcRenderer.invoke('test-prompt-optimization'),
   
   // Add the missing reportPrompt method
   reportPrompt: (data: { prompt: string; sourceApp: string }) => ipcRenderer.invoke('prompt-captured', data),
@@ -64,7 +74,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onPromptProcessed: (callback: (data: any) => void) => {
     ipcRenderer.on('prompt-processed', (event, data) => callback(data));
-  }
+  },
+  onMonitoringToggled: (callback: (data: any) => void) => {
+    ipcRenderer.on('monitoring-toggled', (event, data) => callback(data));
+  },
+
+  // Tray dropdown methods
+  getFlaggedPrompts: () => ipcRenderer.invoke('get-flagged-prompts'),
+  copyToClipboard: (text: string) => ipcRenderer.invoke('copy-to-clipboard', text),
+  markPromptAsSafe: (promptId: string) => ipcRenderer.invoke('mark-prompt-as-safe', promptId),
+  dismissPrompt: (promptId: string) => ipcRenderer.invoke('dismiss-prompt', promptId),
+  openSettings: () => ipcRenderer.invoke('open-settings'),
+  closeTrayDropdown: () => ipcRenderer.send('close-tray-dropdown'),
+  showMainWindow: () => ipcRenderer.send('show-main-window'),
+  
+  // Test methods
+  testAddFlaggedPrompt: () => ipcRenderer.invoke('test-add-flagged-prompt')
 });
 
 // Inject prompt monitoring script into web pages

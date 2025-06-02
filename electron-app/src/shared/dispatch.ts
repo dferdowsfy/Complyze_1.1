@@ -30,8 +30,8 @@ class ComplyzeApiClient {
   private apiKey?: string;
 
   constructor() {
-    // Default to localhost for development
-    this.baseUrl = process.env.COMPLYZE_API_URL || 'http://localhost:3000/api';
+    // Default to production API for Complyze
+    this.baseUrl = process.env.COMPLYZE_API_URL || 'https://complyze.co/api';
   }
 
   setApiKey(apiKey: string) {

@@ -26,7 +26,7 @@ class PromptWatcher {
       },
       'claude.ai': {
         promptInput: 'div[contenteditable="true"], textarea[placeholder*="Talk to Claude"], div[data-testid="composer-input"], div[role="textbox"], div[contenteditable="true"][data-testid], .ProseMirror, div[contenteditable="true"].ProseMirror',
-        submitButton: 'button[aria-label="Send Message"], button:has(svg[data-icon="send"]), button[data-testid="send-button"], button:has(svg), button[type="submit"], button[aria-label*="Send"], button:contains("Send")',
+        submitButton: 'button[aria-label="Send Message"], button:has(svg[data-icon="send"]), button[data-testid="send-button"], button:has(svg), button[type="submit"], button[aria-label*="Send"], button[title*="Send"]',
         loginCheck: '[data-testid="user-menu"], .user-avatar, button[aria-label*="User"], [data-testid="profile-button"], button[aria-label*="Account"], .avatar'
       },
       'gemini.google.com': {
@@ -36,7 +36,7 @@ class PromptWatcher {
       },
       'complyze.co': {
         promptInput: 'textarea, input[type="text"], div[contenteditable="true"], [role="textbox"]',
-        submitButton: 'button[type="submit"], button:contains("Send"), button:contains("Submit"), .submit-btn',
+        submitButton: 'button[type="submit"], button.submit-btn, .submit-btn, button[aria-label*="Send"], button[aria-label*="Submit"]',
         loginCheck: '.user-menu, [data-testid="user-menu"], .logout-btn, .user-avatar'
       }
     };
@@ -246,10 +246,7 @@ class PromptWatcher {
   getCurrentPlatform() {
     const hostname = window.location.hostname;
     
-    // Special handling for localhost development
-    if (hostname === 'localhost') {
-      return 'complyze.co'; // Treat localhost as complyze.co for development
-    }
+    // Production-only: no localhost handling
     
     return Object.keys(this.platformSelectors).find(platform => 
       hostname === platform || hostname.endsWith(platform.replace('*.', ''))
@@ -616,6 +613,10 @@ class PromptWatcher {
 
   // NEW: Perform real-time analysis without sending the prompt
   async performRealTimeAnalysis(promptText, promptElement) {
+    console.log('Complyze: 🎯 performRealTimeAnalysis CALLED');
+    console.log('Complyze: 📝 Prompt text preview:', promptText.substring(0, 100) + '...');
+    console.log('Complyze: 🎯 Prompt element:', promptElement);
+    
     // Skip analysis for safe prompts
     const promptHash = this.createSafeHash(promptText);
     if (this.safePrompts.has(promptHash)) {
@@ -631,16 +632,48 @@ class PromptWatcher {
     try {
       // First, perform quick local analysis
       const localAnalysis = this.performQuickLocalAnalysis(promptText);
-      console.log('Complyze: Local analysis result:', localAnalysis);
+      console.log('Complyze: 📊 LOCAL ANALYSIS COMPLETE:', {
+        risk_level: localAnalysis.risk_level,
+        detectedPII: localAnalysis.detectedPII,
+        detectedCount: localAnalysis.detectedPII?.length || 0,
+        fullResult: localAnalysis
+      });
       
-      // If local analysis finds issues, show warning immediately
-      if (localAnalysis.risk_level === 'high' || localAnalysis.risk_level === 'critical') {
-        this.hideLoadingIndicator(promptElement);
-        this.showRealTimeWarning(promptElement, localAnalysis, false);
+      // IMMEDIATE BLOCKING: If sensitive data is detected, block immediately
+      console.log('Complyze: 🔍 CHECKING BLOCKING CONDITIONS:', {
+        risk_level: localAnalysis.risk_level,
+        isHigh: localAnalysis.risk_level === 'high',
+        isCritical: localAnalysis.risk_level === 'critical',
+        detectedPII: localAnalysis.detectedPII,
+        detectedPIILength: localAnalysis.detectedPII?.length || 0,
+        shouldBlock: localAnalysis.risk_level === 'high' || localAnalysis.risk_level === 'critical' || 
+                    (localAnalysis.detectedPII && localAnalysis.detectedPII.length > 0)
+      });
+      
+      if (localAnalysis.risk_level === 'high' || localAnalysis.risk_level === 'critical' || 
+          (localAnalysis.detectedPII && localAnalysis.detectedPII.length > 0)) {
         
-        // Still try server analysis in background for better results
+        console.log('Complyze: 🚨 IMMEDIATE BLOCKING - Sensitive data detected!');
+        console.log('Complyze: 🎯 BLOCKING CONDITIONS MET - Starting AI optimization flow');
+        
+        // BLOCK USER IMMEDIATELY
+        this.preventSubmission = true;
+        this.blockSubmitButtons(true);
+        
+        // Hide loading and show blocking warning
+        this.hideLoadingIndicator(promptElement);
+        this.showRealTimeWarning(promptElement, localAnalysis, true); // true = blocking mode
+        
+        // Show AI optimization progress
+        console.log('Complyze: 🔄 Showing AI optimization progress indicator');
+        this.showAIOptimizationProgress(promptElement);
+        
+        // Trigger AI optimization in background
+        console.log('Complyze: 🚀 Calling performServerAnalysisBackground');
         this.performServerAnalysisBackground(promptText, promptElement, localAnalysis);
         return;
+      } else {
+        console.log('Complyze: ✅ NO IMMEDIATE BLOCKING NEEDED - Risk level too low');
       }
       
       // If local analysis is clean, try server analysis
@@ -686,24 +719,91 @@ class PromptWatcher {
     }
   }
 
-  // NEW: Background server analysis for better UX
+  // NEW: Background server analysis and AI optimization for better UX
   async performServerAnalysisBackground(promptText, promptElement, fallbackAnalysis) {
     try {
-      const serverAnalysis = await this.performServerAnalysis(promptText);
+      console.log('Complyze: Starting background server analysis and AI optimization...');
       
-      // If server analysis provides better results, update the warning
-      if (serverAnalysis && serverAnalysis.detectedPII && serverAnalysis.detectedPII.length > fallbackAnalysis.detectedPII.length) {
-        console.log('Complyze: Server analysis found more issues, updating warning');
+      // Show progress indicator immediately since we know AI optimization will take 15-25 seconds
+      console.log('Complyze: 🚀 Starting AI optimization process - showing progress indicator');
+      
+      // Send to background script for full analysis AND AI optimization
+      // The background script will handle all timing delays (15-25 seconds total)
+      const messagePayload = {
+        type: 'analyze_prompt',
+        payload: {
+          prompt: promptText,
+          platform: this.getCurrentPlatform(),
+          url: window.location.href,
+          timestamp: new Date().toISOString(),
+          triggerOptimization: true // NEW: Request AI optimization
+        }
+      };
+      
+      console.log('Complyze: 📤 SENDING MESSAGE TO BACKGROUND:', messagePayload);
+      const response = await chrome.runtime.sendMessage(messagePayload);
+      console.log('Complyze: 📥 RECEIVED RESPONSE FROM BACKGROUND:', response);
+      
+      console.log('Complyze: ⏱️ Background AI optimization completed, response received');
+      
+      if (response && response.success) {
+        console.log('Complyze: Background server analysis completed');
         
-        // Remove old warning and show updated one
-        const existingWarning = document.querySelector('#complyze-realtime-warning');
-        if (existingWarning) {
-          existingWarning.remove();
-          this.showRealTimeWarning(promptElement, serverAnalysis, true);
+        // Always hide the progress indicator first
+        console.log('Complyze: 🎯 Hiding AI optimization progress indicator');
+        this.hideAIOptimizationProgress();
+        
+        // If we have an optimized prompt, update the UI immediately
+        if (response.optimizedPrompt) {
+          console.log('Complyze: ✨ AI optimization completed, updating UI with safe prompt');
+          
+          // Update the warning panel with the optimized prompt
+          const analysis = response.analysis || fallbackAnalysis;
+          analysis.optimized_prompt = response.optimizedPrompt;
+          analysis.optimization_details = response.optimizationDetails;
+          
+          // Only update if no modal is open
+          if (!document.querySelector('#complyze-safe-prompt-modal')) {
+            const existingWarning = document.querySelector('#complyze-realtime-warning');
+            if (existingWarning) {
+              existingWarning.remove();
+            }
+            this.showRealTimeWarning(promptElement, analysis, true);
+          }
+        } else if (response.analysis && 
+                   response.analysis.detectedPII && 
+                   response.analysis.detectedPII.length > fallbackAnalysis.detectedPII.length &&
+                   !document.querySelector('#complyze-safe-prompt-modal')) {
+          
+          console.log('Complyze: Server analysis found more issues, updating warning');
+          
+          // Remove old warning and show updated one ONLY if no modal exists
+          const existingWarning = document.querySelector('#complyze-realtime-warning');
+          if (existingWarning) {
+            existingWarning.remove();
+            this.showRealTimeWarning(promptElement, response.analysis, true);
+          }
         }
       }
     } catch (error) {
-      console.log('Complyze: Background server analysis failed, keeping local results');
+      console.log('Complyze: Background server analysis failed, generating fallback safe prompt');
+      
+      // Always hide the progress indicator on error
+      console.log('Complyze: 🎯 Hiding AI optimization progress indicator (error case)');
+      this.hideAIOptimizationProgress();
+      
+      // Fallback: Generate local safe prompt if server fails
+      const safePrompt = this.generateSafePrompt(promptText, fallbackAnalysis);
+      fallbackAnalysis.optimized_prompt = safePrompt;
+      
+      // Only update if no modal is open
+      if (!document.querySelector('#complyze-safe-prompt-modal')) {
+        const existingWarning = document.querySelector('#complyze-realtime-warning');
+        if (existingWarning) {
+          existingWarning.remove();
+        }
+        this.showRealTimeWarning(promptElement, fallbackAnalysis, true);
+      }
     }
   }
 
@@ -1710,6 +1810,116 @@ class PromptWatcher {
     const existingLoading = document.querySelector('#complyze-loading-indicator');
     if (existingLoading) {
       existingLoading.remove();
+    }
+  }
+
+  // NEW: Show AI optimization progress indicator
+  showAIOptimizationProgress(promptElement) {
+    const progressId = 'complyze-ai-progress';
+    
+    // Remove any existing progress indicator
+    const existing = document.getElementById(progressId);
+    if (existing) existing.remove();
+    
+    const progress = document.createElement('div');
+    progress.id = progressId;
+    
+    const rect = promptElement.getBoundingClientRect();
+    
+    progress.style.cssText = `
+      position: fixed;
+      top: ${rect.top - 80}px;
+      left: ${rect.left}px;
+      width: ${rect.width}px;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: white;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      z-index: 999999;
+      animation: slideDown 0.3s ease-out;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    `;
+    
+    progress.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <div>
+          <div style="font-weight: 600; margin-bottom: 2px;">🤖 AI Optimization in Progress</div>
+          <div style="font-size: 12px; opacity: 0.9;" id="progress-status">Analyzing sensitive data patterns...</div>
+        </div>
+      </div>
+    `;
+    
+    // Add CSS animation for spinner
+    if (!document.getElementById('complyze-spinner-style')) {
+      const style = document.createElement('style');
+      style.id = 'complyze-spinner-style';
+      style.textContent = `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(progress);
+    
+    // Position update function
+    const updatePosition = () => {
+      const newRect = promptElement.getBoundingClientRect();
+      progress.style.top = `${newRect.top - 80}px`;
+      progress.style.left = `${newRect.left}px`;
+      progress.style.width = `${newRect.width}px`;
+    };
+    
+    // Update position on scroll/resize
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+    
+    // Update progress status messages
+    const statusElement = progress.querySelector('#progress-status');
+    const statusMessages = [
+      'Analyzing sensitive data patterns...',
+      'Detecting compliance requirements...',
+      'Fetching optimization insights...',
+      'Generating secure alternatives...',
+      'Applying AI-powered optimization...',
+      'Finalizing secure prompt...'
+    ];
+    
+    let messageIndex = 0;
+    const statusInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % statusMessages.length;
+      if (statusElement) {
+        statusElement.textContent = statusMessages[messageIndex];
+      }
+    }, 2500);
+    
+    // Store cleanup function
+    progress._cleanup = () => {
+      clearInterval(statusInterval);
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+      if (progress.parentNode) {
+        progress.remove();
+      }
+    };
+    
+    // Auto-cleanup after 30 seconds (fallback)
+    setTimeout(() => {
+      if (progress._cleanup) progress._cleanup();
+    }, 30000);
+  }
+
+  // NEW: Hide AI optimization progress indicator
+  hideAIOptimizationProgress() {
+    const progress = document.getElementById('complyze-ai-progress');
+    if (progress && progress._cleanup) {
+      progress._cleanup();
     }
   }
 

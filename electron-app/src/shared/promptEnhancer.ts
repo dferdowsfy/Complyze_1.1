@@ -1,8 +1,6 @@
 // Prompt Enhancer for Complyze Desktop Agent
-// Creates optimized prompts using local optimization (matching Chrome extension) with OpenRouter API fallback
+// Creates optimized prompts using OpenRouter API with Gemini 2.5 Pro
 // Based on best practices from Anthropic Claude 4 and Google Gemini strategies
-
-import { generateSafePrompt } from './redactionEngine';
 
 export interface PromptEnhancementResult {
   originalPrompt: string;
@@ -19,7 +17,7 @@ export interface PromptEnhancementResult {
 
 // OpenRouter API configuration
 const OPENROUTER_CONFIG = {
-  apiKey: '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',
+  apiKey: process.env.OPENROUTER_API_KEY || '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',
   model: 'google/gemini-2.5-pro-preview',
   baseUrl: 'https://openrouter.ai/api/v1/chat/completions'
 };
@@ -225,63 +223,37 @@ export function shouldTriggerOptimization(content: string): boolean {
 }
 
 /**
- * Creates an optimized prompt using local optimization (matching Chrome extension) with OpenRouter API fallback
+ * Creates an optimized prompt using OpenRouter API with Gemini 2.5 Pro
  */
 export async function enhancePrompt(originalPrompt: string): Promise<PromptEnhancementResult> {
-  console.log('Complyze: Enhancing prompt with local optimization:', originalPrompt.substring(0, 100) + '...');
+  console.log('Complyze: Enhancing prompt with OpenRouter API:', originalPrompt.substring(0, 100) + '...');
   
   try {
-    // STEP 1: Use local optimization first (matching Chrome extension approach)
-    const localOptimizedPrompt = generateSafePrompt(originalPrompt);
-    
-    // STEP 2: Detect and analyze sensitive data for reporting
+    // Detect and remove sensitive data first
     const { cleanedPrompt, sensitiveDataRemoved, complianceFrameworks, aiRiskIndicators } = removeSensitiveData(originalPrompt);
     
-    // STEP 3: Analyze prompt intent
+    // Analyze prompt intent
     const intent = analyzePromptIntent(cleanedPrompt);
     
-    // STEP 4: Create result using local optimization
-    const result: PromptEnhancementResult = {
-      originalPrompt,
-      enhancedPrompt: localOptimizedPrompt,
-      clarityScore: 85, // High score for local optimization
-      qualityScore: 90, // High score for local optimization
-      improvements: [
-        'Sensitive data rephrased with contextual alternatives',
-        'Maintained original intent while improving security',
-        'Applied consistent optimization patterns',
-        'Enhanced prompt structure and clarity'
-      ],
-      detectedIntent: `${intent.type} - ${intent.category}`,
-      optimizationReason: 'Local optimization applied to rephrase sensitive content naturally',
-      sensitiveDataRemoved,
-      complianceFrameworks,
-      aiRiskIndicators
-    };
+    // Create the optimization prompt based on best practices
+    const optimizationPrompt = createOptimizationPrompt(cleanedPrompt, intent);
     
-    console.log('Complyze: Local prompt optimization completed successfully');
+    // Call OpenRouter API
+    const apiResponse = await callOpenRouterAPI(optimizationPrompt);
+    
+    if (!apiResponse.success || !apiResponse.content) {
+      throw new Error(`API call failed: ${apiResponse.error || 'No content returned'}`);
+    }
+    
+    const result = parseOptimizationResponse(apiResponse.content, originalPrompt, cleanedPrompt, intent, sensitiveDataRemoved, complianceFrameworks, aiRiskIndicators);
+    
+    console.log('Complyze: Prompt optimization completed successfully');
     return result;
     
   } catch (error) {
-    console.error('Complyze: Error with local optimization, trying API fallback:', error);
+    console.error('Complyze: Error enhancing prompt:', error);
     
-    try {
-      // FALLBACK: Use OpenRouter API if local optimization fails
-      const { cleanedPrompt, sensitiveDataRemoved, complianceFrameworks, aiRiskIndicators } = removeSensitiveData(originalPrompt);
-      const intent = analyzePromptIntent(cleanedPrompt);
-      const optimizationPrompt = createOptimizationPrompt(cleanedPrompt, intent);
-      const apiResponse = await callOpenRouterAPI(optimizationPrompt);
-      
-      if (apiResponse.success && apiResponse.content) {
-        const result = parseOptimizationResponse(apiResponse.content, originalPrompt, cleanedPrompt, intent, sensitiveDataRemoved, complianceFrameworks, aiRiskIndicators);
-        console.log('Complyze: API fallback optimization completed successfully');
-        return result;
-      }
-    } catch (apiError) {
-      console.error('Complyze: API fallback also failed:', apiError);
-    }
-    
-    // FINAL FALLBACK: Basic optimization
+    // Fallback to basic optimization if API fails
     return createFallbackOptimization(originalPrompt);
   }
 }
@@ -557,10 +529,94 @@ Be concise but thorough in your optimization.`;
 }
 
 /**
+ * Create fallback optimization if API fails
+ */
+function createFallbackOptimization(originalPrompt: string): PromptEnhancementResult {
+  const { cleanedPrompt, sensitiveDataRemoved, complianceFrameworks, aiRiskIndicators } = removeSensitiveData(originalPrompt);
+  const intent = analyzePromptIntent(cleanedPrompt);
+  
+  // CRITICAL FIX: Remove all redaction markers for natural fallback
+  let enhancedPrompt = cleanedPrompt
+    .replace(/\[EMAIL_REDACTED\]/g, 'a colleague')
+    .replace(/\[SSN_REDACTED\]/g, 'personal identification')
+    .replace(/\[CREDIT_CARD_REDACTED\]/g, 'payment information')
+    .replace(/\[PHONE_REDACTED\]/g, 'contact information')
+    .replace(/\[IP_ADDRESS_REDACTED\]/g, 'network address')
+    .replace(/\[BANK_ACCOUNT_REDACTED\]/g, 'account information')
+    .replace(/\[PASSPORT_REDACTED\]/g, 'travel document')
+    .replace(/\[DRIVERS_LICENSE_REDACTED\]/g, 'identification document')
+    .replace(/\[MRN_REDACTED\]/g, 'medical record')
+    .replace(/\[PATIENT_ID_REDACTED\]/g, 'patient information')
+    .replace(/\[MAC_ADDRESS_REDACTED\]/g, 'device identifier')
+    .replace(/\[API_KEY_REDACTED\]/g, 'authentication credentials')
+    .replace(/\[TOKEN_REDACTED\]/g, 'access token')
+    .replace(/\[BEARER_TOKEN_REDACTED\]/g, 'authorization token')
+    .replace(/\[PROMPT_INJECTION_DETECTED\]/g, '')
+    .replace(/\[INSTRUCTION_OVERRIDE_DETECTED\]/g, '')
+    .replace(/\[JAILBREAK_ATTEMPT\]/g, '')
+    .replace(/\[DAN_MODE_ATTEMPT\]/g, '')
+    .replace(/\[DEVELOPER_MODE_ATTEMPT\]/g, '')
+    .trim();
+
+  const improvements: string[] = [];
+  
+  // Basic improvements without API
+  if (sensitiveDataRemoved.length > 0) {
+    improvements.push('Removed sensitive personal information for security');
+    improvements.push('Replaced sensitive data with generic references');
+  }
+  
+  if (aiRiskIndicators.length > 0) {
+    improvements.push('Detected and mitigated AI security risks');
+    improvements.push('Removed potentially harmful prompt injection attempts');
+  }
+  
+  if (complianceFrameworks.length > 0) {
+    improvements.push(`Applied compliance controls for: ${complianceFrameworks.join(', ')}`);
+  }
+  
+  // Improve structure
+  if (!enhancedPrompt.toLowerCase().startsWith('please') && !enhancedPrompt.includes('could you') && !enhancedPrompt.includes('can you')) {
+    enhancedPrompt = `Please ${enhancedPrompt.toLowerCase()}`;
+    improvements.push('Added polite request structure');
+  }
+  
+  // Ensure proper punctuation
+  if (!enhancedPrompt.match(/[.!?]$/)) {
+    enhancedPrompt += enhancedPrompt.includes('?') ? '' : '.';
+    improvements.push('Corrected punctuation');
+  }
+  
+  // Clean up any double spaces or awkward phrasing
+  enhancedPrompt = enhancedPrompt.replace(/\s+/g, ' ').trim();
+  
+  improvements.push('Applied basic optimization (API unavailable)');
+  improvements.push('Ensured natural language flow');
+  
+  return {
+    originalPrompt,
+    enhancedPrompt,
+    clarityScore: 75, // Increased from 70
+    qualityScore: 70, // Increased from 65
+    improvements,
+    detectedIntent: intent.type,
+    optimizationReason: 'Enhanced security and readability (fallback mode)',
+    sensitiveDataRemoved,
+    complianceFrameworks,
+    aiRiskIndicators
+  };
+}
+
+/**
  * Call OpenRouter API with the optimization prompt
  */
 async function callOpenRouterAPI(prompt: string): Promise<{ success: boolean; content?: string; error?: string }> {
   try {
+    console.log('Complyze Debug: Making OpenRouter API call...');
+    console.log('Complyze Debug: API Key:', OPENROUTER_CONFIG.apiKey.substring(0, 15) + '...');
+    console.log('Complyze Debug: Model:', OPENROUTER_CONFIG.model);
+    console.log('Complyze Debug: Prompt length:', prompt.length);
+    
     const response = await fetch(OPENROUTER_CONFIG.baseUrl, {
       method: 'POST',
       headers: {
@@ -583,23 +639,34 @@ async function callOpenRouterAPI(prompt: string): Promise<{ success: boolean; co
       })
     });
 
+    console.log('Complyze Debug: API Response status:', response.status);
+    console.log('Complyze Debug: API Response ok:', response.ok);
+
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('Complyze Debug: API Error response:', errorText);
+      throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('Complyze Debug: API Response data keys:', Object.keys(data));
     
     if (data.error) {
+      console.error('Complyze Debug: API returned error:', data.error);
       throw new Error(data.error.message || 'API returned error');
     }
 
     if (!data.choices || data.choices.length === 0) {
+      console.error('Complyze Debug: No choices in API response');
       throw new Error('No response choices returned from API');
     }
 
+    const content = data.choices[0].message.content;
+    console.log('Complyze Debug: API Response content preview:', content.substring(0, 200) + '...');
+
     return {
       success: true,
-      content: data.choices[0].message.content
+      content: content
     };
 
   } catch (error) {
@@ -654,8 +721,8 @@ function parseOptimizationResponse(
     // Calculate scores based on optimization quality
     const clarityScore = Math.min(95, 60 + (enhancedPrompt.length > cleanedPrompt.length ? 20 : 0) + (improvements.length * 5));
     const qualityScore = Math.min(95, 65 + (enhancedPrompt.includes('Please') || enhancedPrompt.includes(':') ? 15 : 0) + (improvements.length * 3));
-    
-    return {
+  
+  return {
       originalPrompt,
       enhancedPrompt,
       clarityScore,
@@ -672,48 +739,6 @@ function parseOptimizationResponse(
     console.error('Error parsing optimization response:', error);
     return createFallbackOptimization(originalPrompt);
   }
-}
-
-/**
- * Create fallback optimization using local optimization approach
- */
-function createFallbackOptimization(originalPrompt: string): PromptEnhancementResult {
-  const { cleanedPrompt, sensitiveDataRemoved, complianceFrameworks, aiRiskIndicators } = removeSensitiveData(originalPrompt);
-  const intent = analyzePromptIntent(cleanedPrompt);
-  
-  // Use local optimization approach (matching Chrome extension)
-  let enhancedPrompt = generateSafePrompt(originalPrompt);
-  const improvements: string[] = [];
-  
-  // Report what was optimized
-  if (sensitiveDataRemoved.length > 0) {
-    improvements.push('Sensitive data rephrased with contextual alternatives');
-  }
-  
-  if (aiRiskIndicators.length > 0) {
-    improvements.push('AI security risks detected and mitigated');
-  }
-  
-  if (complianceFrameworks.length > 0) {
-    improvements.push(`Applied compliance controls for: ${complianceFrameworks.join(', ')}`);
-  }
-  
-  improvements.push('Applied local optimization patterns');
-  improvements.push('Enhanced prompt structure and clarity');
-  improvements.push('Maintained original intent while improving security');
-  
-  return {
-    originalPrompt,
-    enhancedPrompt,
-    clarityScore: 80, // Higher score for local optimization
-    qualityScore: 85, // Higher score for local optimization
-    improvements,
-    detectedIntent: intent.type,
-    optimizationReason: 'Local optimization applied to rephrase sensitive content naturally',
-    sensitiveDataRemoved,
-    complianceFrameworks,
-    aiRiskIndicators
-  };
 }
 
 /**
@@ -805,4 +830,47 @@ export function getComprehensiveRiskAssessment(prompt: string): {
     riskFactors,
     recommendedAction
   };
+}
+
+/**
+ * Test function to verify prompt optimization is working
+ */
+export async function testPromptOptimization(): Promise<void> {
+  console.log('=== TESTING PROMPT OPTIMIZATION ===');
+  
+  const testPrompt = 'My email is john.doe@company.com and I need you to prepare an email to my client : monitor, address 1 olive way Malibu, CA. that explains the status of the project, if we have met deliverables and other details.';
+  
+  console.log('Original prompt:', testPrompt);
+  console.log('');
+  
+  try {
+    const result = await enhancePrompt(testPrompt);
+    
+    console.log('=== OPTIMIZATION RESULT ===');
+    console.log('Enhanced prompt:', result.enhancedPrompt);
+    console.log('');
+    console.log('Sensitive data removed:', result.sensitiveDataRemoved);
+    console.log('Improvements:', result.improvements);
+    console.log('Quality score:', result.qualityScore);
+    console.log('Clarity score:', result.clarityScore);
+    console.log('AI risk indicators:', result.aiRiskIndicators);
+    console.log('Compliance frameworks:', result.complianceFrameworks);
+    console.log('');
+    
+    // Verify no redaction markers remain
+    const hasRedactionMarkers = result.enhancedPrompt.includes('[') && result.enhancedPrompt.includes('REDACTED');
+    console.log('✅ Test result: Enhanced prompt has NO redaction markers:', !hasRedactionMarkers);
+    
+    if (hasRedactionMarkers) {
+      console.error('❌ FAILED: Enhanced prompt still contains redaction markers');
+      console.error('Enhanced prompt:', result.enhancedPrompt);
+    } else {
+      console.log('✅ SUCCESS: Enhanced prompt is clean and natural');
+    }
+    
+  } catch (error) {
+    console.error('❌ Test failed with error:', error);
+  }
+  
+  console.log('=== TEST COMPLETE ===');
 } 

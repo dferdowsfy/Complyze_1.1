@@ -1,13 +1,22 @@
 {
   "name": "Complyze - AI Prompt Security & Optimization",
-  "description": "Automatically analyze, optimize, and secure your AI prompts across ChatGPT, Claude, Gemini, and other LLM platforms. Real-time PII detection and compliance monitoring.",
+  "description": "Secure AI prompts across ChatGPT, Claude, Gemini with real-time PII detection, optimization, and compliance monitoring.",
   "version": "2.0.0",
   "manifest_version": 3,
+  "icons": {
+    "16": "icons/icon-16.png",
+    "24": "icons/icon-24.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "64": "icons/icon-64.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
-    "cookies"
+    "cookies",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://complyze.co/*",
@@ -20,13 +29,7 @@
     "*://character.ai/*",
     "*://huggingface.co/*",
     "*://replicate.com/*",
-    "*://cohere.ai/*",
-    "http://localhost:3004/*",
-    "http://localhost:3002/*",
-    "http://localhost:3001/*",
-    "https://localhost:3000/*",
-    "http://127.0.0.1:3000/*",
-    "https://127.0.0.1:3000/*"
+    "*://cohere.ai/*"
   ],
   "content_scripts": [
     {
@@ -41,13 +44,11 @@
         "*://character.ai/*",
         "*://huggingface.co/chat/*",
         "*://replicate.com/*",
-        "*://cohere.ai/*",
-        "http://localhost:3004/*",
-        "http://localhost:3002/*",
-        "http://localhost:3001/*"
+        "*://cohere.ai/*"
       ],
       "js": [
-        "content.js"
+        "content.js",
+        "prompt-interceptor.js"
       ],
       "run_at": "document_end"
     }
@@ -57,12 +58,22 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Complyze - AI Prompt Security"
+    "default_title": "Complyze - AI Prompt Security",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "24": "icons/icon-24.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "64": "icons/icon-64.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "web_accessible_resources": [
     {
       "resources": [
-        "injectUI.js"
+        "injectUI.js",
+        "extension-debug.js",
+        "prompt-interceptor.js"
       ],
       "matches": [
         "<all_urls>"
