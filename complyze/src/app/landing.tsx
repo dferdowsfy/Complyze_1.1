@@ -252,6 +252,115 @@ export default function Landing() {
     setMobileMenuOpen(false); // Close mobile menu after navigation
   };
 
+  // Download handlers to force proper file downloads
+  const handleDesktopDownload = async () => {
+    try {
+      // Try API endpoint first for forced download
+      const response = await fetch('/api/download/Complyze Desktop Agent-1.0.0-arm64.dmg');
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'ComplyzeDesktop-macOS-v1.0.0.dmg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        // Fallback to direct download
+        const link = document.createElement('a');
+        link.href = '/downloads/Complyze Desktop Agent-1.0.0-arm64.dmg';
+        link.download = 'ComplyzeDesktop-macOS-v1.0.0.dmg';
+        link.type = 'application/octet-stream';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback to direct download
+      const link = document.createElement('a');
+      link.href = '/downloads/Complyze Desktop Agent-1.0.0-arm64.dmg';
+      link.download = 'ComplyzeDesktop-macOS-v1.0.0.dmg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleExtensionDownload = async () => {
+    try {
+      // Try API endpoint first for forced download
+      const response = await fetch('/api/download/complyze-extension-latest.zip');
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'complyze-extension-v2.0.1.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        // Fallback to direct download
+        const link = document.createElement('a');
+        link.href = '/downloads/complyze-extension-latest.zip';
+        link.download = 'complyze-extension-v2.0.1.zip';
+        link.type = 'application/zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback to direct download
+      const link = document.createElement('a');
+      link.href = '/downloads/complyze-extension-latest.zip';
+      link.download = 'complyze-extension-v2.0.1.zip';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleLegacyDesktopDownload = async () => {
+    try {
+      // Try API endpoint first for forced download
+      const response = await fetch('/api/download/ComplyzeDesktop-macOS-Apple.dmg');
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'ComplyzeDesktop-macOS-Legacy.dmg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        // Fallback to direct download
+        const link = document.createElement('a');
+        link.href = '/downloads/ComplyzeDesktop-macOS-Apple.dmg';
+        link.download = 'ComplyzeDesktop-macOS-Legacy.dmg';
+        link.type = 'application/octet-stream';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback to direct download
+      const link = document.createElement('a');
+      link.href = '/downloads/ComplyzeDesktop-macOS-Apple.dmg';
+      link.download = 'ComplyzeDesktop-macOS-Legacy.dmg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Modal overlay and card styles
   const modalOverlay = {
     position: 'fixed' as const,
@@ -778,9 +887,8 @@ export default function Landing() {
                 <h3 className="text-3xl font-bold text-white mb-4">Complyze Desktop</h3>
                 <p className="text-gray-300 mb-6">Real-time AI prompt monitoring for your menu bar.</p>
                 
-                <a 
-                  href="/downloads/Complyze Desktop Agent-1.0.0-arm64.dmg"
-                  download
+                <button 
+                  onClick={handleDesktopDownload}
                   className="inline-block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg mb-4"
                 >
                   <div className="flex items-center justify-center space-x-3">
@@ -790,17 +898,16 @@ export default function Landing() {
                       <div className="text-sm opacity-90">Latest Version 1.0.0 (Apple Silicon)</div>
                     </div>
                   </div>
-                </a>
+                </button>
                 
                 <div className="text-center mb-4">
                   <p className="text-xs text-gray-400 mb-2">Alternative Downloads:</p>
-                  <a 
-                    href="/downloads/ComplyzeDesktop-macOS-Apple.dmg"
-                    download
+                  <button 
+                    onClick={handleLegacyDesktopDownload}
                     className="text-sm text-gray-300 hover:text-white underline mr-4"
                   >
                     Legacy macOS Build
-                  </a>
+                  </button>
                   <a 
                     href="/downloads/version-info.json"
                     target="_blank"
@@ -851,9 +958,8 @@ export default function Landing() {
                 <h3 className="text-3xl font-bold text-white mb-4">Complyze Chrome Extension</h3>
                 <p className="text-gray-300 mb-6">Browser-based AI prompt security for web-based AI tools</p>
                 
-                <a 
-                  href="/downloads/complyze-extension-latest.zip"
-                  download
+                <button 
+                  onClick={handleExtensionDownload}
                   className="inline-block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg mb-4"
                 >
                   <div className="flex items-center justify-center space-x-3">
@@ -863,7 +969,7 @@ export default function Landing() {
                       <div className="text-sm opacity-90">Latest Version 2.0.1</div>
                     </div>
                   </div>
-                </a>
+                </button>
                 
                 <div className="text-center mb-4">
                   <p className="text-xs text-gray-400 mb-2">Installation Required:</p>

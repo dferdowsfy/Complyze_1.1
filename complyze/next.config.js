@@ -37,6 +37,34 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Force download for .dmg files
+        source: '/downloads/:path*.dmg',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/octet-stream',
+          },
+          {
+            key: 'Content-Disposition',
+            value: 'attachment',
+          },
+        ],
+      },
+      {
+        // Force download for .zip files
+        source: '/downloads/:path*.zip',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/zip',
+          },
+          {
+            key: 'Content-Disposition',
+            value: 'attachment',
+          },
+        ],
+      },
     ];
   },
   // Ensure webpack resolves the @ alias properly
