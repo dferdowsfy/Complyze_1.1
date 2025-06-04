@@ -1,0 +1,15 @@
+{
+  "lastUpdated": "2025-06-04T03:00:04Z",
+  "buildTimestamp": "20250603-225950",
+  "chromeExtension": {
+    "version": "2.0.1",
+    "filename": "complyze-extension-latest.zip",
+    "size": " 48K"
+  },
+  "desktopApp": {
+    "version": "1.0.0",
+    "platform": "macOS-arm64",
+    "filename": "Complyze Desktop Agent-1.0.0-arm64.dmg",
+    "size": " 90M"
+  }
+}

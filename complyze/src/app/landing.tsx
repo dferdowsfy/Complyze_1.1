@@ -3,9 +3,18 @@ import React, { useState, useRef, useEffect } from "react";
 import PromptJourney from "./components/PromptJourney";
 
 export default function Landing() {
-  const [showModal, setShowModal] = useState<null | 'login' | 'signup' | 'pricing'>(null);
+  const [showModal, setShowModal] = useState<null | 'login' | 'signup' | 'pricing' | 'demo'>(null);
   const [loginFields, setLoginFields] = useState({ email: '', password: '' });
   const [signupFields, setSignupFields] = useState({ name: '', email: '', password: '', confirm: '' });
+  const [demoFields, setDemoFields] = useState({ 
+    name: '', 
+    email: '', 
+    company: '', 
+    phone: '', 
+    message: '', 
+    use_case: '', 
+    team_size: '' 
+  });
   const [isAnnual, setIsAnnual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -162,6 +171,53 @@ export default function Landing() {
     }
   };
 
+  const handleDemoRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      console.log('Complyze: Submitting demo request for:', demoFields.email);
+
+      const response = await fetch('/api/demo/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(demoFields),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSuccess(data.message || 'Demo request submitted successfully! Our team will contact you within 24 hours.');
+        // Reset form
+        setDemoFields({ 
+          name: '', 
+          email: '', 
+          company: '', 
+          phone: '', 
+          message: '', 
+          use_case: '', 
+          team_size: '' 
+        });
+        // Close modal after 3 seconds
+        setTimeout(() => {
+          setShowModal(null);
+          setSuccess('');
+        }, 3000);
+      } else {
+        setError(data.error || 'Failed to submit demo request');
+      }
+    } catch (error) {
+      console.error('Complyze: Demo request error:', error);
+      setError('Failed to submit demo request. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Scroll handlers
   const handleJourneyClick = () => {
     if (journeyRef.current) {
@@ -188,6 +244,11 @@ export default function Landing() {
 
   const handleLoginClick = () => {
     setShowModal('login');
+    setMobileMenuOpen(false); // Close mobile menu after navigation
+  };
+
+  const handleDemoClick = () => {
+    setShowModal('demo');
     setMobileMenuOpen(false); // Close mobile menu after navigation
   };
 
@@ -325,7 +386,13 @@ export default function Landing() {
             Pricing
           </a>
           <button
-            className="ml-6 bg-white text-[#FF6F3C] border border-[#FF6F3C] px-5 py-2 rounded-md font-semibold text-base shadow hover:bg-orange-100 transition"
+            className="ml-6 bg-transparent text-white border border-white px-4 py-2 rounded-md font-semibold text-base hover:bg-white hover:text-[#0E1E36] transition"
+            onClick={handleDemoClick}
+          >
+            Request Demo
+          </button>
+          <button
+            className="ml-2 bg-white text-[#FF6F3C] border border-[#FF6F3C] px-5 py-2 rounded-md font-semibold text-base shadow hover:bg-orange-100 transition"
             onClick={() => setShowModal('signup')}
           >
             Sign Up
@@ -374,6 +441,12 @@ export default function Landing() {
               >
                 Pricing
               </a>
+              <button
+                className="bg-transparent text-white border border-white px-8 py-3 rounded-md font-semibold text-lg hover:bg-white hover:text-[#0E1E36] transition"
+                onClick={handleDemoClick}
+              >
+                Request Demo
+              </button>
               <button
                 className="bg-white text-[#FF6F3C] border border-[#FF6F3C] px-8 py-3 rounded-md font-semibold text-lg shadow hover:bg-orange-100 transition"
                 onClick={handleSignupClick}
@@ -457,6 +530,123 @@ export default function Landing() {
                 setError('');
                 setSuccess('');
               }}>Login</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {showModal === 'demo' && (
+        <div style={modalOverlay}>
+          <div style={{ ...modalCard, maxWidth: 600, minWidth: 320, width: '95%' }}>
+            <button style={closeBtn} aria-label="Close" onClick={() => setShowModal(null)}>&times;</button>
+            <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 18, color: '#0E1E36' }}>Request a Demo</div>
+            <p style={{ color: '#6B7280', marginBottom: 20, fontSize: 15 }}>
+              See how Complyze can protect your organization's AI usage. Our team will show you a personalized demo and answer your questions.
+            </p>
+            {error && (
+              <div style={{ background: '#fee2e2', color: '#dc2626', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontSize: '14px' }}>
+                {error}
+              </div>
+            )}
+            {success && (
+              <div style={{ background: '#dcfce7', color: '#16a34a', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontSize: '14px' }}>
+                {success}
+              </div>
+            )}
+            <form onSubmit={handleDemoRequest}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <label style={labelStyle} htmlFor="demo-name">Full Name *</label>
+                  <input 
+                    style={inputStyle} 
+                    id="demo-name" 
+                    type="text" 
+                    required 
+                    value={demoFields.name} 
+                    onChange={e => setDemoFields(f => ({ ...f, name: e.target.value }))} 
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle} htmlFor="demo-email">Work Email *</label>
+                  <input 
+                    style={inputStyle} 
+                    id="demo-email" 
+                    type="email" 
+                    required 
+                    value={demoFields.email} 
+                    onChange={e => setDemoFields(f => ({ ...f, email: e.target.value }))} 
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <label style={labelStyle} htmlFor="demo-company">Company</label>
+                  <input 
+                    style={inputStyle} 
+                    id="demo-company" 
+                    type="text" 
+                    value={demoFields.company} 
+                    onChange={e => setDemoFields(f => ({ ...f, company: e.target.value }))} 
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle} htmlFor="demo-phone">Phone</label>
+                  <input 
+                    style={inputStyle} 
+                    id="demo-phone" 
+                    type="tel" 
+                    value={demoFields.phone} 
+                    onChange={e => setDemoFields(f => ({ ...f, phone: e.target.value }))} 
+                  />
+                </div>
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle} htmlFor="demo-use-case">Primary Use Case</label>
+                <select 
+                  style={inputStyle} 
+                  id="demo-use-case" 
+                  value={demoFields.use_case} 
+                  onChange={e => setDemoFields(f => ({ ...f, use_case: e.target.value }))}
+                >
+                  <option value="">Select your primary use case</option>
+                  <option value="compliance">Compliance & Risk Management</option>
+                  <option value="security">Security & Data Protection</option>
+                  <option value="governance">AI Governance</option>
+                  <option value="monitoring">Employee AI Usage Monitoring</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle} htmlFor="demo-team-size">Team Size</label>
+                <select 
+                  style={inputStyle} 
+                  id="demo-team-size" 
+                  value={demoFields.team_size} 
+                  onChange={e => setDemoFields(f => ({ ...f, team_size: e.target.value }))}
+                >
+                  <option value="">Select team size</option>
+                  <option value="1-10">1-10 employees</option>
+                  <option value="11-50">11-50 employees</option>
+                  <option value="51-200">51-200 employees</option>
+                  <option value="201-1000">201-1000 employees</option>
+                  <option value="1000+">1000+ employees</option>
+                </select>
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={labelStyle} htmlFor="demo-message">Additional Information</label>
+                <textarea 
+                  style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} 
+                  id="demo-message" 
+                  placeholder="Tell us about your specific needs or questions..."
+                  value={demoFields.message} 
+                  onChange={e => setDemoFields(f => ({ ...f, message: e.target.value }))} 
+                />
+              </div>
+              <button type="submit" style={{...buttonStyle, opacity: loading ? 0.6 : 1}} disabled={loading}>
+                {loading ? 'Submitting...' : 'Request Demo'}
+              </button>
+            </form>
+            <div style={{ marginTop: 18, fontSize: 13, color: '#6B7280', textAlign: 'center' }}>
+              Our team typically responds within 24 hours during business days.
             </div>
           </div>
         </div>
@@ -546,7 +736,20 @@ export default function Landing() {
       <section className="flex flex-col items-center justify-center text-center py-12 sm:py-20 px-4">
         <h1 className="text-3xl sm:text-4xl md:text-6xl font-extralight mb-4 sm:mb-6 leading-tight max-w-4xl">LLM risk is invisible—until it's inevitable.</h1>
         <p className="text-base sm:text-lg md:text-2xl font-normal mb-8 sm:mb-10 max-w-2xl px-4">Executives and regulators are asking: 'How are we using AI responsibly?' Complyze gives you an answer before you're scrambling for one.</p>
-        {/* <a href="#how-it-works" className="bg-[#FF6F3C] text-white font-bold text-lg px-8 py-4 rounded-lg shadow-lg hover:bg-[#ff8a5c] transition">See how it works</a> */}
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+          <button 
+            onClick={handleDemoClick}
+            className="bg-[#FF6F3C] text-white font-bold text-lg px-8 py-4 rounded-lg shadow-lg hover:bg-[#ff8a5c] transition"
+          >
+            Request a Demo
+          </button>
+          <button 
+            onClick={handleSignupClick}
+            className="bg-white text-[#FF6F3C] border-2 border-[#FF6F3C] font-bold text-lg px-8 py-4 rounded-lg shadow-lg hover:bg-[#FF6F3C] hover:text-white transition"
+          >
+            Start Free Trial
+          </button>
+        </div>
       </section>
 
       {/* Count-up Section */}
@@ -576,17 +779,36 @@ export default function Landing() {
                 <p className="text-gray-300 mb-6">Real-time AI prompt monitoring for your menu bar.</p>
                 
                 <a 
-                  href="/downloads/ComplyzeDesktop-macOS-Apple.dmg"
+                  href="/downloads/Complyze Desktop Agent-1.0.0-arm64.dmg"
                   download
-                  className="inline-block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg mb-6"
+                  className="inline-block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg mb-4"
                 >
                   <div className="flex items-center justify-center space-x-3">
                     <span className="text-xl">🍎</span>
                     <div>
                       <div className="text-lg">Download for macOS</div>
+                      <div className="text-sm opacity-90">Latest Version 1.0.0 (Apple Silicon)</div>
                     </div>
                   </div>
                 </a>
+                
+                <div className="text-center mb-4">
+                  <p className="text-xs text-gray-400 mb-2">Alternative Downloads:</p>
+                  <a 
+                    href="/downloads/ComplyzeDesktop-macOS-Apple.dmg"
+                    download
+                    className="text-sm text-gray-300 hover:text-white underline mr-4"
+                  >
+                    Legacy macOS Build
+                  </a>
+                  <a 
+                    href="/downloads/version-info.json"
+                    target="_blank"
+                    className="text-sm text-gray-300 hover:text-white underline"
+                  >
+                    Version Info
+                  </a>
+                </div>
               </div>
               
               {/* Desktop Features */}
@@ -630,18 +852,28 @@ export default function Landing() {
                 <p className="text-gray-300 mb-6">Browser-based AI prompt security for web-based AI tools</p>
                 
                 <a 
-                  href="https://chromewebstore.google.com/detail/complyze-ai-prompt-securi/your-extension-id"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg mb-6"
+                  href="/downloads/complyze-extension-latest.zip"
+                  download
+                  className="inline-block w-full bg-[#FF6F3C] hover:bg-[#ff8a5c] text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg mb-4"
                 >
                   <div className="flex items-center justify-center space-x-3">
                     <span className="text-xl">🌐</span>
                     <div>
-                      <div className="text-lg">Add to Chrome</div>
+                      <div className="text-lg">Download Extension</div>
+                      <div className="text-sm opacity-90">Latest Version 2.0.1</div>
                     </div>
                   </div>
                 </a>
+                
+                <div className="text-center mb-4">
+                  <p className="text-xs text-gray-400 mb-2">Installation Required:</p>
+                  <p className="text-xs text-gray-300 leading-relaxed">
+                    1. Extract ZIP file<br/>
+                    2. Open chrome://extensions/<br/>
+                    3. Enable Developer Mode<br/>
+                    4. Load unpacked extension
+                  </p>
+                </div>
               </div>
               
               {/* Chrome Features */}
