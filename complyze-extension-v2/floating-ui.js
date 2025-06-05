@@ -1457,19 +1457,68 @@ window.ComplyzeFloatingUI = ComplyzeFloatingUI;
 // Ensure initialization happens reliably
 const initializeFloatingUI = () => {
     try {
-        if (!window.complyzeFloatingUI) {
-            console.log("Complyze: Initializing FloatingUI...");
-            window.complyzeFloatingUI = new ComplyzeFloatingUI();
-            console.log("Complyze: FloatingUI initialized successfully");
-        } else {
-            console.log("Complyze: FloatingUI already exists");
+        if (window.complyzeFloatingUI) {
+            console.log("Complyze: FloatingUI already exists, skipping initialization");
+            return;
         }
+
+        console.log("Complyze: Starting FloatingUI initialization...");
+        console.log("Complyze: Current URL:", window.location.href);
+        console.log("Complyze: DOM ready state:", document.readyState);
+        
+        // Check if we're on a supported platform
+        const hostname = window.location.hostname;
+        const supportedDomains = [
+            'chat.openai.com',
+            'chatgpt.com',
+            'claude.ai',
+            'gemini.google.com',
+            'bard.google.com',
+            'poe.com',
+            'character.ai',
+            'huggingface.co',
+            'replicate.com',
+            'cohere.ai',
+            'complyze.co'
+        ];
+        
+        const isSupported = supportedDomains.some(domain => hostname.includes(domain));
+        console.log("Complyze: Platform supported:", isSupported, "for hostname:", hostname);
+        
+        if (!isSupported) {
+            console.log("Complyze: Not on supported platform, skipping initialization");
+            return;
+        }
+
+        // Create the floating UI instance
+        window.complyzeFloatingUI = new ComplyzeFloatingUI();
+        console.log("Complyze: FloatingUI initialized successfully");
+        
+        // Verify the floating icon was created
+        setTimeout(() => {
+            const icon = document.getElementById('complyze-floating-icon');
+            if (icon) {
+                console.log("Complyze: ✅ Floating icon verified in DOM");
+            } else {
+                console.error("Complyze: ❌ Floating icon NOT found in DOM after initialization");
+                
+                // Try to force create it
+                if (window.complyzeFloatingUI && window.complyzeFloatingUI.createFloatingIcon) {
+                    console.log("Complyze: Attempting to force create floating icon...");
+                    window.complyzeFloatingUI.createFloatingIcon();
+                }
+            }
+        }, 1000);
+        
     } catch (error) {
         console.error("Complyze: Failed to initialize FloatingUI:", error);
-        // Retry after a delay
+        console.error("Complyze: Error stack:", error.stack);
+        
+        // Try a simple retry after delay
         setTimeout(() => {
             try {
                 if (!window.complyzeFloatingUI) {
+                    console.log("Complyze: Retrying FloatingUI initialization...");
                     window.complyzeFloatingUI = new ComplyzeFloatingUI();
                     console.log("Complyze: FloatingUI initialized on retry");
                 }
@@ -1480,19 +1529,37 @@ const initializeFloatingUI = () => {
     }
 };
 
-// Try multiple initialization strategies
-setTimeout(initializeFloatingUI, 500);  // Quick initialization
-setTimeout(initializeFloatingUI, 1000); // Delayed initialization
-setTimeout(initializeFloatingUI, 2000); // Fallback initialization
+// Multiple initialization strategies for maximum reliability
+console.log("Complyze: Setting up FloatingUI initialization strategies...");
 
-// Also try immediate initialization for supported platforms
+// Strategy 1: Immediate if DOM is ready
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    console.log("Complyze: DOM ready, initializing immediately");
     initializeFloatingUI();
+} else {
+    console.log("Complyze: DOM not ready, waiting for DOMContentLoaded");
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log("Complyze: DOMContentLoaded event fired");
+        initializeFloatingUI();
+    });
 }
 
-// Listen for DOM ready events
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeFloatingUI);
-}
+// Strategy 2: Delayed initialization
+setTimeout(() => {
+    console.log("Complyze: Running delayed initialization (500ms)");
+    initializeFloatingUI();
+}, 500);
 
-console.log("Complyze: Floating UI script loaded and initialization scheduled"); 
+// Strategy 3: Additional fallback
+setTimeout(() => {
+    console.log("Complyze: Running fallback initialization (2000ms)");
+    initializeFloatingUI();
+}, 2000);
+
+// Strategy 4: Listen for window load as final fallback
+window.addEventListener('load', () => {
+    console.log("Complyze: Window load event fired, final initialization attempt");
+    initializeFloatingUI();
+});
+
+console.log("Complyze: Floating UI script loaded and initialization strategies activated"); 
