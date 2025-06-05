@@ -715,33 +715,43 @@ class ComplyzeBackground {
 
   async injectOptimizationUI(tabId, result) {
     try {
-      chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['injectUI.js']
-      });
+      // DISABLED: Using floating UI instead of injected modal
+      console.log('Complyze: Optimization UI injection disabled - using floating UI sidebar');
       
+      // Just set the data for floating UI to use
       await chrome.storage.local.set({ 
         analysisResult: result,
         optimizationMode: true
       });
+      
+      // Don't inject the conflicting modal UI
+      // chrome.scripting.executeScript({
+      //   target: { tabId },
+      //   files: ['injectUI.js']
+      // });
     } catch (error) {
-      console.error('Complyze: Error injecting optimization UI:', error);
+      console.error('Complyze: Error setting optimization data:', error);
     }
   }
 
   async injectAnalysisUI(tabId, result) {
     try {
-      chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['injectUI.js']
-      });
+      // DISABLED: Using floating UI instead of injected modal
+      console.log('Complyze: Analysis UI injection disabled - using floating UI sidebar');
       
+      // Just set the data for floating UI to use
       await chrome.storage.local.set({ 
         analysisResult: result,
         optimizationMode: false
       });
+      
+      // Don't inject the conflicting modal UI
+      // chrome.scripting.executeScript({
+      //   target: { tabId },
+      //   files: ['injectUI.js']
+      // });
     } catch (error) {
-      console.error('Complyze: Error injecting analysis UI:', error);
+      console.error('Complyze: Error setting analysis data:', error);
     }
   }
 

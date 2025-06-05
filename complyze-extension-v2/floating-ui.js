@@ -351,6 +351,20 @@ class ComplyzeFloatingUI {
         console.log("Complyze: Loading popup content...");
         
         try {
+            // Check for stored analysis results first
+            const storageData = await chrome.storage.local.get(['analysisResult', 'optimizationMode']);
+            
+            if (storageData.analysisResult) {
+                console.log("Complyze: Found analysis result, showing security alert");
+                
+                // Clear the analysis result from storage to prevent repeated displays
+                await chrome.storage.local.remove(['analysisResult', 'optimizationMode']);
+                
+                // Show security alert with the analysis
+                this.showSecurityAlert(storageData.analysisResult, storageData.analysisResult.original_prompt);
+                return;
+            }
+            
             // Check if user is authenticated
             const isLoggedIn = await this.checkLoginStatus();
             console.log("Complyze: Login status:", isLoggedIn);
@@ -365,7 +379,6 @@ class ComplyzeFloatingUI {
             }
         } catch (error) {
             console.error("Complyze: Error loading popup content:", error);
-            // Fallback to login screen on error
             this.showLoginScreen(container);
         }
     }
@@ -808,6 +821,7 @@ class ComplyzeFloatingUI {
     // New method to show security alert in sidebar
     showSecurityAlert(analysis, originalPrompt) {
         console.log('Complyze: Showing security alert in floating sidebar');
+        console.log('Complyze: Analysis data:', analysis);
         
         // Clear any existing alert popups first
         this.clearAllAlertPopups();
@@ -825,6 +839,11 @@ class ComplyzeFloatingUI {
             console.error('Complyze: Sidebar content not found');
             return;
         }
+
+        // Extract PII types from analysis (handle different possible formats)
+        const piiDetected = analysis.pii_detected || analysis.detectedPII || [];
+        const optimizedPrompt = analysis.optimized_prompt || analysis.redacted_prompt || analysis.safe_prompt || "Processing...";
+        const originalText = originalPrompt || analysis.original_prompt || "Original prompt";
 
         // Create new Apollo-style security alert
         const securityAlert = document.createElement('div');
@@ -854,9 +873,12 @@ class ComplyzeFloatingUI {
                 
                 <!-- About Section -->
                 <div style="margin-bottom: 16px;">
-                    <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #2E2E2E;">🔐 Sensitive Info Blocked</h3>
+                    <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #2E2E2E;">🔐 Sensitive Info Detected</h3>
                     <p style="margin: 0; color: #6B7280; font-size: 14px; line-height: 1.4;">
-                        Your prompt contained sensitive content. We've safely removed it and improved the phrasing.
+                        ${piiDetected.length > 0 ? 
+                            "Your prompt contained sensitive content. We've safely removed it and improved the phrasing." :
+                            "Your prompt was analyzed for potential security risks. A safe version is ready for use."
+                        }
                     </p>
                 </div>
 
@@ -867,49 +889,44 @@ class ComplyzeFloatingUI {
                     <span style="background: #FEF2F2; color: #DC2626; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 500;">Data Loss Prevention</span>
                     <span style="background: #FFF7ED; color: #EA580C; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 500;">Governance Tools</span>
                 </div>
-
-                <!-- Location and Company Info -->
-                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="font-size: 14px;">📍</span>
-                        <span style="color: #6B7280; font-size: 13px;">Remote-first</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="font-size: 14px;">👥</span>
-                        <span style="color: #6B7280; font-size: 13px;">Bootstrapped Startup</span>
-                    </div>
-                </div>
             </div>
 
             <!-- Security Alert Content -->
             <div style="padding: 20px 24px;">
+                ${piiDetected.length > 0 ? `
                 <!-- Detected Issues -->
                 <div style="background: #F8D7DA; border: 1px solid #F5C6CB; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                        <h3 style="margin: 0; color: #721C24; font-size: 14px; font-weight: 600;">Detected Issues</h3>
+                        <h3 style="margin: 0; color: #721C24; font-size: 14px; font-weight: 600;">⚠️ Detected Issues</h3>
                         <button style="background: none; border: none; color: #6B7280; cursor: pointer; font-size: 12px;" title="Why was this flagged?">❓</button>
                     </div>
                     <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                        ${analysis.detectedPII.map(type => `
+                        ${piiDetected.map(type => `
                             <span style="background: rgba(220, 38, 38, 0.1); color: #DC2626; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid rgba(220, 38, 38, 0.2);">
                                 ${type.toUpperCase()}
                             </span>
                         `).join('')}
                     </div>
                 </div>
+                ` : ''}
                 
                 <!-- Optimized Prompt -->
                 <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
                     <h3 style="margin: 0 0 12px 0; color: #166534; font-size: 14px; font-weight: 600;">✅ Secure Version</h3>
                     <div id="optimized-prompt-text" style="background: white; border: 1px solid #D1D5DB; border-radius: 6px; padding: 12px; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; font-size: 12px; line-height: 1.5; color: #374151; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;">
-                        ${analysis.optimized_prompt || this.createLoadingAnimation()}
+                        ${optimizedPrompt}
                     </div>
                     
                     <!-- Redaction Insights -->
                     <div style="margin-top: 12px;">
                         <div style="background: #EEF2FF; border-left: 3px solid #4F46E5; padding: 8px 12px; border-radius: 4px;">
                             <div style="font-size: 11px; color: #4338CA; font-weight: 600; margin-bottom: 2px;">REDACTION INSIGHT</div>
-                            <div style="font-size: 12px; color: #6366F1;">Sensitive identifiers replaced with privacy-safe alternatives</div>
+                            <div style="font-size: 12px; color: #6366F1;">
+                                ${piiDetected.length > 0 ? 
+                                    "Sensitive identifiers replaced with privacy-safe alternatives" :
+                                    "Prompt analyzed and verified safe for AI processing"
+                                }
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -989,15 +1006,12 @@ class ComplyzeFloatingUI {
             </div>
         `;
 
-        // Clear existing content and add security alert
+        // Replace the content
         sidebarContent.innerHTML = '';
         sidebarContent.appendChild(securityAlert);
 
-        // Add button event handlers
-        this.setupSecurityAlertHandlers(analysis, originalPrompt);
-        
-        // Add hover effects
-        this.addButtonHoverEffects();
+        // Setup handlers for the security alert
+        this.setupSecurityAlertHandlers(analysis, originalText);
     }
 
     createLoadingAnimation() {
