@@ -484,8 +484,12 @@ class ComplyzeBackground {
 
   async handleMessage(message, sender, sendResponse) {
     try {
-      switch (message.type) {
+      // Handle both object-based and string-based message types for compatibility
+      const messageType = message.type;
+      
+      switch (messageType) {
         case MESSAGE_TYPES.DEBUG_TEST:
+        case 'debug_test':
           sendResponse({ 
             success: true, 
             message: 'Extension working',
@@ -495,45 +499,58 @@ class ComplyzeBackground {
           break;
           
         case MESSAGE_TYPES.ANALYZE_PROMPT:
+        case 'analyze_prompt':
           const analysisResult = await this.handlePromptAnalysis(message.payload, sender.tab.id);
           sendResponse(analysisResult);
           break;
           
         case MESSAGE_TYPES.ANALYZE_PROMPT_REALTIME:
+        case 'analyze_prompt_realtime':
           const result = await this.aiOptimizer.handleRealTimeAnalysis(message.payload);
           sendResponse(result);
           break;
           
         case MESSAGE_TYPES.LOGIN:
+        case 'login':
           const loginResult = await this.authManager.login(message.email, message.password);
           sendResponse(loginResult);
           break;
           
         case MESSAGE_TYPES.SIGNUP:
+        case 'signup':
           const signupResult = await this.authManager.signup(message.email, message.password, message.fullName);
           sendResponse(signupResult);
           break;
           
         case MESSAGE_TYPES.LOGOUT:
+        case 'logout':
           await this.authManager.logout();
           sendResponse({ success: true });
           break;
           
         case MESSAGE_TYPES.SYNC_FROM_WEBSITE:
+        case 'sync_from_website':
           await this.authManager.syncFromWebsite();
           sendResponse({ success: true });
           break;
           
         case MESSAGE_TYPES.GET_AUTH_STATUS:
-          sendResponse(this.authManager.getAuthStatus());
+        case 'get_auth_status':
+          const authStatus = await this.authManager.checkUserAuth();
+          sendResponse({ 
+            isAuthenticated: authStatus.isAuthenticated,
+            user: authStatus.user
+          });
           break;
           
         case MESSAGE_TYPES.SET_AUTH_DATA:
+        case 'set_auth_data':
           await this.authManager.setAuthData(message.data);
           sendResponse({ success: true });
           break;
 
         case MESSAGE_TYPES.GET_DASHBOARD_URL:
+        case 'get_dashboard_url':
           sendResponse({ 
             dashboardUrl: this.dashboardUrl,
             apiBase: this.apiBase 
@@ -541,6 +558,7 @@ class ComplyzeBackground {
           break;
           
         case MESSAGE_TYPES.UPDATE_REDACTION_SETTINGS:
+        case 'update_redaction_settings':
           await this.handleRedactionSettingsUpdate(message.payload);
           sendResponse({ success: true });
           break;

@@ -372,9 +372,27 @@ class ComplyzeFloatingUI {
 
     async checkLoginStatus() {
         try {
-            // Check for stored auth token
-            const result = await chrome.storage.local.get(['complyze_token', 'complyze_user']);
-            return !!(result.complyze_token && result.complyze_user);
+            // Check for stored auth token with more detailed validation
+            const result = await chrome.storage.local.get(['complyze_token', 'complyze_user', 'complyze_login_time']);
+            
+            console.log('Complyze: Checking login status:', {
+                hasToken: !!result.complyze_token,
+                hasUser: !!result.complyze_user,
+                tokenType: typeof result.complyze_token,
+                isDemo: result.complyze_token === 'demo',
+                loginTime: result.complyze_login_time,
+                timeSinceLogin: result.complyze_login_time ? Date.now() - result.complyze_login_time : null
+            });
+            
+            // Valid if we have a token and user, or if in demo mode
+            const isAuthenticated = !!(
+                result.complyze_token && 
+                result.complyze_user && 
+                (result.complyze_token === 'demo' || result.complyze_token.length > 10)
+            );
+            
+            console.log('Complyze: Authentication status determined:', isAuthenticated);
+            return isAuthenticated;
         } catch (error) {
             console.error("Complyze: Error checking login status:", error);
             return false;
@@ -1018,166 +1036,137 @@ class ComplyzeFloatingUI {
         const demoButton = document.getElementById('demo-mode');
         const errorDiv = document.getElementById('login-error');
 
-        loginForm?.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        // Prevent multiple event listeners
+        if (loginForm && !loginForm.hasAttribute('data-complyze-handler-attached')) {
+            loginForm.setAttribute('data-complyze-handler-attached', 'true');
             
-            const emailInput = document.getElementById('login-email');
-            const passwordInput = document.getElementById('login-password');
-            const submitBtn = document.getElementById('login-submit');
-            
-            const email = emailInput?.value?.trim();
-            const password = passwordInput?.value?.trim();
-            
-            console.log('Login attempt:', { email, passwordLength: password?.length });
-            
-            if (!email || !password) {
-                errorDiv.textContent = 'Please enter both email and password';
-                errorDiv.style.display = 'block';
-                return;
-            }
-            
-            // Show loading state
-            const originalText = submitBtn.innerHTML;
-            submitBtn.innerHTML = 'Signing In...';
-            submitBtn.disabled = true;
-            errorDiv.style.display = 'none';
-            
-            try {
-                console.log('Calling Supabase Auth API...');
-                const response = await fetch('https://complyze.co/api/auth/supabase', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-Client-Info': 'extension-v2.3.1'
-                    },
-                    body: JSON.stringify({ 
-                        email: email,
-                        password: password,
-                        gotrue_meta_security: { captcha_token: null },
-                        options: {
-                            data: {
-                                source: 'extension'
-                            }
-                        }
-                    })
-                });
-
-                console.log('API Response:', response.status, response.statusText);
-                console.log('Response headers:', [...response.headers.entries()]);
-
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('Login successful - raw response:', data);
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Prevent double submission
+                if (loginForm.hasAttribute('data-submitting')) {
+                    console.log('Complyze: Login already in progress, ignoring duplicate submission');
+                    return;
+                }
+                
+                loginForm.setAttribute('data-submitting', 'true');
+                
+                const emailInput = document.getElementById('login-email');
+                const passwordInput = document.getElementById('login-password');
+                const submitBtn = document.getElementById('login-submit');
+                
+                const email = emailInput?.value?.trim();
+                const password = passwordInput?.value?.trim();
+                
+                console.log('Complyze: Login attempt for:', email);
+                
+                if (!email || !password) {
+                    errorDiv.textContent = 'Please enter both email and password';
+                    errorDiv.style.display = 'block';
+                    loginForm.removeAttribute('data-submitting');
+                    return;
+                }
+                
+                // Show loading state
+                const originalText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '🔄 Signing In...';
+                submitBtn.disabled = true;
+                errorDiv.style.display = 'none';
+                
+                try {
+                    console.log('Complyze: Attempting login via background script...');
                     
-                    // Handle Supabase auth response format
-                    const { session, user } = data;
-                    const token = session?.access_token;
-                    
-                    console.log('Supabase auth response:', { 
-                        hasSession: !!session,
-                        hasToken: !!token,
-                        hasUser: !!user,
-                        userId: user?.id,
-                        userEmail: user?.email
+                    // Use background script for authentication (try both formats for compatibility)
+                    let response = await new Promise((resolve) => {
+                        chrome.runtime.sendMessage({
+                            type: 'login',
+                            email: email,
+                            password: password
+                        }, resolve);
                     });
                     
-                    if (token && user?.id) {
+                    // If first attempt failed, try with MESSAGE_TYPES format
+                    if (!response || !response.success) {
+                        console.log('Complyze: Trying alternative message format...');
+                        response = await new Promise((resolve) => {
+                            chrome.runtime.sendMessage({
+                                type: 'login',
+                                email: email,
+                                password: password
+                            }, resolve);
+                        });
+                    }
+                    
+                    console.log('Complyze: Background login response:', response);
+                    
+                    if (response && response.success) {
+                        console.log('Complyze: Login successful!');
+                        
+                        // Store login data for the floating UI
                         await chrome.storage.local.set({
-                            complyze_token: token,
-                            complyze_user: user,
-                            complyze_session: session,
+                            complyze_token: response.user?.id || 'authenticated',
+                            complyze_user: response.user,
+                            complyze_session: response,
                             complyze_login_time: Date.now()
                         });
                         
-                        console.log('Login data stored successfully');
-                        // Reload interface to show main view
-                        this.showMainInterface(container);
+                        // Small delay to ensure storage is updated
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                        // Force refresh the popup content
+                        await this.loadPopupContent(container);
+                        
+                        console.log('Complyze: Interface refreshed after login');
                     } else {
-                        console.error('Invalid response format - missing token or user:', { token: !!token, user: !!user });
-                        console.error('Full response data:', data);
-                        errorDiv.textContent = 'Login response missing required data';
+                        const errorMessage = response?.error || 'Login failed';
+                        console.error('Complyze: Login failed:', errorMessage);
+                        
+                        // Map common error messages to user-friendly ones
+                        const userMessage = {
+                            'Invalid login credentials': 'Invalid email or password',
+                            'Email not confirmed': 'Please verify your email first',
+                            'User not found': 'No account found with this email',
+                            'Invalid email or password': 'Invalid email or password',
+                            'Login failed': 'Login failed. Please check your credentials.'
+                        }[errorMessage] || errorMessage;
+                        
+                        errorDiv.textContent = userMessage;
                         errorDiv.style.display = 'block';
                     }
-                } else {
-                    const errorData = await response.json();
-                    console.error('Supabase auth error:', errorData);
-                    
-                    // Handle Supabase error format
-                    const supabaseError = errorData.error || {};
-                    const errorMessage = supabaseError.message || 'Authentication failed';
-                    
-                    // Map common Supabase errors to user-friendly messages
-                    const userMessage = {
-                        'Invalid login credentials': 'Invalid email or password',
-                        'Email not confirmed': 'Please verify your email first',
-                        'User not found': 'No account found with this email',
-                        'Invalid email or password': 'Invalid email or password'
-                    }[errorMessage] || errorMessage;
-                    
-                    errorDiv.textContent = userMessage;
+                } catch (error) {
+                    console.error('Complyze: Login error:', error);
+                    errorDiv.textContent = 'Network error. Please check your connection and try again.';
                     errorDiv.style.display = 'block';
+                } finally {
+                    // Reset button state
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                    loginForm.removeAttribute('data-submitting');
                 }
-            } catch (error) {
-                console.error('Network error details:', error);
-                console.error('Error name:', error.name);
-                console.error('Error message:', error.message);
-                
-                // Try alternative endpoint if CORS error
-                if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                    console.log('Trying alternative auth endpoint...');
-                    try {
-                        const altResponse = await fetch('https://complyze.co/api/auth/check', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                            },
-                            body: JSON.stringify({ 
-                                email: email,
-                                password: password,
-                                action: 'login'
-                            })
-                        });
-                        
-                        if (altResponse.ok) {
-                            const data = await altResponse.json();
-                            console.log('Alternative login successful:', data);
-                            
-                            // Store login data
-                            await chrome.storage.local.set({
-                                complyze_token: data.token || 'demo_token',
-                                complyze_user: data.user || { email: email },
-                                complyze_session: data,
-                                complyze_login_time: Date.now()
-                            });
-                            
-                            this.showMainInterface(container);
-                            return;
-                        }
-                    } catch (altError) {
-                        console.error('Alternative login also failed:', altError);
-                    }
-                }
-                
-                errorDiv.textContent = 'Network error. Please check your connection and try again.';
-                errorDiv.style.display = 'block';
-            } finally {
-                // Reset button state
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
-            }
-        });
-
-        demoButton?.addEventListener('click', async () => {
-            // Set demo mode
-            await chrome.storage.local.set({
-                complyze_token: 'demo',
-                complyze_user: { name: 'Demo User', email: 'demo@complyze.co' }
             });
+        }
+
+        // Demo mode handler
+        if (demoButton && !demoButton.hasAttribute('data-complyze-handler-attached')) {
+            demoButton.setAttribute('data-complyze-handler-attached', 'true');
             
-            this.showMainInterface(container);
-        });
+            demoButton.addEventListener('click', async () => {
+                console.log('Complyze: Activating demo mode...');
+                
+                // Set demo mode
+                await chrome.storage.local.set({
+                    complyze_token: 'demo',
+                    complyze_user: { name: 'Demo User', email: 'demo@complyze.co' }
+                });
+                
+                // Small delay to ensure storage is updated
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Refresh the popup content
+                await this.loadPopupContent(container);
+            });
+        }
     }
 
     setupMainInterfaceHandlers(container) {
