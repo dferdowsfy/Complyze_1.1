@@ -143,6 +143,7 @@ class ComplyzeBackground {
     this.user = null;
     this.lastTokenVerification = null;
     this.tokenVerificationInterval = 15 * 60 * 1000; // 15 minutes
+    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; // Unique session ID
     this.init();
   }
 
@@ -456,13 +457,12 @@ class ComplyzeBackground {
         userId = this.user.id;
         console.log('Complyze: Using authenticated user ID from session:', userId);
       } else {
-        // Fall back to localStorage
-        userId = localStorage.getItem('complyze_uid');
-        console.log('Complyze: Using user ID from localStorage:', userId);
-        
-        // If still no userId, try chrome.storage
-        if (!userId) {
-          const storage = await chrome.storage.local.get(['userId', 'complyze_uid', 'supabase_uid']);
+        // Try chrome.storage for stored user data
+        const storage = await chrome.storage.local.get(['user', 'userId', 'complyze_uid', 'supabase_uid']);
+        if (storage.user && storage.user.id) {
+          userId = storage.user.id;
+          console.log('Complyze: Using user ID from chrome.storage user object:', userId);
+        } else if (storage.userId || storage.complyze_uid || storage.supabase_uid) {
           userId = storage.userId || storage.complyze_uid || storage.supabase_uid;
           console.log('Complyze: Using user ID from chrome.storage:', userId);
         }
@@ -487,11 +487,13 @@ class ComplyzeBackground {
             hasEmail: !!this.user.email,
             keys: Object.keys(this.user)
           });
-          // Last resort - try email as identifier if available
-          userId = this.user.id || this.user.email || 'unknown-user';
-        } else {
-          console.error('Complyze: ❌ No user ID or user object available. Using fallback ID.');
-          userId = 'extension-user-' + Date.now(); // Fallback ID as last resort
+          // Use the user ID or email as identifier
+          userId = this.user.id || this.user.email;
+        }
+        
+        if (!userId) {
+          console.error('Complyze: ❌ No user ID available. Cannot sync to Supabase.');
+          return { success: false, error: 'No user ID available' };
         }
       }
       
@@ -500,31 +502,83 @@ class ComplyzeBackground {
         // Create event with enhanced metadata to help debug
         const promptEvent = {
           user_id: userId,
-          platform: promptData.platform || 'chrome_extension',
-          prompt: promptData.prompt,
-          flagged: true,
+          original_prompt: promptData.prompt,
+          optimized_prompt: optimizedPrompt || cleanedPrompt,
+          timestamp: new Date().toISOString(),
           risk_level: riskLevel,
-          risks: [...(basicAnalysis.detectedPII || []), ...(basicAnalysis.aiRiskIndicators || [])],
-          timestamp: Date.now(),
-          // Add extra metadata to help with debugging
+          sensitivity_score: sensitiveDataRemoved.length,
+          framework_flags: complianceFrameworks,
+          llm_used: promptData.model || 'unknown',
+          platform: promptData.platform,
+          url: promptData.url,
+          flagged: true,
+          pii_detected: sensitiveDataRemoved.map(item => item.type),
+          compliance_frameworks: complianceFrameworks,
+          ai_risk_indicators: aiRiskIndicators,
+          improvements: optimizationDetails?.improvements || [],
+          session_id: this.sessionId || 'session_' + Date.now(),
+          extension_version: chrome.runtime.getManifest().version || '2.0.0',
           metadata: {
-            source: 'chrome_extension_v2',
-            auth_method: this.user ? 'session_auth' : 'localstorage',
-            user_email: this.user?.email || 'unknown',
-            extension_version: '2.0'
+            hasOptimization: !!optimizedPrompt,
+            hasUser: !!this.user,
+            authMethod: this.user ? 'authenticated' : 'anonymous',
+            userIdSource: userId === this.user?.id ? 'auth_session' : 
+                         userId === storage?.user?.id ? 'storage_user' :
+                         userId ? 'extracted' : 'unknown'
           }
         };
-        
-        console.log('Complyze: 📤 Sending prompt event to Supabase with user_id:', userId);
-        console.log('Complyze: Event details:', {
-          platform: promptEvent.platform,
+
+        console.log('Complyze: 📤 Preparing to sync high-risk prompt event:', {
+          user_id: promptEvent.user_id,
           risk_level: promptEvent.risk_level,
-          risks_count: promptEvent.risks.length,
-          prompt_length: promptEvent.prompt.length,
-          metadata: promptEvent.metadata
+          pii_count: promptEvent.pii_detected.length,
+          hasOptimized: !!promptEvent.optimized_prompt,
+          platform: promptEvent.platform
         });
+
+        // Sync to Supabase
+        await syncPromptEventToSupabase(promptEvent);
         
-        syncPromptEventToSupabase(promptEvent);
+        // If optimization was successful, show both prompts
+        if (optimizedPrompt && promptData.triggerOptimization) {
+          this.injectUI(tabId);
+          chrome.tabs.sendMessage(tabId, {
+            type: 'show_safe_prompt_modal',
+            originalPrompt: promptData.prompt,
+            safePrompt: optimizedPrompt,
+            analysis: {
+              ...basicAnalysis,
+              optimized_prompt: optimizedPrompt,
+              improvements: optimizationDetails?.improvements || []
+            }
+          });
+        }
+      } else {
+        // For low-risk prompts, still sync if optimization was requested
+        if (promptData.triggerOptimization) {
+          const promptEvent = {
+            user_id: userId,
+            original_prompt: promptData.prompt,
+            optimized_prompt: optimizedPrompt || promptData.prompt,
+            timestamp: new Date().toISOString(),
+            risk_level: riskLevel,
+            sensitivity_score: 0,
+            framework_flags: [],
+            llm_used: promptData.model || 'unknown',
+            platform: promptData.platform,
+            url: promptData.url,
+            flagged: false,
+            pii_detected: [],
+            compliance_frameworks: [],
+            ai_risk_indicators: [],
+            improvements: optimizationDetails?.improvements || [],
+            session_id: this.sessionId || 'session_' + Date.now(),
+            extension_version: chrome.runtime.getManifest().version || '2.0.0'
+          };
+
+          console.log('Complyze: 📤 Syncing low-risk prompt event for tracking');
+          await syncPromptEventToSupabase(promptEvent);
+        }
       }
 
       // Step 3: NEW - If optimization is requested and sensitive data is detected, trigger AI optimization WITH GUARANTEED DELAYS

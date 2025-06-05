@@ -593,44 +593,66 @@ class PromptWatcher {
       return;
     }
     
-    // Check if we've already processed this exact prompt
-    // Use a safer hash function that handles Unicode characters
+    console.log('Complyze: ✅ GOT PROMPT TEXT:', userPrompt.substring(0, 100) + '...');
+    
+    // Detect the current model being used
+    const currentModel = this.detectCurrentModel();
+    console.log('Complyze: Detected model:', currentModel);
+
+    // Create a hash of the prompt to track it
     const promptHash = this.createSafeHash(userPrompt);
     
-    // For subsequent messages, be less strict about deduplication
-    // Clear processed prompts if we have too many or if enough time has passed
-    const now = Date.now();
-    if (!this.lastClearTime) this.lastClearTime = now;
-    
-    if (this.processedPrompts.size > 10 || (now - this.lastClearTime) > 30000) { // Clear every 30 seconds
-      console.log('Complyze: Clearing processed prompts cache');
-      this.processedPrompts.clear();
-      this.lastClearTime = now;
-    }
-    
+    // Check if we've already processed this exact prompt
     if (this.processedPrompts.has(promptHash)) {
-      console.log('Complyze: Prompt already processed recently, skipping');
+      console.log('Complyze: Prompt already processed, skipping');
       return;
     }
-    
+
+    // Add to processed prompts
     this.processedPrompts.add(promptHash);
     
-    console.log('Complyze: Capturing prompt for analysis:', userPrompt.substring(0, 100) + '...');
-    
-    // Send to background script for processing (with error handling)
-    try {
+    // Clean up old processed prompts after 5 minutes
+    setTimeout(() => {
+      this.processedPrompts.delete(promptHash);
+    }, 5 * 60 * 1000);
+
+    console.log('Complyze: 📤 SENDING analyze_prompt MESSAGE TO BACKGROUND');
+    console.log('Complyze: Message details:', {
+      type: 'analyze_prompt',
+      promptLength: userPrompt.length,
+      platform: window.location.hostname,
+      model: currentModel,
+      triggerOptimization: true
+    });
+
+    // Send to background script for processing
     chrome.runtime.sendMessage({
       type: 'analyze_prompt',
       payload: {
         prompt: userPrompt,
-        platform: this.getCurrentPlatform(),
+        platform: window.location.hostname,
         url: window.location.href,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        model: currentModel,
+        triggerOptimization: true // Always trigger optimization for flagged prompts
+      }
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Complyze: Runtime error:', chrome.runtime.lastError);
+        // Try to handle the error gracefully
+        this.handleContextInvalidation();
+        return;
+      }
+      
+      console.log('Complyze: 📥 RECEIVED RESPONSE FROM BACKGROUND:', response);
+      
+      if (response && response.success) {
+        console.log('Complyze: Prompt analysis completed successfully');
+        // The background script will handle showing the UI if needed
+      } else if (response && response.error) {
+        console.error('Complyze: Analysis error:', response.error);
       }
     });
-    } catch (error) {
-      console.log('Complyze: Could not send message to background script (context may be invalidated):', error.message);
-    }
   }
   
   monitorInputChanges() {
@@ -2244,75 +2266,48 @@ class PromptWatcher {
   // NEW: Detect current model being used on the platform
   detectCurrentModel() {
     const platform = this.getCurrentPlatform();
-    let model = 'Unknown';
     
-    try {
-      switch (platform) {
-        case 'chatgpt':
-          // Look for model selector or model indicator in ChatGPT
-          const gptModelSelector = document.querySelector('[data-testid="model-switcher"]') || 
-                                   document.querySelector('.text-token-text-primary') ||
-                                   document.querySelector('[role="button"][aria-haspopup="menu"]');
-          if (gptModelSelector) {
-            const modelText = gptModelSelector.textContent || gptModelSelector.innerText;
-            if (modelText.includes('GPT-4o')) model = 'GPT-4o';
-            else if (modelText.includes('GPT-4')) model = 'GPT-4 Turbo';
-            else if (modelText.includes('GPT-3.5')) model = 'GPT-3.5 Turbo';
-            else model = 'OpenAI GPT-4'; // Default fallback
-          } else {
-            model = 'OpenAI GPT-4'; // Default for ChatGPT
-          }
-          break;
-          
-        case 'claude':
-          // Look for model indicator in Claude
-          const claudeModelIndicator = document.querySelector('[data-testid="model-selector"]') ||
-                                       document.querySelector('.text-sm.text-text-300') ||
-                                       document.querySelector('[role="button"]');
-          if (claudeModelIndicator) {
-            const modelText = claudeModelIndicator.textContent || claudeModelIndicator.innerText;
-            if (modelText.includes('Claude 3.5 Sonnet')) model = 'Claude 3.5 Sonnet';
-            else if (modelText.includes('Claude 3 Opus')) model = 'Claude 3 Opus';
-            else if (modelText.includes('Claude 3 Sonnet')) model = 'Claude 3 Sonnet';
-            else if (modelText.includes('Claude 3 Haiku')) model = 'Claude 3 Haiku';
-            else model = 'Anthropic Claude'; // Default fallback
-          } else {
-            model = 'Anthropic Claude'; // Default for Claude
-          }
-          break;
-          
-        case 'gemini':
-          // Look for model indicator in Gemini
-          const geminiModelIndicator = document.querySelector('[data-testid="model-picker"]') ||
-                                       document.querySelector('.model-name') ||
-                                       document.querySelector('[role="button"][aria-label*="model"]');
-          if (geminiModelIndicator) {
-            const modelText = geminiModelIndicator.textContent || geminiModelIndicator.innerText;
-            if (modelText.includes('Gemini 1.5 Pro')) model = 'Gemini 1.5 Pro';
-            else if (modelText.includes('Gemini 1.5 Flash')) model = 'Gemini 1.5 Flash';
-            else if (modelText.includes('Gemini Pro')) model = 'Gemini 1.5 Pro';
-            else model = 'Google Gemini'; // Default fallback
-          } else {
-            model = 'Google Gemini'; // Default for Gemini
-          }
-          break;
-          
-        default:
-          model = 'Unknown';
+    if (platform === 'chat.openai.com' || platform === 'chatgpt.com') {
+      // Look for GPT model indicators
+      const modelElements = document.querySelectorAll('[class*="model"], [data-testid*="model"], button[aria-haspopup="menu"]');
+      for (const elem of modelElements) {
+        const text = elem.textContent?.toLowerCase() || '';
+        if (text.includes('gpt-4')) return 'gpt-4';
+        if (text.includes('gpt-3.5')) return 'gpt-3.5-turbo';
+        if (text.includes('gpt-4o')) return 'gpt-4o';
       }
-    } catch (error) {
-      console.log('Complyze: Error detecting model:', error);
-      // Fallback based on platform
-      switch (platform) {
-        case 'chatgpt': model = 'OpenAI GPT-4'; break;
-        case 'claude': model = 'Anthropic Claude'; break;
-        case 'gemini': model = 'Google Gemini'; break;
-        default: model = 'Unknown';
-      }
+      // Check for model in page content
+      const pageText = document.body.textContent || '';
+      if (pageText.includes('GPT-4')) return 'gpt-4';
+      if (pageText.includes('GPT-4o')) return 'gpt-4o';
+      return 'gpt-3.5-turbo'; // default for ChatGPT
     }
     
-    console.log(`Complyze: Detected model: ${model} on platform: ${platform}`);
-    return model;
+    if (platform === 'claude.ai') {
+      // Look for Claude model indicators
+      const modelElements = document.querySelectorAll('[class*="model"], span, div');
+      for (const elem of modelElements) {
+        const text = elem.textContent?.toLowerCase() || '';
+        if (text.includes('opus')) return 'claude-3-opus';
+        if (text.includes('sonnet')) return 'claude-3-sonnet';
+        if (text.includes('haiku')) return 'claude-3-haiku';
+      }
+      return 'claude-3-sonnet'; // default for Claude
+    }
+    
+    if (platform === 'gemini.google.com') {
+      // Look for Gemini model indicators
+      const modelElements = document.querySelectorAll('[class*="model"], span, div');
+      for (const elem of modelElements) {
+        const text = elem.textContent?.toLowerCase() || '';
+        if (text.includes('pro')) return 'gemini-pro';
+        if (text.includes('ultra')) return 'gemini-ultra';
+        if (text.includes('2.5')) return 'gemini-2.5-pro';
+      }
+      return 'gemini-pro'; // default for Gemini
+    }
+    
+    return 'unknown';
   }
 }
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from '@/lib/supabaseClient';
 import { useDashboardMetrics } from '@/lib/useDashboardMetrics';
 import { BudgetModal } from '@/components/BudgetModal';
+import { PromptEventsPanel } from '@/components/PromptEventsPanel';
 
 // Inline style helpers
 const COLORS = {
@@ -907,6 +908,292 @@ export default function Dashboard() {
     { label: 'High Risk', value: 20, color: '#ef4444' },
   ];
 
+  // --- Framework Tag Colors ---
+  const FRAMEWORK_COLORS: Record<string, string> = {
+    NIST: 'bg-blue-500',
+    'NIST AI RMF': 'bg-indigo-500',
+    FedRAMP: 'bg-orange-500',
+    'SOC 2': 'bg-green-600',
+    'ISO 27001': 'bg-pink-500',
+    SO: 'bg-yellow-500',
+    'NIST AI RMP SOC': 'bg-cyan-600',
+    NSST: 'bg-purple-500',
+  };
+
+  // --- Flagged Prompt Interface ---
+  interface FlaggedPrompt {
+    id: string;
+    summary: string;
+    frameworks: string[];
+    date: string;
+    risk: 'High' | 'Medium' | 'Low';
+    status: string;
+    platform?: string;
+    url?: string;
+    piiTypes?: string[];
+    mappedControls?: any[];
+    detectionTime: string;
+  }
+
+  function FrameworkTag({ fw }: { fw: string }) {
+    const color = FRAMEWORK_COLORS[fw] || 'bg-gray-400';
+    return (
+      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold text-white mr-2 mb-1 ${color}`}>{fw}</span>
+    );
+  }
+
+  function FlaggedPromptsPanel() {
+    const [flaggedPrompts, setFlaggedPrompts] = useState<FlaggedPrompt[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const [clearing, setClearing] = useState(false);
+
+    useEffect(() => {
+      fetchFlaggedPrompts();
+    }, []);
+
+    const fetchFlaggedPrompts = async () => {
+      try {
+        setRefreshing(true);
+        setError(null);
+        
+        console.log('Complyze Dashboard: Fetching flagged prompts...');
+        const response = await fetch('/api/prompts/flagged?limit=20');
+        console.log('Complyze Dashboard: Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Complyze Dashboard: API error:', errorText);
+          throw new Error(`Failed to fetch flagged prompts: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Complyze Dashboard: API response:', data);
+        console.log('Complyze Dashboard: Number of flagged prompts:', data.prompts?.length || 0);
+        
+        setFlaggedPrompts(data.prompts || []);
+      } catch (err) {
+        console.error('Error fetching flagged prompts:', err);
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        // Fall back to empty array on error
+        setFlaggedPrompts([]);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    };
+
+    const createTestData = async () => {
+      try {
+        console.log('Complyze Dashboard: Creating test data...');
+        
+        const response = await fetch('/api/test-db', { method: 'POST' });
+        console.log('Complyze Dashboard: Create test response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Complyze Dashboard: Create test error:', errorText);
+          throw new Error(`Failed to create test data: ${response.status} ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Complyze Dashboard: Create test result:', result);
+        
+        // Refresh the list after creating test data
+        await fetchFlaggedPrompts();
+        
+        // Show success message
+        console.log('Complyze Dashboard: Test data created successfully');
+        
+      } catch (error) {
+        console.error('Failed to create test data:', error);
+        setError('Failed to create test data: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
+    };
+
+    if (loading && !refreshing) {
+      return (
+        <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+          <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
+          <div className="flex items-center justify-center py-8">
+            <div className="text-gray-500">Loading flagged prompts...</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (error && !refreshing) {
+      return (
+        <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={createTestData}
+                className="text-sm text-green-600 hover:text-green-800 transition-colors"
+              >
+                Create Test Data
+              </button>
+              <button 
+                onClick={fetchFlaggedPrompts}
+                className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+                disabled={refreshing}
+              >
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center justify-center py-8">
+            <div className="text-red-500">Error loading flagged prompts: {error}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (flaggedPrompts.length === 0 && !refreshing) {
+      return (
+        <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={createTestData}
+                className="text-sm text-green-600 hover:text-green-800 transition-colors"
+              >
+                Create Test Data
+              </button>
+              <button 
+                onClick={fetchFlaggedPrompts}
+                className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+                disabled={refreshing}
+              >
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center justify-center py-8">
+            <div className="text-gray-500">No flagged prompts found. Your prompts are looking secure! 🛡️</div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-3 sm:gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2 sm:gap-0">
+          <div className="font-bold text-lg sm:text-xl text-[#0E1E36]">
+            Flagged Prompts {refreshing && <span className="text-sm text-gray-500">(Refreshing...)</span>}
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <button 
+              onClick={createTestData}
+              className="text-green-600 hover:text-green-800 transition-colors"
+            >
+              Create Test Data
+            </button>
+            <button 
+              onClick={fetchFlaggedPrompts}
+              className="text-blue-600 hover:text-blue-800 transition-colors"
+              disabled={refreshing}
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+        {flaggedPrompts.map((row, i) => (
+          <div key={row.id || i} className="flex flex-col lg:flex-row lg:items-start justify-between border-b border-gray-100 py-3 sm:py-4 last:border-b-0 gap-3 lg:gap-4">
+            <div className="flex-1">
+              <div className="font-semibold text-sm sm:text-base text-[#0E1E36] mb-2">{row.summary}</div>
+              
+              {/* Framework Tags */}
+              <div className="flex flex-wrap gap-1 mb-2">
+                {row.frameworks?.map(fw => <FrameworkTag key={fw} fw={fw} />)}
+              </div>
+              
+              {/* Platform and LLM Provider Info */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                {row.platform && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-medium text-gray-500">Platform:</span>
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-semibold text-white ${
+                      row.platform === 'chatgpt' ? 'bg-green-600' :
+                      row.platform === 'claude' ? 'bg-orange-600' :
+                      row.platform === 'gemini' ? 'bg-blue-600' :
+                      'bg-gray-600'
+                    }`}>
+                      {row.platform === 'chatgpt' ? 'ChatGPT' :
+                       row.platform === 'claude' ? 'Claude' :
+                       row.platform === 'gemini' ? 'Gemini' :
+                       row.platform.toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                
+                {/* LLM Provider Badge */}
+                {row.platform && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-medium text-gray-500">LLM:</span>
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-semibold text-white ${
+                      row.platform === 'chatgpt' ? 'bg-green-500' :
+                      row.platform === 'claude' ? 'bg-orange-500' :
+                      row.platform === 'gemini' ? 'bg-blue-500' :
+                      'bg-gray-500'
+                    }`}>
+                      {row.platform === 'chatgpt' ? 'OpenAI GPT-4' :
+                       row.platform === 'claude' ? 'Anthropic Claude' :
+                       row.platform === 'gemini' ? 'Google Gemini' :
+                       'Unknown LLM'}
+                    </span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Metadata Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs text-gray-400">
+                <span>{row.date}</span>
+                {row.piiTypes && row.piiTypes.length > 0 && (
+                  <>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="text-red-600 font-medium">
+                      PII: {row.piiTypes.join(', ')}
+                    </span>
+                  </>
+                )}
+                {row.url && (
+                  <>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="text-blue-600 font-medium truncate max-w-[200px] sm:max-w-[300px]" title={row.url}>
+                      {row.url}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            {/* Risk and Status Badges */}
+            <div className="flex flex-row lg:flex-col gap-2 lg:mt-0">
+              <span className={`inline-block px-2 sm:px-3 py-1 rounded-full text-xs font-bold text-center ${
+                row.risk === 'High' ? 'bg-red-100 text-red-700' : 
+                row.risk === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 
+                'bg-green-100 text-green-700'
+              }`}>
+                {row.risk} Risk
+              </span>
+              <span className={`inline-block px-2 py-1 rounded text-xs font-medium text-center ${
+                row.status === 'flagged' ? 'bg-yellow-100 text-yellow-800' :
+                row.status === 'blocked' ? 'bg-red-100 text-red-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {row.status?.toUpperCase()}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   // --- Prompt Optimizer Panel Component ---
   function PromptOptimizerPanel({ onOptimize }: { onOptimize: (data: any) => void }) {
     const [prompt, setPrompt] = useState("");
@@ -1077,6 +1364,12 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 pb-6 sm:pb-8 lg:pb-10">
         <FlaggedPromptsPanel />
       </div>
+      
+      {/* Live Prompt Events Panel - NEW */}
+      <div className="max-w-7xl mx-auto px-4 pb-6 sm:pb-8 lg:pb-10">
+        <PromptEventsPanel userId={userId} />
+      </div>
+      
       {/* Floating Optimizer Button */}
       <FloatingOptimizerButton />
       {/* Optimizer Drawer */}
