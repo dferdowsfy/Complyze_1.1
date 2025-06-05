@@ -5,6 +5,7 @@ class ComplyzeFloatingUI {
         this.isOpen = false;
         this.sidebar = null;
         this.floatingIcon = null;
+        this.isLoadingContent = false;
         this.init();
     }
 
@@ -348,6 +349,13 @@ class ComplyzeFloatingUI {
     }
 
     async loadPopupContent(container) {
+        // Prevent concurrent loading
+        if (this.isLoadingContent) {
+            console.log("Complyze: Content already loading, skipping duplicate call");
+            return;
+        }
+        
+        this.isLoadingContent = true;
         console.log("Complyze: Loading popup content...");
         
         try {
@@ -377,9 +385,19 @@ class ComplyzeFloatingUI {
                 console.log("Complyze: User not authenticated, showing login screen");
                 this.showLoginScreen(container);
             }
+            
+            // Set up event handlers after content is loaded
+            if (isLoggedIn) {
+                this.setupMainInterfaceHandlers(container);
+            } else {
+                this.setupLoginHandlers(container);
+            }
         } catch (error) {
             console.error("Complyze: Error loading popup content:", error);
             this.showLoginScreen(container);
+            this.setupLoginHandlers(container);
+        } finally {
+            this.isLoadingContent = false;
         }
     }
 
@@ -547,8 +565,18 @@ class ComplyzeFloatingUI {
             </div>
         `;
 
-        // Add event handlers
-        this.setupLoginHandlers(container);
+        // Force black text for better readability
+        const forceBlackText = () => {
+            const inputs = container.querySelectorAll('input[type="email"], input[type="password"]');
+            inputs.forEach(input => {
+                input.style.color = '#000000';
+                input.style.webkitTextFillColor = '#000000';
+                input.style.backgroundColor = 'white';
+                input.style.backgroundImage = 'none';
+            });
+        };
+
+        forceBlackText();
         
         // Auto-focus email field after a short delay
         setTimeout(() => {
@@ -557,56 +585,6 @@ class ComplyzeFloatingUI {
                 emailInput.focus();
             }
         }, 200);
-        
-        // Add focus/blur event handlers for better input styling
-        const inputs = container.querySelectorAll('input[type="email"], input[type="password"]');
-        inputs.forEach(input => {
-            // Ensure inputs are properly enabled
-            input.removeAttribute('disabled');
-            input.removeAttribute('readonly');
-            
-            // Force black text styling and remove autofill styling
-            const forceBlackText = () => {
-                input.style.color = '#000000';
-                input.style.webkitTextFillColor = '#000000';
-                input.style.backgroundColor = 'white';
-                input.style.backgroundImage = 'none';
-            };
-            
-            forceBlackText();
-            
-            input.addEventListener('focus', (e) => {
-                e.target.style.borderColor = '#f97316';
-                e.target.style.boxShadow = '0 0 0 3px rgba(249, 115, 22, 0.1)';
-                forceBlackText();
-                // Force focus for better input handling
-                setTimeout(() => e.target.focus(), 10);
-            });
-            
-            input.addEventListener('blur', (e) => {
-                e.target.style.borderColor = '#D1D5DB';
-                e.target.style.boxShadow = 'none';
-                forceBlackText();
-            });
-            
-            // Add explicit input event handlers
-            input.addEventListener('input', (e) => {
-                forceBlackText();
-                console.log('Input detected:', e.target.type, e.target.value);
-            });
-            
-            input.addEventListener('keydown', (e) => {
-                // Ensure normal typing behavior
-                e.stopPropagation();
-            });
-            
-            // Force black text after autofill
-            input.addEventListener('animationstart', (e) => {
-                if (e.animationName === 'onAutoFillStart') {
-                    forceBlackText();
-                }
-            });
-        });
     }
 
     showMainInterface(container) {
@@ -1064,7 +1042,18 @@ class ComplyzeFloatingUI {
                     return;
                 }
                 
+                // Check for too many recent attempts to prevent loops
+                const lastAttempt = parseInt(loginForm.getAttribute('data-last-attempt') || '0');
+                const now = Date.now();
+                if (now - lastAttempt < 2000) { // Prevent attempts within 2 seconds
+                    console.log('Complyze: Rate limiting login attempts');
+                    errorDiv.textContent = 'Please wait before trying again';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
                 loginForm.setAttribute('data-submitting', 'true');
+                loginForm.setAttribute('data-last-attempt', now.toString());
                 
                 const emailInput = document.getElementById('login-email');
                 const passwordInput = document.getElementById('login-password');
@@ -1091,8 +1080,13 @@ class ComplyzeFloatingUI {
                 try {
                     console.log('Complyze: Attempting login via background script...');
                     
-                    // Use background script for authentication (try both formats for compatibility)
-                    let response = await new Promise((resolve) => {
+                    // Create a timeout promise to prevent hanging
+                    const timeoutPromise = new Promise((_, reject) => {
+                        setTimeout(() => reject(new Error('Login timeout')), 10000); // 10 second timeout
+                    });
+                    
+                    // Use background script for authentication with timeout
+                    const loginPromise = new Promise((resolve) => {
                         chrome.runtime.sendMessage({
                             type: 'login',
                             email: email,
@@ -1100,17 +1094,7 @@ class ComplyzeFloatingUI {
                         }, resolve);
                     });
                     
-                    // If first attempt failed, try with MESSAGE_TYPES format
-                    if (!response || !response.success) {
-                        console.log('Complyze: Trying alternative message format...');
-                        response = await new Promise((resolve) => {
-                            chrome.runtime.sendMessage({
-                                type: 'login',
-                                email: email,
-                                password: password
-                            }, resolve);
-                        });
-                    }
+                    const response = await Promise.race([loginPromise, timeoutPromise]);
                     
                     console.log('Complyze: Background login response:', response);
                     
@@ -1128,6 +1112,9 @@ class ComplyzeFloatingUI {
                         // Small delay to ensure storage is updated
                         await new Promise(resolve => setTimeout(resolve, 500));
                         
+                        // Mark as no longer submitting BEFORE reloading content
+                        loginForm.removeAttribute('data-submitting');
+                        
                         // Force refresh the popup content
                         await this.loadPopupContent(container);
                         
@@ -1142,16 +1129,27 @@ class ComplyzeFloatingUI {
                             'Email not confirmed': 'Please verify your email first',
                             'User not found': 'No account found with this email',
                             'Invalid email or password': 'Invalid email or password',
-                            'Login failed': 'Login failed. Please check your credentials.'
+                            'Login failed': 'Login failed. Please check your credentials.',
+                            'Login timeout': 'Request timed out. Please try again.'
                         }[errorMessage] || errorMessage;
                         
                         errorDiv.textContent = userMessage;
                         errorDiv.style.display = 'block';
+                        
+                        // Add longer delay before allowing retry on failure
+                        setTimeout(() => {
+                            loginForm.removeAttribute('data-last-attempt');
+                        }, 3000);
                     }
                 } catch (error) {
                     console.error('Complyze: Login error:', error);
                     errorDiv.textContent = 'Network error. Please check your connection and try again.';
                     errorDiv.style.display = 'block';
+                    
+                    // Add delay before allowing retry on error
+                    setTimeout(() => {
+                        loginForm.removeAttribute('data-last-attempt');
+                    }, 3000);
                 } finally {
                     // Reset button state
                     submitBtn.innerHTML = originalText;
