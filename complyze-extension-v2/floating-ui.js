@@ -1494,6 +1494,57 @@ class ComplyzeFloatingUI {
             this.showSecurityAlert(analysisResult, analysisResult.original_prompt || '');
         }
     }
+
+    setupAnalysisResultListener() {
+        console.log("Complyze: Setting up analysis result listener...");
+        
+        // Listen for storage changes to detect new analysis results
+        if (chrome.storage && chrome.storage.onChanged) {
+            chrome.storage.onChanged.addListener((changes, namespace) => {
+                console.log("Complyze: Storage changed:", namespace, changes);
+                if (namespace === 'local' && changes.analysisResult && changes.analysisResult.newValue) {
+                    console.log("Complyze: Analysis result detected via storage listener!", changes.analysisResult.newValue);
+                    // Open sidebar and show security alert
+                    this.handleNewAnalysisResult(changes.analysisResult.newValue);
+                }
+            });
+        }
+        
+        // Also set up periodic check as fallback (every 1 second for faster response)
+        this.analysisCheckInterval = setInterval(() => {
+            this.checkForAnalysisResults();
+        }, 1000);
+        
+        // Do an immediate check on setup
+        setTimeout(() => {
+            this.checkForAnalysisResults();
+        }, 500);
+        
+        console.log("Complyze: Analysis result listener active");
+    }
+
+    async checkForAnalysisResults() {
+        try {
+            const storageData = await chrome.storage.local.get(['analysisResult']);
+            
+            if (storageData.analysisResult) {
+                console.log("Complyze: Found analysis result during periodic check", storageData.analysisResult);
+                await this.handleNewAnalysisResult(storageData.analysisResult);
+                
+                // Clear from storage after handling
+                await chrome.storage.local.remove(['analysisResult', 'optimizationMode']);
+                console.log("Complyze: Cleared analysis result from storage after handling");
+            }
+        } catch (error) {
+            console.error("Complyze: Error checking for analysis results:", error);
+        }
+    }
+
+    // Debug function to force check and render
+    async forceCheckAndRender() {
+        console.log("Complyze: Force checking for analysis results...");
+        await this.checkForAnalysisResults();
+    }
 }
 
 // Initialize the floating UI when the script loads
@@ -1514,104 +1565,27 @@ const initializeFloatingUI = () => {
             return;
         }
 
-        console.log("Complyze: Starting FloatingUI initialization...");
-        console.log("Complyze: Current URL:", window.location.href);
-        console.log("Complyze: DOM ready state:", document.readyState);
-        
-        // Check if we're on a supported platform
-        const hostname = window.location.hostname;
-        const supportedDomains = [
-            'chat.openai.com',
-            'chatgpt.com',
-            'claude.ai',
-            'gemini.google.com',
-            'bard.google.com',
-            'poe.com',
-            'character.ai',
-            'huggingface.co',
-            'replicate.com',
-            'cohere.ai',
-            'complyze.co'
-        ];
-        
-        const isSupported = supportedDomains.some(domain => hostname.includes(domain));
-        console.log("Complyze: Platform supported:", isSupported, "for hostname:", hostname);
-        
-        if (!isSupported) {
-            console.log("Complyze: Not on supported platform, skipping initialization");
-            return;
-        }
-
-        // Create the floating UI instance
+        console.log("Complyze: Creating new FloatingUI instance");
         window.complyzeFloatingUI = new ComplyzeFloatingUI();
         console.log("Complyze: FloatingUI initialized successfully");
         
-        // Verify the floating icon was created
+        // Force check for any pending analysis results
         setTimeout(() => {
-            const icon = document.getElementById('complyze-floating-icon');
-            if (icon) {
-                console.log("Complyze: ✅ Floating icon verified in DOM");
-            } else {
-                console.error("Complyze: ❌ Floating icon NOT found in DOM after initialization");
-                
-                // Try to force create it
-                if (window.complyzeFloatingUI && window.complyzeFloatingUI.createFloatingIcon) {
-                    console.log("Complyze: Attempting to force create floating icon...");
-                    window.complyzeFloatingUI.createFloatingIcon();
-                }
+            if (window.complyzeFloatingUI) {
+                window.complyzeFloatingUI.forceCheckAndRender();
             }
         }, 1000);
-        
     } catch (error) {
-        console.error("Complyze: Failed to initialize FloatingUI:", error);
-        console.error("Complyze: Error stack:", error.stack);
-        
-        // Try a simple retry after delay
-        setTimeout(() => {
-            try {
-                if (!window.complyzeFloatingUI) {
-                    console.log("Complyze: Retrying FloatingUI initialization...");
-                    window.complyzeFloatingUI = new ComplyzeFloatingUI();
-                    console.log("Complyze: FloatingUI initialized on retry");
-                }
-            } catch (retryError) {
-                console.error("Complyze: Failed to initialize FloatingUI on retry:", retryError);
-            }
-        }, 2000);
+        console.error("Complyze: FloatingUI initialization error:", error);
     }
 };
 
-// Multiple initialization strategies for maximum reliability
-console.log("Complyze: Setting up FloatingUI initialization strategies...");
+// Initialize immediately to ensure it's ready
+console.log("Complyze: Initializing FloatingUI immediately...");
+initializeFloatingUI();
 
-// Strategy 1: Immediate if DOM is ready
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    console.log("Complyze: DOM ready, initializing immediately");
-    initializeFloatingUI();
-} else {
-    console.log("Complyze: DOM not ready, waiting for DOMContentLoaded");
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log("Complyze: DOMContentLoaded event fired");
-        initializeFloatingUI();
-    });
-}
-
-// Strategy 2: Delayed initialization
-setTimeout(() => {
-    console.log("Complyze: Running delayed initialization (500ms)");
-    initializeFloatingUI();
-}, 500);
-
-// Strategy 3: Additional fallback
-setTimeout(() => {
-    console.log("Complyze: Running fallback initialization (2000ms)");
-    initializeFloatingUI();
-}, 2000);
-
-// Strategy 4: Listen for window load as final fallback
-window.addEventListener('load', () => {
-    console.log("Complyze: Window load event fired, final initialization attempt");
-    initializeFloatingUI();
-});
+// Also initialize on DOMContentLoaded and window.load events for redundancy
+document.addEventListener('DOMContentLoaded', initializeFloatingUI);
+window.addEventListener('load', initializeFloatingUI);
 
 console.log("Complyze: Floating UI script loaded and initialization strategies activated"); 

@@ -718,11 +718,34 @@ class ComplyzeBackground {
       // DISABLED: Using floating UI instead of injected modal
       console.log('Complyze: Optimization UI injection disabled - using floating UI sidebar');
       
-      // Just set the data for floating UI to use
+      // First try to directly communicate with floating UI via script injection
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: (resultStr) => {
+            const result = JSON.parse(resultStr);
+            console.log('Complyze: Directly passing analysis result to floating UI');
+            
+            if (window.complyzeFloatingUI) {
+              window.complyzeFloatingUI.handleNewAnalysisResult(result);
+              return true;
+            }
+            return false;
+          },
+          args: [JSON.stringify(result)]
+        });
+        
+        console.log('Complyze: Direct communication with floating UI attempted');
+      } catch (err) {
+        console.log('Complyze: Direct communication with floating UI failed, using storage fallback');
+      }
+      
+      // Set the data for floating UI to use (as fallback)
       await chrome.storage.local.set({ 
         analysisResult: result,
         optimizationMode: true
       });
+      console.log('Complyze: analysisResult set in storage (optimization)', result);
       
       // Don't inject the conflicting modal UI
       // chrome.scripting.executeScript({

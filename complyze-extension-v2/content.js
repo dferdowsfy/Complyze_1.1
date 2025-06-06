@@ -1366,7 +1366,28 @@ class PromptWatcher {
         }, (response) => {
           console.log('Complyze: API optimization response:', response);
           // The response will trigger the sidebar to open with the optimized prompt
+          
+          // Additional fallback: Check if floating UI exists and force it to check
+          if (window.complyzeFloatingUI && window.complyzeFloatingUI.forceCheckAndRender) {
+            console.log('Complyze: Forcing UI to check for analysis results...');
+            setTimeout(() => {
+              window.complyzeFloatingUI.forceCheckAndRender();
+            }, 1000);
+          }
         });
+        
+        // Final fallback: Check for stored results directly after a delay
+        setTimeout(async () => {
+          try {
+            const storageData = await chrome.storage.local.get(['analysisResult']);
+            if (storageData.analysisResult && window.complyzeFloatingUI) {
+              console.log('Complyze: Found analysis results in fallback check:', storageData.analysisResult);
+              window.complyzeFloatingUI.handleNewAnalysisResult(storageData.analysisResult);
+            }
+          } catch (err) {
+            console.error('Complyze: Error in fallback check:', err);
+          }
+        }, 3000);
       });
     }
     
