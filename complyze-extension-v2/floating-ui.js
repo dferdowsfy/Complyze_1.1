@@ -927,7 +927,7 @@ class ComplyzeFloatingUI {
                         gap: 8px;
                         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
                     ">
-                        ✅ Use Secure Version
+                        ✅ Use Optimized Prompt
                     </button>
                     <button id="complyze-copy-optimized" style="
                         padding: 12px 16px; 
@@ -1260,10 +1260,49 @@ class ComplyzeFloatingUI {
 
         // Use optimized button
         document.getElementById('complyze-use-optimized')?.addEventListener('click', () => {
-            this.replacePromptText(analysis.optimized_prompt);
+            // Replace prompt text using the stored reference if available
+            if (window.complyzeCurrentPromptElement) {
+                const promptElement = window.complyzeCurrentPromptElement;
+                const optimizedPrompt = analysis.optimized_prompt;
+                
+                if (promptElement.tagName === 'TEXTAREA' || promptElement.tagName === 'INPUT') {
+                    promptElement.value = optimizedPrompt;
+                    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+                    promptElement.dispatchEvent(new Event('change', { bubbles: true }));
+                } else if (promptElement.contentEditable === 'true') {
+                    promptElement.textContent = optimizedPrompt;
+                    promptElement.dispatchEvent(new Event('input', { bubbles: true }));
+                    promptElement.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                
+                // Focus the input
+                promptElement.focus();
+                
+                // Move cursor to end
+                if (promptElement.setSelectionRange) {
+                    promptElement.setSelectionRange(optimizedPrompt.length, optimizedPrompt.length);
+                } else if (promptElement.contentEditable === 'true') {
+                    const range = document.createRange();
+                    const selection = window.getSelection();
+                    range.selectNodeContents(promptElement);
+                    range.collapse(false);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
+            } else {
+                // Fallback to generic replacement
+                this.replacePromptText(analysis.optimized_prompt);
+            }
+            
+            // Clear any warning popups
+            this.clearAllAlertPopups();
+            
+            // Notify content script
             this.markPromptAsSafe(analysis.optimized_prompt);
-            this.closeSidebar();
             this.allowSubmission();
+            
+            // Keep sidebar open for user reference
+            console.log('Complyze: Optimized prompt applied successfully');
         });
 
         // Send anyway button

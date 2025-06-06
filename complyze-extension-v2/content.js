@@ -1266,7 +1266,7 @@ class PromptWatcher {
             width: 100%;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
           ">
-            🔒 Secure Version
+            🔒 Secure Prompt
           </button>
           <button id="complyze-ignore" style="
             background: rgba(255, 255, 255, 0.1); 
@@ -1343,20 +1343,30 @@ class PromptWatcher {
     }
     
     if (fixButton) {
-      fixButton.addEventListener('click', (e) => {
+      fixButton.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        console.log('Complyze: Fix button clicked, creating safe prompt panel...');
+        console.log('Complyze: Secure Prompt button clicked, triggering API optimization...');
         
-        // Ensure we have the analysis data needed for the panel
-        const enhancedAnalysis = {
-          ...analysis,
-          detectedPII: detectedPII,
-          risk_level: riskLevel,
-          original_prompt: this.getPromptText(promptElement)
-        };
+        const originalPrompt = this.getPromptText(promptElement);
         
-        this.createSafePromptPanel(promptElement, enhancedAnalysis);
+        // Store the prompt element reference for later use
+        window.complyzeCurrentPromptElement = promptElement;
+        
+        // Send message to background script to trigger optimization
+        chrome.runtime.sendMessage({
+          type: 'analyze_prompt',
+          payload: {
+            prompt: originalPrompt,
+            platform: this.getCurrentPlatform() || 'unknown',
+            url: window.location.href,
+            timestamp: new Date().toISOString(),
+            triggerOptimization: true
+          }
+        }, (response) => {
+          console.log('Complyze: API optimization response:', response);
+          // The response will trigger the sidebar to open with the optimized prompt
+        });
       });
     }
     
