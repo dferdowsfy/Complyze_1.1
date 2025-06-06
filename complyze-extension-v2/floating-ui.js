@@ -1486,9 +1486,13 @@ class ComplyzeFloatingUI {
         
         // Always open sidebar (create it if it does not yet exist)
         console.log("Complyze: Calling openSidebar()...");
-        // Open the sidebar first
         this.openSidebar();
         console.log("Complyze: openSidebar() called");
+
+        // Display security alert in the sidebar
+        if (analysisResult) {
+            this.showSecurityAlert(analysisResult, analysisResult.original_prompt || '');
+        }
     }
 }
 
