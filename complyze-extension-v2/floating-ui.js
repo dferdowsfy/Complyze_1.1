@@ -797,7 +797,7 @@ class ComplyzeFloatingUI {
     }
 
     // New method to show security alert in sidebar
-    showSecurityAlert(analysis, originalPrompt) {
+    async showSecurityAlert(analysis, originalPrompt) {
         console.log('Complyze: Showing security alert in floating sidebar');
         console.log('Complyze: Analysis data:', analysis);
         
@@ -811,6 +811,7 @@ class ComplyzeFloatingUI {
 
         // Open sidebar
         this.openSidebar();
+        console.log("Complyze: openSidebar() called");
 
         const sidebarContent = this.sidebar.querySelector('.complyze-sidebar-content');
         if (!sidebarContent) {
@@ -1480,7 +1481,15 @@ class ComplyzeFloatingUI {
         }
     }
 
-
+    async handleNewAnalysisResult(analysisResult) {
+        console.log("Complyze: handleNewAnalysisResult called with:", analysisResult);
+        
+        // Always open sidebar (create it if it does not yet exist)
+        console.log("Complyze: Calling openSidebar()...");
+        // Open the sidebar first
+        this.openSidebar();
+        console.log("Complyze: openSidebar() called");
+    }
 }
 
 // Initialize the floating UI when the script loads
