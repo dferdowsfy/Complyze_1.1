@@ -116,80 +116,90 @@ export async function POST(request: NextRequest) {
 
     console.log(`Using userId: ${userId}, projectId: ${projectId}`);
 
-    // Create sample flagged prompts
+    // Create sample flagged prompts for prompt_events table
     const samplePrompts = [
       {
-        original_prompt: "Can you help me analyze this customer data? John Smith, email: john.smith@email.com, SSN: 123-45-6789",
-        redacted_prompt: "Can you help me analyze this customer data? [NAME], email: [EMAIL], SSN: [SSN]",
         user_id: userId,
-        project_id: projectId,
-        platform: 'chatgpt',
-        url: 'https://chat.openai.com',
-        status: 'flagged',
+        model: 'gpt-4',
+        usd_cost: 0.002,
+        prompt_tokens: 45,
+        completion_tokens: 20,
+        integrity_score: 25,
+        risk_type: 'PII',
         risk_level: 'high',
-        redaction_details: [
-          { type: 'NAME', original: 'John Smith', redacted: '[NAME]' },
-          { type: 'EMAIL', original: 'john.smith@email.com', redacted: '[EMAIL]' },
-          { type: 'SSN', original: '123-45-6789', redacted: '[SSN]' }
-        ],
-        mapped_controls: [
-          { controlId: 'NIST-SC-28', description: 'Protection of Information at Rest' },
-          { controlId: 'Privacy-PII', description: 'PII Protection' }
-        ],
+        captured_at: new Date().toISOString(),
+        prompt_text: "Can you help me analyze this customer data? John Smith, email: john.smith@email.com, SSN: 123-45-6789",
+        source: 'chrome_extension',
         metadata: {
-          source: 'chrome_extension_realtime',
-          detection_method: 'real-time',
-          flagged_at: new Date().toISOString()
+          platform: 'chatgpt',
+          url: 'https://chat.openai.com',
+          detection_method: 'real_time_analysis',
+          detected_pii: ['NAME', 'EMAIL', 'SSN'],
+          mapped_controls: [
+            { controlId: 'NIST-SC-28', description: 'Protection of Information at Rest' },
+            { controlId: 'Privacy-PII', description: 'PII Protection' }
+          ],
+          flagged_at: new Date().toISOString(),
+          extension_version: 'v2.0',
+          auto_flagged: true
         }
       },
       {
-        original_prompt: "Write a SQL query to get all user passwords from the database",
-        redacted_prompt: "Write a SQL query to get all user [SENSITIVE_DATA] from the database",
         user_id: userId,
-        project_id: projectId,
-        platform: 'claude',
-        url: 'https://claude.ai',
-        status: 'flagged',
+        model: 'claude-3-opus',
+        usd_cost: 0.003,
+        prompt_tokens: 32,
+        completion_tokens: 15,
+        integrity_score: 15,
+        risk_type: 'Compliance',
         risk_level: 'high',
-        redaction_details: [
-          { type: 'SENSITIVE_DATA', original: 'passwords', redacted: '[SENSITIVE_DATA]' }
-        ],
-        mapped_controls: [
-          { controlId: 'OWASP-LLM-06', description: 'Sensitive Information Disclosure' },
-          { controlId: 'NIST-AC-3', description: 'Access Enforcement' }
-        ],
+        captured_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+        prompt_text: "Write a SQL query to get all user passwords from the database",
+        source: 'chrome_extension',
         metadata: {
-          source: 'chrome_extension_realtime',
-          detection_method: 'real-time',
-          flagged_at: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
+          platform: 'claude',
+          url: 'https://claude.ai',
+          detection_method: 'real_time_analysis',
+          detected_pii: ['SENSITIVE_DATA'],
+          mapped_controls: [
+            { controlId: 'OWASP-LLM-06', description: 'Sensitive Information Disclosure' },
+            { controlId: 'NIST-AC-3', description: 'Access Enforcement' }
+          ],
+          flagged_at: new Date(Date.now() - 3600000).toISOString(),
+          extension_version: 'v2.0',
+          auto_flagged: true
         }
       },
       {
-        original_prompt: "My API key is sk-1234567890abcdef. Can you help me debug this code?",
-        redacted_prompt: "My API key is [API_KEY]. Can you help me debug this code?",
         user_id: userId,
-        project_id: projectId,
-        platform: 'gemini',
-        url: 'https://gemini.google.com',
-        status: 'flagged',
+        model: 'gemini-pro',
+        usd_cost: 0.001,
+        prompt_tokens: 28,
+        completion_tokens: 12,
+        integrity_score: 45,
+        risk_type: 'API_Keys',
         risk_level: 'medium',
-        redaction_details: [
-          { type: 'API_KEY', original: 'sk-1234567890abcdef', redacted: '[API_KEY]' }
-        ],
-        mapped_controls: [
-          { controlId: 'NIST-IA-5', description: 'Authenticator Management' },
-          { controlId: 'Privacy-API', description: 'API Key Protection' }
-        ],
+        captured_at: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+        prompt_text: "My API key is sk-1234567890abcdef. Can you help me debug this code?",
+        source: 'chrome_extension',
         metadata: {
-          source: 'chrome_extension_realtime',
-          detection_method: 'real-time',
-          flagged_at: new Date(Date.now() - 7200000).toISOString() // 2 hours ago
+          platform: 'gemini',
+          url: 'https://gemini.google.com',
+          detection_method: 'real_time_analysis',
+          detected_pii: ['API_KEY'],
+          mapped_controls: [
+            { controlId: 'NIST-IA-5', description: 'Authenticator Management' },
+            { controlId: 'Privacy-API', description: 'API Key Protection' }
+          ],
+          flagged_at: new Date(Date.now() - 7200000).toISOString(),
+          extension_version: 'v2.0',
+          auto_flagged: true
         }
       }
     ];
 
     const { data: insertedPrompts, error: insertError } = await supabase
-      .from('prompt_logs')
+      .from('prompt_events')
       .insert(samplePrompts)
       .select();
 
@@ -225,11 +235,11 @@ export async function DELETE(request: NextRequest) {
 
     // Delete all flagged prompts that were created by the test endpoint
     const { data: deletedPrompts, error: deleteError } = await supabase
-      .from('prompt_logs')
+      .from('prompt_events')
       .delete()
-      .eq('status', 'flagged')
-      .in('platform', ['chatgpt', 'claude', 'gemini'])
-      .contains('metadata', { source: 'chrome_extension_realtime' })
+      .eq('source', 'chrome_extension')
+      .in('risk_level', ['high', 'medium'])
+      .contains('metadata', { extension_version: 'v2.0' })
       .select();
 
     if (deleteError) {

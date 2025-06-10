@@ -312,7 +312,7 @@ function FrameworkTag({ fw }: { fw: string }) {
   );
 }
 
-function FlaggedPromptsPanel() {
+function FlaggedPromptsPanel({ userId }: { userId: string }) {
   const [flaggedPrompts, setFlaggedPrompts] = useState<FlaggedPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -321,15 +321,15 @@ function FlaggedPromptsPanel() {
 
   useEffect(() => {
     fetchFlaggedPrompts();
-  }, []);
+  }, [userId]);
 
   const fetchFlaggedPrompts = async () => {
     try {
       setRefreshing(true);
       setError(null);
       
-      console.log('Complyze Dashboard: Fetching flagged prompts...');
-      const response = await fetch('/api/prompts/flagged?limit=20');
+      console.log('Complyze Dashboard: Fetching flagged prompts for user:', userId);
+      const response = await fetch(`/api/prompts/flagged?limit=20&userId=${encodeURIComponent(userId)}`);
       console.log('Complyze Dashboard: Response status:', response.status);
       
       if (!response.ok) {
@@ -881,7 +881,14 @@ export default function Dashboard() {
   }
 
   // Get user ID from the authenticated user
-  const userId = user?.id || "test-user-123"; // Fallback for development
+  const userId = user?.id || "4a03e80e-5e21-4628-8ff1-f2fc5ba34a36"; // Fallback UUID for development
+  
+  // Debug logging for user ID issues
+  if (!user?.id) {
+    console.warn('Complyze Dashboard: No user.id found, using fallback UUID. User object:', user);
+  } else {
+    console.log('Complyze Dashboard: Using user ID:', userId);
+  }
 
   const handleOptimize = ({ prompt, model, optimizeForCost }: { prompt: string; model: string; optimizeForCost: boolean }) => {
     console.log('Optimizing:', { prompt, model, optimizeForCost });
@@ -1075,7 +1082,7 @@ export default function Dashboard() {
       
       {/* Flagged Prompts Panel */}
       <div className="max-w-7xl mx-auto px-4 pb-6 sm:pb-8 lg:pb-10">
-        <FlaggedPromptsPanel />
+                    <FlaggedPromptsPanel userId={userId} />
       </div>
       {/* Floating Optimizer Button */}
       <FloatingOptimizerButton />
