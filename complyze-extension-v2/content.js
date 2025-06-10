@@ -5,7 +5,7 @@ class PromptWatcher {
   constructor() {
     this.isLoggedIn = false;
     this.lastPrompt = '';
-    this.processedPrompts = new Set();
+    this.processedPrompts = new Map(); // Changed to Map to store timestamps
     this.safePrompts = new Set(); // Track safe prompts to avoid re-analysis
     this.lastClearTime = null;
     this.isAnalyzing = false;
@@ -471,23 +471,28 @@ class PromptWatcher {
     // Use a safer hash function that handles Unicode characters
     const promptHash = this.createSafeHash(userPrompt);
     
-    // For subsequent messages, be less strict about deduplication
-    // Clear processed prompts if we have too many or if enough time has passed
+    // Clear processed prompts more frequently to allow follow-up messages
     const now = Date.now();
     if (!this.lastClearTime) this.lastClearTime = now;
     
-    if (this.processedPrompts.size > 10 || (now - this.lastClearTime) > 30000) { // Clear every 30 seconds
-      console.log('Complyze: Clearing processed prompts cache');
+    // Clear cache more aggressively - every 10 seconds or after 3 prompts
+    if (this.processedPrompts.size > 3 || (now - this.lastClearTime) > 10000) {
+      console.log('Complyze: Clearing processed prompts cache to allow follow-up messages');
       this.processedPrompts.clear();
       this.lastClearTime = now;
     }
     
+    // Only skip if this exact prompt was processed very recently (within 5 seconds)
     if (this.processedPrompts.has(promptHash)) {
-      console.log('Complyze: Prompt already processed recently, skipping');
-      return;
+      const recentPromptTime = this.processedPrompts.get(promptHash);
+      if (recentPromptTime && (now - recentPromptTime) < 5000) {
+        console.log('Complyze: Prompt processed very recently, skipping');
+        return;
+      }
     }
     
-    this.processedPrompts.add(promptHash);
+    // Store prompt with timestamp instead of just adding to set
+    this.processedPrompts.set(promptHash, now);
     
     console.log('Complyze: Capturing prompt for analysis:', userPrompt.substring(0, 100) + '...');
     
@@ -518,6 +523,15 @@ class PromptWatcher {
       const promptElement = document.querySelector(selectors.promptInput);
       if (promptElement) {
         const currentValue = this.getPromptText(promptElement).trim();
+        
+        // If input was cleared (indicating message was sent), reset prevention state
+        if (lastInputValue && !currentValue) {
+          console.log('Complyze: Input cleared - message likely sent, resetting prevention state');
+          this.preventSubmission = false;
+          this.blockSubmitButtons(false);
+          this.clearRealTimeWarnings(promptElement);
+          this.lastPrompt = ''; // Clear last prompt to allow fresh detection
+        }
         
         // If we had text before and now it's empty, a message was likely sent
         if (lastInputValue && !currentValue && lastInputValue !== this.lastPrompt) {
@@ -2092,6 +2106,10 @@ class PromptWatcher {
           this.blockSubmitButtons(false);
           return;
         }
+        
+        // Clear previous analysis state for fresh start
+        this.preventSubmission = false;
+        this.blockSubmitButtons(false);
         
         // Debounce analysis
         clearTimeout(analysisTimeout);
