@@ -1,7 +1,7 @@
 {
   "name": "Complyze - AI Prompt Security & Optimization",
   "description": "Secure AI prompts across ChatGPT, Claude, Gemini with real-time PII detection, optimization, and compliance monitoring.",
-  "version": "2.0.0",
+  "version": "2.0.4",
   "manifest_version": 3,
   "icons": {
     "16": "icons/icon-16.png",
@@ -47,8 +47,7 @@
         "*://cohere.ai/*"
       ],
       "js": [
-        "content.js",
-        "prompt-interceptor.js"
+        "content.js"
       ],
       "run_at": "document_end"
     }
@@ -71,9 +70,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "injectUI.js",
-        "extension-debug.js",
-        "prompt-interceptor.js"
+        "injectUI.js"
       ],
       "matches": [
         "<all_urls>"

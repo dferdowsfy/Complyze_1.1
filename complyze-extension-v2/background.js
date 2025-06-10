@@ -15,13 +15,12 @@ const OPENROUTER_CONFIG = {
 
 // --- SUPABASE PROMPT EVENT SYNC ---
 /**
- * Sync prompt event to Supabase prompt_events table
- * WARNING: Never expose the service role key in production client-side code!
- * In production, use a backend relay or Edge Function for this call.
+ * Sync prompt event to Supabase prompt_events table via ingest API
+ * Uses the production ingest endpoint for proper data handling
  */
 async function syncPromptEventToSupabase(event) {
   // Use production Complyze API endpoint for all telemetry and logging
-  const SUPABASE_URL = 'https://complyze.co/api/prompt_events'; // Production endpoint
+  const SUPABASE_URL = 'https://complyze.co/api/ingest'; // Production ingest endpoint
   const SUPABASE_SERVICE_ROLE_KEY = null; // Will be handled by the production API
   
   console.log('Complyze: 🔄 STARTING Supabase sync for prompt event...');
@@ -955,13 +954,13 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
         return result.openrouter_api_key;
       }
       
-      // If no API key in storage, use default (user needs to set it in extension settings)
-      console.warn('Complyze: No OpenRouter API key found in storage. Using default key.');
-      OPENROUTER_CONFIG.apiKey = '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'; // Default key as requested
+      // If no API key in storage, use working default key
+      console.warn('Complyze: No OpenRouter API key found in storage. Using working default key.');
+      OPENROUTER_CONFIG.apiKey = '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'; // Working API key
       return OPENROUTER_CONFIG.apiKey;
     } catch (error) {
       console.error('Complyze: Failed to load API key from storage:', error);
-      OPENROUTER_CONFIG.apiKey = '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'; // Default key as requested
+      OPENROUTER_CONFIG.apiKey = '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'; // Working API key
       return OPENROUTER_CONFIG.apiKey;
     }
   }
@@ -1679,14 +1678,40 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
         target_environment: flaggedPromptData.analysis_metadata.saved_from
       });
       
-      // Send to the API endpoint
-      const response = await fetch(`${this.apiBase}/prompts/ingest`, {
+      // Send to the ingest API endpoint with proper data structure
+      const ingestData = {
+        user_id: this.user?.id || 'unknown',
+        model: data.model || 'Unknown',
+        usd_cost: 0.001, // Estimated cost for analysis
+        prompt_tokens: Math.ceil(data.prompt.length / 4), // Rough token estimate
+        completion_tokens: 50, // Estimated completion tokens
+        integrity_score: data.analysis?.risk_level === 'high' ? 20 : 
+                        data.analysis?.risk_level === 'medium' ? 60 : 90,
+        risk_type: data.analysis?.detectedPII?.length > 0 ? 'PII' : 'Compliance',
+        risk_level: data.analysis?.risk_level || 'high',
+        captured_at: data.timestamp || new Date().toISOString(),
+        prompt_text: data.prompt,
+        source: 'chrome_extension',
+        metadata: {
+          platform: data.platform || 'chrome_extension',
+          url: data.url || 'unknown',
+          detection_method: 'real_time_analysis',
+          detected_pii: data.analysis?.detectedPII || [],
+          risk_factors: data.analysis?.risk_factors || [],
+          mapped_controls: data.analysis?.mapped_controls || [],
+          flagged_at: new Date().toISOString(),
+          extension_version: 'v2.0',
+          auto_flagged: true
+        }
+      };
+
+      const response = await fetch(`${this.apiBase}/ingest`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(flaggedPromptData)
+        body: JSON.stringify(ingestData)
       });
 
       if (response.ok) {
