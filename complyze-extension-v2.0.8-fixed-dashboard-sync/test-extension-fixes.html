@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Extension Fixes - ChatGPT Simulator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f7f7f8;
+        }
+        .container {
+            max-width: 768px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: #10a37f;
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .test-section {
+            margin-bottom: 32px;
+            padding: 20px;
+            border: 2px solid #e5e5e5;
+            border-radius: 8px;
+        }
+        .test-section h3 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 2px solid #10a37f;
+            padding-bottom: 8px;
+        }
+        .prompt-input {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px;
+            border: 2px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        .prompt-input:focus {
+            outline: none;
+            border-color: #10a37f;
+        }
+        .send-button {
+            background: #10a37f;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 12px;
+        }
+        .send-button:hover {
+            background: #0d9488;
+        }
+        .send-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .info-box {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 16px;
+        }
+        .warning {
+            background: #fef2f2;
+            border: 1px solid #ef4444;
+            color: #dc2626;
+        }
+        .success {
+            background: #f0fdf4;
+            border: 1px solid #22c55e;
+            color: #16a34a;
+        }
+        .uuid-display {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #f3f4f6;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #d1d5db;
+            font-size: 14px;
+        }
+        .test-data {
+            margin: 8px 0;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ Complyze Extension Test Page</h1>
+            <p>Test the fixed modal behavior and UUID synchronization</p>
+        </div>
+
+        <div class="test-section">
+            <h3>🔴 Test 1: Modal Disappears After Button Click</h3>
+            <p>Type a prompt with sensitive data (e.g., credit card number) to trigger the warning modal. 
+               The modal should disappear when you click either button.</p>
+            
+            <textarea 
+                class="prompt-input" 
+                id="prompt-textarea"
+                placeholder="Type: 'My credit card number is 4532-1234-5678-9012' to test the warning modal..."
+                data-testid="prompt-textarea"
+            ></textarea>
+            <button class="send-button" data-testid="send-button" onclick="simulateSend()">
+                Send Message
+            </button>
+            
+            <div class="test-data">
+                <strong>Expected Behavior:</strong>
+                <ul>
+                    <li>Red warning modal appears when you type sensitive data</li>
+                    <li>Modal shows "Security Risk: CreditCard detected"</li>
+                    <li>Clicking "🔒 View Safe Version" should hide modal and show safe prompt panel</li>
+                    <li>Clicking "Send Anyway" should hide modal and unblock submission</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🆔 Test 2: UUID Format Validation</h3>
+            <p>This section shows the current user authentication status and UUID format.</p>
+            
+            <div id="uuid-status">
+                <div class="info-box">
+                    <strong>Checking extension authentication...</strong><br>
+                    Open browser console (F12) to see detailed logs.
+                </div>
+            </div>
+            
+            <button class="send-button" onclick="checkUUIDStatus()">
+                Check UUID Status
+            </button>
+            
+            <div class="test-data">
+                <strong>Expected UUID Format:</strong>
+                <div class="uuid-display">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</div>
+                <p>Must be exactly 36 characters with 4 hyphens in specific positions (8-4-4-4-12 pattern)</p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Test 3: Dashboard Sync Debug</h3>
+            <p>Test if prompts are being saved to Supabase with correct UUID.</p>
+            
+            <textarea 
+                class="prompt-input" 
+                id="dashboard-test-prompt"
+                placeholder="Type any prompt here to test dashboard sync..."
+            ></textarea>
+            <button class="send-button" onclick="testDashboardSync()">
+                Test Dashboard Sync
+            </button>
+            
+            <div id="sync-status">
+                <div class="info-box">
+                    Ready to test dashboard synchronization...
+                </div>
+            </div>
+            
+            <div class="test-data">
+                <strong>Check Dashboard:</strong>
+                <ol>
+                    <li>Open <a href="https://complyze.co/dashboard" target="_blank">Complyze Dashboard</a></li>
+                    <li>Login with the same account</li>
+                    <li>Check if prompts appear in the reports section</li>
+                    <li>Verify timestamps match your test submissions</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simulate ChatGPT page environment
+        window.location.hostname = 'chatgpt.com';
+        
+        function simulateSend() {
+            const textarea = document.getElementById('prompt-textarea');
+            console.log('🧪 Test: Simulating prompt submission:', textarea.value);
+            
+            if (!textarea.value.trim()) {
+                alert('Please enter a test prompt first!');
+                return;
+            }
+            
+            // Trigger input event that the extension listens for
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            // Log for debugging
+            console.log('🔍 Extension should detect this prompt and show warning modal if sensitive data found');
+        }
+        
+        async function checkUUIDStatus() {
+            const statusDiv = document.getElementById('uuid-status');
+            statusDiv.innerHTML = '<div class="info-box">Checking extension status...</div>';
+            
+            console.log('🔍 Checking extension authentication status...');
+            
+            try {
+                // Try to communicate with extension
+                if (typeof chrome !== 'undefined' && chrome.runtime) {
+                    chrome.runtime.sendMessage({
+                        type: 'get_auth_status'
+                    }, (response) => {
+                        console.log('Extension auth response:', response);
+                        
+                        let html;
+                        if (response && response.authenticated) {
+                            html = `
+                                <div class="info-box success">
+                                    <strong>✅ Extension Authenticated</strong><br>
+                                    User ID: <span class="uuid-display">${response.userId}</span><br>
+                                    Email: ${response.email || 'Unknown'}<br>
+                                    UUID Valid: ${response.uuidValid ? '✅' : '❌'}
+                                </div>
+                            `;
+                        } else {
+                            html = `
+                                <div class="info-box warning">
+                                    <strong>❌ Extension Not Authenticated</strong><br>
+                                    Please log in to the Complyze dashboard first.
+                                </div>
+                            `;
+                        }
+                        statusDiv.innerHTML = html;
+                    });
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="info-box warning">
+                            <strong>❌ Extension Not Detected</strong><br>
+                            Make sure the Complyze extension is installed and enabled.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error checking UUID status:', error);
+                statusDiv.innerHTML = `
+                    <div class="info-box warning">
+                        <strong>❌ Error</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        async function testDashboardSync() {
+            const textarea = document.getElementById('dashboard-test-prompt');
+            const statusDiv = document.getElementById('sync-status');
+            
+            if (!textarea.value.trim()) {
+                alert('Please enter a test prompt first!');
+                return;
+            }
+            
+            statusDiv.innerHTML = '<div class="info-box">Testing dashboard sync...</div>';
+            console.log('🧪 Testing dashboard sync with prompt:', textarea.value);
+            
+            try {
+                if (typeof chrome !== 'undefined' && chrome.runtime) {
+                    chrome.runtime.sendMessage({
+                        type: 'test_dashboard_sync',
+                        payload: {
+                            prompt: textarea.value,
+                            platform: 'test_page',
+                            url: window.location.href,
+                            timestamp: new Date().toISOString()
+                        }
+                    }, (response) => {
+                        console.log('Dashboard sync response:', response);
+                        
+                        let html;
+                        if (response && response.success) {
+                            html = `
+                                <div class="info-box success">
+                                    <strong>✅ Sync Successful</strong><br>
+                                    User ID: ${response.userId}<br>
+                                    Check the dashboard for this prompt.
+                                </div>
+                            `;
+                        } else {
+                            html = `
+                                <div class="info-box warning">
+                                    <strong>❌ Sync Failed</strong><br>
+                                    Error: ${response ? response.error : 'No response from extension'}
+                                </div>
+                            `;
+                        }
+                        statusDiv.innerHTML = html;
+                    });
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="info-box warning">
+                            <strong>❌ Extension Not Available</strong><br>
+                            Cannot test dashboard sync without extension.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error testing dashboard sync:', error);
+                statusDiv.innerHTML = `
+                    <div class="info-box warning">
+                        <strong>❌ Error</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        // Auto-check UUID status on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(checkUUIDStatus, 1000);
+        });
+        
+        console.log('🧪 Complyze Extension Test Page Loaded');
+        console.log('🔍 Open this console to see detailed extension logs');
+        console.log('📝 Test Instructions:');
+        console.log('1. Type sensitive data in the prompt field to test modal behavior');
+        console.log('2. Check UUID authentication status');
+        console.log('3. Test dashboard synchronization');
+    </script>
+</body>
+</html> 

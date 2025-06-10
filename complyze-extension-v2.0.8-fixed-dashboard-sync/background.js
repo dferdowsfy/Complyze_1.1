@@ -9,27 +9,45 @@ console.log('⏰ Script Start Time:', new Date().toISOString());
 // OpenRouter API configuration - API key will be loaded from storage
 const OPENROUTER_CONFIG = {
   apiKey: null, // Will be loaded from secure storage
-  model: 'google/gemini-2.5-pro-preview',
+  model: 'google/gemini-2.5-flash-preview-05-20',
   baseUrl: 'https://openrouter.ai/api/v1/chat/completions'
 };
 
 // --- SUPABASE PROMPT EVENT SYNC ---
 /**
- * Sync prompt event to Supabase prompt_events table
- * WARNING: Never expose the service role key in production client-side code!
- * In production, use a backend relay or Edge Function for this call.
+ * Sync prompt event to Supabase prompt_events table via ingest API
+ * Uses the production ingest endpoint for proper data handling
  */
 async function syncPromptEventToSupabase(event) {
+  // Get background instance to access auth
+  const background = globalThis.complyzeBackground;
+  if (!background) {
+    console.error('Complyze: Background instance not available for Supabase sync');
+    return;
+  }
+  
   // Use production Complyze API endpoint for all telemetry and logging
-  const SUPABASE_URL = 'https://complyze.co/api/prompt_events'; // Production endpoint
-  const SUPABASE_SERVICE_ROLE_KEY = null; // Will be handled by the production API
+  const SUPABASE_URL = 'https://complyze.co/api/ingest'; // Production ingest endpoint
   
   console.log('Complyze: 🔄 STARTING Supabase sync for prompt event...');
   console.log('Complyze: 🎯 Target URL:', SUPABASE_URL);
   console.log('Complyze: 👤 User ID in event:', event.user_id);
   
+  // --- Enhanced Logging & Validation ---
+  console.log('Complyze: 📦 Full event payload being sent to Supabase:', JSON.stringify(event, null, 2));
+  
+  // Validate required fields before sending
+  const requiredFields = ['user_id', 'model', 'usd_cost', 'prompt_tokens', 'completion_tokens', 'integrity_score', 'risk_type', 'risk_level'];
+  const missingFields = requiredFields.filter(field => event[field] === undefined || event[field] === null);
+  
+  if (missingFields.length > 0) {
+    console.error('Complyze: ❌ Missing required fields for Supabase sync:', missingFields);
+    console.error('Complyze: 📋 Available fields:', Object.keys(event));
+    return;
+  }
+  
   try {
-    console.log('Complyze: 📡 Making Supabase API request...');
+    console.log('Complyze: 📡 Making authenticated Supabase API request...');
     
     const requestBody = JSON.stringify(event);
     console.log('Complyze: 📦 Request payload size:', requestBody.length, 'bytes');
@@ -38,7 +56,8 @@ async function syncPromptEventToSupabase(event) {
     const response = await fetch(SUPABASE_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${background.accessToken}` // Add authentication
       },
       body: requestBody
     });
@@ -103,27 +122,107 @@ async function getUserIdFromDashboard() {
     const results = await chrome.scripting.executeScript({
       target: { tabId: dashboardTabs[0].id },
       func: () => {
-        // Try various common ways to get user ID from the dashboard
-              const userId = 
-        // Note: localStorage and window are not available in service worker context
-        // These would need to be injected from content script
-        null || // localStorage.getItem('complyze_uid') 
-        null || // localStorage.getItem('supabase.auth.token')
-        // From global variable - not available in service worker
-        null || // (window.currentUser && window.currentUser.id)
-          // From other common patterns
-          document.querySelector('[data-user-id]')?.getAttribute('data-user-id');
-        
-        // Log what we found
-        console.log(`Dashboard script: Found user ID: ${userId || 'none'}`);
-        
-        return userId;
+        try {
+          console.log('Complyze Dashboard Script: Starting UUID extraction...');
+          
+          // BEST METHOD: Find Supabase auth token in localStorage
+          // The key format is usually sb-{project-ref-id}-auth-token
+          const sessionKeys = Object.keys(localStorage).filter(key => 
+            key.startsWith('sb-') && key.endsWith('-auth-token')
+          );
+          
+          console.log('Complyze Dashboard Script: Found session keys:', sessionKeys);
+          
+          for (const sessionKey of sessionKeys) {
+            try {
+              const sessionData = JSON.parse(localStorage.getItem(sessionKey));
+              if (sessionData && sessionData.user && sessionData.user.id) {
+                const userId = sessionData.user.id;
+                // Validate UUID format (8-4-4-4-12 characters)
+                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                if (uuidRegex.test(userId)) {
+                  console.log('Complyze Dashboard Script: Found valid UUID from Supabase session:', userId);
+                  console.log('Complyze Dashboard Script: User email:', sessionData.user.email);
+                  return userId;
+                } else {
+                  console.log('Complyze Dashboard Script: Found user ID but invalid UUID format:', userId);
+                }
+              }
+            } catch (parseError) {
+              console.log('Complyze Dashboard Script: Error parsing session data for key:', sessionKey, parseError);
+            }
+          }
+          
+          // FALLBACK 1: Check for user data in other common keys
+          const commonKeys = ['user', 'currentUser', 'auth', 'session', 'complyze_user'];
+          for (const key of commonKeys) {
+            try {
+              const userData = localStorage.getItem(key);
+              if (userData) {
+                const parsed = JSON.parse(userData);
+                if (parsed && parsed.id) {
+                  const userId = parsed.id;
+                  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                  if (uuidRegex.test(userId)) {
+                    console.log(`Complyze Dashboard Script: Found valid UUID from ${key}:`, userId);
+                    return userId;
+                  }
+                }
+              }
+            } catch (parseError) {
+              // Skip invalid JSON
+            }
+          }
+          
+          // FALLBACK 2: Check window objects
+          if (window.supabase && window.supabase.auth && window.supabase.auth.user) {
+            const userId = window.supabase.auth.user().id;
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (uuidRegex.test(userId)) {
+              console.log('Complyze Dashboard Script: Found valid UUID from window.supabase:', userId);
+              return userId;
+            }
+          }
+          
+          // FALLBACK 3: Check for any UUID pattern in localStorage values
+          console.log('Complyze Dashboard Script: Searching for any UUID patterns in localStorage...');
+          const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            const value = localStorage.getItem(key);
+            if (value) {
+              const match = value.match(uuidRegex);
+              if (match) {
+                console.log(`Complyze Dashboard Script: Found UUID pattern in ${key}:`, match[0]);
+                return match[0];
+              }
+            }
+          }
+
+          console.log('Complyze Dashboard Script: Could not find valid UUID via any method.');
+          console.log('Complyze Dashboard Script: Available localStorage keys:', Object.keys(localStorage));
+          return null;
+
+        } catch (e) {
+            console.error('Complyze Dashboard Script: Error extracting user ID:', e);
+            return null;
+        }
       }
     });
     
     if (results && results[0] && results[0].result) {
-      console.log('Complyze: Successfully extracted user ID from dashboard:', results[0].result);
-      return results[0].result;
+      const userId = results[0].result;
+      console.log('Complyze: Successfully extracted UUID from dashboard:', userId);
+      
+      // Validate UUID format one more time
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(userId)) {
+        console.log('Complyze: ✅ UUID format validated successfully');
+        return userId;
+      } else {
+        console.log('Complyze: ❌ Invalid UUID format, rejecting:', userId);
+        return null;
+      }
     } else {
       console.log('Complyze: Could not extract user ID from dashboard tab');
       return null;
@@ -143,6 +242,10 @@ class ComplyzeBackground {
     this.user = null;
     this.lastTokenVerification = null;
     this.tokenVerificationInterval = 15 * 60 * 1000; // 15 minutes
+    
+    // Make instance globally available for syncPromptEventToSupabase
+    globalThis.complyzeBackground = this;
+    
     this.init();
   }
 
@@ -258,6 +361,12 @@ class ComplyzeBackground {
           sendResponse(result);
           break;
           
+        case 'sync_prompt_immediate':
+          // Quick sync to Supabase for blocked prompts (no AI processing delays)
+          await this.handleImmediateSync(message.payload);
+          sendResponse({ success: true });
+          break;
+          
         case 'login':
           const loginResult = await this.login(message.email, message.password);
           sendResponse(loginResult);
@@ -296,6 +405,68 @@ class ComplyzeBackground {
             apiBase: this.apiBase 
           });
           break;
+          
+        case 'real_time_analysis':
+          return await this.handleRealTimeAnalysis(message.payload);
+          
+        case 'sync_prompt_immediate':
+          return await this.handleImmediateSync(message.payload);
+          
+        case 'get_auth_status':
+          // NEW: Support for test page to check authentication status
+          const isValidUUID = (uuid) => {
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            return uuidRegex.test(uuid);
+          };
+          
+          const authResult = {
+            authenticated: false,
+            userId: null,
+            email: null,
+            uuidValid: false
+          };
+          
+          if (this.user && this.user.id) {
+            authResult.authenticated = true;
+            authResult.userId = this.user.id;
+            authResult.email = this.user.email;
+            authResult.uuidValid = isValidUUID(this.user.id);
+          } else {
+            // Try to get from storage
+            const stored = await chrome.storage.local.get(['user']);
+            if (stored.user && stored.user.id) {
+              authResult.authenticated = true;
+              authResult.userId = stored.user.id;
+              authResult.email = stored.user.email;
+              authResult.uuidValid = isValidUUID(stored.user.id);
+            }
+          }
+          
+          console.log('Complyze: Auth status check:', authResult);
+          return authResult;
+        
+        case 'test_dashboard_sync':
+          // NEW: Support for test page to verify dashboard synchronization
+          try {
+            console.log('Complyze: Test dashboard sync requested');
+            const testResult = await this.handlePromptAnalysis({
+              ...message.payload,
+              triggerOptimization: false // Skip optimization for test
+            }, sender.tab?.id);
+            
+            return {
+              success: testResult.success,
+              userId: this.user?.id || 'unknown',
+              error: testResult.error
+            };
+          } catch (error) {
+            console.error('Complyze: Test dashboard sync failed:', error);
+            return {
+              success: false,
+              error: error.message,
+              userId: this.user?.id || 'unknown'
+            };
+          }
           
         default:
           console.log('Complyze: Unknown message type:', message.type);
@@ -422,80 +593,172 @@ class ComplyzeBackground {
       let optimizedPrompt = null;
       let optimizationDetails = null;
 
-      // --- ENHANCED SUPABASE SYNC: IMPROVED USER ID HANDLING ---
-      // Get user ID from multiple sources to ensure we match the dashboard
+      // --- ENHANCED SUPABASE SYNC: ROBUST USER ID HANDLING WITH UUID VALIDATION ---
       let userId = null;
-      
-      // Try to get user ID from this.user first (from auth check)
-      if (this.user && this.user.id) {
+
+      // Helper function to validate UUID format
+      const isValidUUID = (uuid) => {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(uuid);
+      };
+
+      // Priority 1: Use the authenticated user's ID from the session.
+      if (this.user && this.user.id && isValidUUID(this.user.id)) {
         userId = this.user.id;
-        console.log('Complyze: Using authenticated user ID from session:', userId);
-      } else {
-        // Fall back to localStorage
-        userId = localStorage.getItem('complyze_uid');
-        console.log('Complyze: Using user ID from localStorage:', userId);
-        
-        // If still no userId, try chrome.storage
-        if (!userId) {
-          const storage = await chrome.storage.local.get(['userId', 'complyze_uid', 'supabase_uid']);
-          userId = storage.userId || storage.complyze_uid || storage.supabase_uid;
-          console.log('Complyze: Using user ID from chrome.storage:', userId);
-        }
-        
-        // If still no userId, try to get it from the dashboard
-        if (!userId) {
-          userId = await getUserIdFromDashboard();
-          if (userId) {
-            console.log('Complyze: Using user ID extracted from dashboard:', userId);
-            // Save this ID for future use
-            await chrome.storage.local.set({ 'complyze_uid': userId });
-          }
-        }
+        console.log('Complyze: ✅ Using valid UUID from active session:', userId);
+      } else if (this.user && this.user.id) {
+        console.log('Complyze: ❌ Session user ID is not a valid UUID:', this.user.id);
       }
-      
-      // Check if we have a valid user ID before proceeding
+
+      // Priority 2: If not in session, try to get it from local storage (might have been populated by a previous auth flow).
       if (!userId) {
-        console.warn('Complyze: ⚠️ NO USER ID FOUND in any storage! Trying to retrieve from user object...');
-        if (this.user) {
-          console.log('Complyze: User object details:', {
-            hasId: !!this.user.id,
-            hasEmail: !!this.user.email,
-            keys: Object.keys(this.user)
-          });
-          // Last resort - try email as identifier if available
-          userId = this.user.id || this.user.email || 'unknown-user';
-        } else {
-          console.error('Complyze: ❌ No user ID or user object available. Using fallback ID.');
-          userId = 'extension-user-' + Date.now(); // Fallback ID as last resort
+        const storedData = await chrome.storage.local.get(['user']);
+        if (storedData.user && storedData.user.id && isValidUUID(storedData.user.id)) {
+          userId = storedData.user.id;
+          console.log('Complyze: ✅ Found valid UUID in chrome.storage.local:', userId);
+          // Also restore the user object to the session
+          this.user = storedData.user;
+        } else if (storedData.user && storedData.user.id) {
+          console.log('Complyze: ❌ Stored user ID is not a valid UUID:', storedData.user.id);
         }
       }
+
+      // Priority 3: As a last resort, attempt to extract it from an open dashboard tab.
+      // This is helpful if the user is logged into the dashboard but the extension session expired.
+      if (!userId) {
+        console.log('Complyze: No valid UUID in session or storage, attempting to extract from dashboard...');
+        const extractedUserId = await getUserIdFromDashboard();
+        if (extractedUserId && isValidUUID(extractedUserId)) {
+          userId = extractedUserId;
+          console.log('Complyze: ✅ Successfully extracted valid UUID from dashboard:', userId);
+          // Store this UUID for future use
+          await chrome.storage.local.set({ 
+            dashboard_extracted_user_id: userId,
+            last_extracted_at: new Date().toISOString()
+          });
+        } else if (extractedUserId) {
+          console.log('Complyze: ❌ Extracted user ID is not a valid UUID:', extractedUserId);
+        }
+      }
+
+      // Final check: If no valid UUID could be found, we cannot proceed.
+      if (!userId || !isValidUUID(userId)) {
+        console.error('Complyze: ❌ CRITICAL: Could not determine valid UUID for Supabase sync.');
+        console.error('Complyze: ❌ Current user ID value:', userId);
+        console.error('Complyze: ❌ This could be due to:');
+        console.error('  1. User is not logged into Complyze dashboard');
+        console.error('  2. UUID format mismatch (Supabase expects 8-4-4-4-12 format)');
+        console.error('  3. Extension authentication state is corrupted');
+        
+        this.showAuthenticationRequired(tabId); // Remind user to log in
+        return { success: false, error: 'Valid UUID could not be determined. Please log in to Complyze dashboard.' };
+      }
       
-      const flagged = (riskLevel === 'high' || riskLevel === 'critical' || sensitiveDataRemoved.length > 0);
-      if (flagged) {
-        // Create event with enhanced metadata to help debug
+      console.log('Complyze: ✅ Final UUID validation passed, proceeding with sync:', userId);
+      
+      // CAPTURE ALL PROCESSED PROMPTS - not just high risk ones
+      // Every prompt that gets analyzed should be saved to prompt_events for dashboard visibility
+      const isProcessedPrompt = true; // Capture all prompts, regardless of risk level
+      if (isProcessedPrompt) {
+        // Calculate token costs (approximate for logging)
+        const promptTokens = Math.ceil(promptData.prompt.length / 4); // Rough estimate: 4 chars per token
+        const completionTokens = 0; // Extension doesn't generate completions
+        const estimatedCost = (promptTokens * 0.0001); // Rough estimate for tracking
+        
+        // Calculate integrity score based on risk level
+        const integrityScore = riskLevel === 'critical' ? 20 :
+                              riskLevel === 'high' ? 40 :
+                              riskLevel === 'medium' ? 70 : 90;
+        
+        // Determine primary risk type from the structured data with proper mapping
+        const detectedPIITypes = (basicAnalysis.detectedPII || []).map(item => {
+          // Extract the type from "type: value" format and map to standard risk types
+          const typeMatch = item.match(/^([^:]+):/);
+          if (typeMatch) {
+            const rawType = typeMatch[1].trim().toLowerCase();
+            // Map detected types to standard risk categories
+            if (rawType.includes('credit') || rawType.includes('card')) return 'financial';
+            if (rawType.includes('ssn') || rawType.includes('social security')) return 'personal_id';
+            if (rawType.includes('phone') || rawType.includes('mobile')) return 'contact';
+            if (rawType.includes('email')) return 'contact';
+            if (rawType.includes('address')) return 'location';
+            if (rawType.includes('ip')) return 'technical';
+            if (rawType.includes('password') || rawType.includes('token')) return 'security';
+            if (rawType.includes('medical') || rawType.includes('health')) return 'medical';
+            return 'pii'; // Generic fallback
+          }
+          return 'pii';
+        });
+        
+        const aiRiskTypes = (basicAnalysis.aiRiskIndicators || []).map(indicator => {
+          const indicatorLower = indicator.toLowerCase();
+          if (indicatorLower.includes('prompt injection')) return 'security';
+          if (indicatorLower.includes('jailbreak')) return 'security';
+          if (indicatorLower.includes('bias')) return 'ethics';
+          if (indicatorLower.includes('harmful')) return 'ethics';
+          return 'compliance';
+        });
+        
+        const allRiskTypes = [...detectedPIITypes, ...aiRiskTypes];
+        const primaryRiskType = allRiskTypes.length > 0 ? allRiskTypes[0] : 'compliance';
+        
+        console.log('Complyze: Risk type mapping:', {
+          detectedPII: basicAnalysis.detectedPII,
+          detectedPIITypes,
+          aiRiskTypes,
+          primaryRiskType
+        });
+        
+        // Create event matching the /api/ingest endpoint schema with ALL required fields
         const promptEvent = {
+          // REQUIRED FIELDS
           user_id: userId,
-          platform: promptData.platform || 'chrome_extension',
-          prompt: promptData.prompt,
-          flagged: true,
-          risk_level: riskLevel,
-          risks: [...(basicAnalysis.detectedPII || []), ...(basicAnalysis.aiRiskIndicators || [])],
-          timestamp: Date.now(),
-          // Add extra metadata to help with debugging
+          model: promptData.model || 'chrome-extension-detection', // Use actual model if available
+          usd_cost: parseFloat(estimatedCost.toFixed(4)), // Ensure proper precision
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          integrity_score: integrityScore,
+          risk_type: primaryRiskType || 'compliance', // Ensure not empty
+          risk_level: riskLevel === 'critical' ? 'high' : riskLevel, // Map critical to high (API only accepts low/medium/high)
+          
+          // OPTIONAL FIELDS
+          captured_at: new Date().toISOString(),
+          prompt_text: promptData.prompt,
+          response_text: null,
+          source: 'chrome_extension',
+          platform: this.mapPlatformName(promptData.platform || 'chrome_extension'),
+          url: promptData.url || 'unknown',
+          status: (riskLevel === 'high' || riskLevel === 'critical') ? 'flagged' : 'processed',
           metadata: {
-            source: 'chrome_extension_v2',
+            // Enhanced metadata to help with debugging and display
+            platform: this.mapPlatformName(promptData.platform || 'chrome_extension'),
+            url: promptData.url || 'unknown',
+            detected_pii: this.formatDetectedPII(basicAnalysis.detectedPII || []),
+            detected_risks: allRiskTypes,
+            mapped_controls: this.generateMappedControls(basicAnalysis, primaryRiskType),
+            flagged: (riskLevel === 'high' || riskLevel === 'critical' || sensitiveDataRemoved.length > 0), // Proper flagged status
+            extension_version: '2.0.8',
             auth_method: this.user ? 'session_auth' : 'localstorage',
             user_email: this.user?.email || 'unknown',
-            extension_version: '2.0'
+            original_risk_level: riskLevel,
+            sensitive_data_count: sensitiveDataRemoved.length,
+            detection_method: 'real_time_analysis',
+            model_used: promptData.model || 'chrome-extension-detection',
+            cost_breakdown: {
+              input: parseFloat((estimatedCost * 0.6).toFixed(4)),
+              output: parseFloat((estimatedCost * 0.4).toFixed(4))
+            }
           }
         };
         
-        console.log('Complyze: 📤 Sending prompt event to Supabase with user_id:', userId);
+        console.log('Complyze: 📤 Sending flagged prompt to Supabase with user_id:', userId);
         console.log('Complyze: Event details:', {
-          platform: promptEvent.platform,
+          model: promptEvent.model,
+          risk_type: promptEvent.risk_type,
           risk_level: promptEvent.risk_level,
-          risks_count: promptEvent.risks.length,
-          prompt_length: promptEvent.prompt.length,
+          integrity_score: promptEvent.integrity_score,
+          prompt_tokens: promptEvent.prompt_tokens,
+          usd_cost: promptEvent.usd_cost,
           metadata: promptEvent.metadata
         });
         
@@ -693,9 +956,6 @@ class ComplyzeBackground {
         prompt_cleaned: cleanedPrompt !== originalPrompt
       });
       
-      // Add a delay to ensure user sees the processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
       // STEP 2: Analyze prompt intent
       console.log('Complyze: 🎯 Step 2 - Analyzing prompt intent...');
       const intent = this.analyzePromptIntent(cleanedPrompt);
@@ -705,21 +965,25 @@ class ComplyzeBackground {
         complexity: intent.complexity
       });
       
-      // Add another delay for intent analysis
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // STEP 3: Check if API key is available for AI optimization
+      console.log('Complyze: 🔑 Step 3 - Checking API key availability...');
+      await this.loadApiKey();
       
-      // STEP 3: Fetch historical optimization insights for self-improvement
-      console.log('Complyze: 📚 Step 3 - Fetching historical optimization insights...');
+      if (!OPENROUTER_CONFIG.apiKey) {
+        console.log('Complyze: ⚠️ No API key available, using local optimization only');
+        // Jump directly to local fallback
+        throw new Error('No API key available for AI optimization');
+      }
+      
+      // STEP 4: Fetch historical optimization insights for self-improvement
+      console.log('Complyze: 📚 Step 4 - Fetching historical optimization insights...');
       const optimizationInsights = await this.fetchOptimizationInsights(intent.category, intent.type);
       console.log('Complyze: 🧠 Retrieved insights:', {
         insights_count: optimizationInsights.length,
         categories: optimizationInsights.map(i => i.category).join(', ')
       });
       
-      // Add delay for insights fetching
-      await new Promise(resolve => setTimeout(resolve, 4000));
-      
-      // STEP 4: PRIMARY METHOD - Use AI optimization via Google Gemini with insights
+      // STEP 5: PRIMARY METHOD - Use AI optimization via Google Gemini with insights
       console.log('Complyze: 🤖 Creating optimization prompt for AI processing...');
       const optimizationPrompt = this.createOptimizationPrompt(cleanedPrompt, intent, optimizationInsights);
       console.log('Complyze: 📤 Calling OpenRouter API with Google Gemini 2.5 Pro...');
@@ -742,9 +1006,6 @@ class ComplyzeBackground {
         console.log('Complyze: 📝 Raw API response preview:', apiResponse.content.substring(0, 500) + '...');
         console.log('Complyze: 🔄 Parsing AI optimization response...');
         
-        // Add delay for response processing to show comprehensive analysis
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
         const result = this.parseOptimizationResponse(
           apiResponse.content, 
           originalPrompt, 
@@ -765,24 +1026,24 @@ class ComplyzeBackground {
           optimized_prompt_preview: result.optimized_prompt?.substring(0, 100) + '...'
         });
         
-        // STEP 5: Save to prompt history for future learning
+        // STEP 6: Save to prompt history for future learning
         const processingTime = Date.now() - startTime;
         await this.savePromptHistory(originalPrompt, result, intent, processingTime);
         
         return result;
-              } else {
-          console.error('Complyze: ❌ AI optimization API call failed!');
-          console.error('Complyze: 🔍 API Error Details:', {
-            success: apiResponse.success,
-            error: apiResponse.error,
-            hasContent: !!apiResponse.content,
-            contentPreview: apiResponse.content ? apiResponse.content.substring(0, 100) + '...' : 'No content'
-          });
-          console.warn('Complyze: 🔄 Falling back to local optimization due to API failure');
-          
-          // Throw error to trigger fallback
-          throw new Error(`API optimization failed: ${apiResponse.error || 'Unknown error'}`);
-        }
+      } else {
+        console.error('Complyze: ❌ AI optimization API call failed!');
+        console.error('Complyze: 🔍 API Error Details:', {
+          success: apiResponse.success,
+          error: apiResponse.error,
+          hasContent: !!apiResponse.content,
+          contentPreview: apiResponse.content ? apiResponse.content.substring(0, 100) + '...' : 'No content'
+        });
+        console.warn('Complyze: 🔄 Falling back to local optimization due to API failure');
+        
+        // Throw error to trigger fallback
+        throw new Error(`API optimization failed: ${apiResponse.error || 'Unknown error'}`);
+      }
       
     } catch (error) {
       console.error('Complyze: ❌ Critical error in AI optimization process:', error);
@@ -955,13 +1216,37 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
         return result.openrouter_api_key;
       }
       
-      // If no API key in storage, use default (user needs to set it in extension settings)
-      console.warn('Complyze: No OpenRouter API key found in storage. Using default key.');
-      OPENROUTER_CONFIG.apiKey = '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'; // Default key as requested
+      // Check if we can get the API key from the Complyze dashboard
+      try {
+        const response = await fetch('https://complyze.co/api/openrouter/key', {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.apiKey && !data.fallbackMode) {
+            console.log('Complyze: Using API key from dashboard');
+            OPENROUTER_CONFIG.apiKey = data.apiKey;
+            // Store for offline use
+            await chrome.storage.local.set({ 'openrouter_api_key': data.apiKey });
+            return data.apiKey;
+          }
+        }
+      } catch (dashboardError) {
+        console.log('Complyze: Could not get API key from dashboard, using built-in fallback');
+      }
+      
+      // Use built-in working API key as fallback
+      console.log('Complyze: Using built-in OpenRouter API key');
+      OPENROUTER_CONFIG.apiKey = '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';
       return OPENROUTER_CONFIG.apiKey;
     } catch (error) {
       console.error('Complyze: Failed to load API key from storage:', error);
-      OPENROUTER_CONFIG.apiKey = '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'; // Default key as requested
+      // Use built-in working API key as fallback
+      console.log('Complyze: Using built-in OpenRouter API key as error fallback');
+      OPENROUTER_CONFIG.apiKey = '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';
       return OPENROUTER_CONFIG.apiKey;
     }
   }
@@ -1192,32 +1477,26 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
       // Use the same AI-first enhance method for real-time analysis
       const analysisResult = await this.enhancePromptWithAI(promptData.prompt);
       
-      // ENHANCED: Auto-save high-risk prompts to dashboard as flagged
-      if (analysisResult.risk_level === 'high' || analysisResult.risk_level === 'critical') {
-        console.log('⚠️  Complyze: High-risk prompt detected! Auto-flagging...');
-        console.log('📝 Risk Level:', analysisResult.risk_level);
-        console.log('🏷️  Detected Issues:', analysisResult.pii_detected || []);
-        console.log('🤖 Model Used:', promptData.model || 'Unknown');
-        
-        // Save to flagged prompts with proper data structure including model info
-        await this.saveFlaggedPrompt({
-          prompt: promptData.prompt,
-          analysis: {
-            risk_level: analysisResult.risk_level,
-            detectedPII: analysisResult.pii_detected || [],
-            risk_factors: analysisResult.control_tags || [],
-            mapped_controls: analysisResult.control_tags || []
-          },
-          platform: promptData.platform || 'real-time-detection',
-          model: promptData.model || 'Unknown',
-          url: promptData.url || (typeof window !== 'undefined' ? window.location?.href : 'unknown'),
-          timestamp: promptData.timestamp || new Date().toISOString()
-        });
-      } else {
-        console.log('✅ Complyze: Low-medium risk prompt, not flagging');
-        console.log('📝 Risk Level:', analysisResult.risk_level);
-        console.log('🤖 Model Used:', promptData.model || 'Unknown');
-      }
+      // ENHANCED: Auto-save ALL real-time analyzed prompts to dashboard
+      console.log('📋 Complyze: Real-time prompt analyzed, saving to dashboard...');
+      console.log('📝 Risk Level:', analysisResult.risk_level);
+      console.log('🏷️  Detected Issues:', analysisResult.pii_detected || []);
+      console.log('🤖 Model Used:', promptData.model || 'Unknown');
+      
+      // Save ALL analyzed prompts (not just high-risk ones) with proper data structure including model info
+      await this.saveFlaggedPrompt({
+        prompt: promptData.prompt,
+        analysis: {
+          risk_level: analysisResult.risk_level,
+          detectedPII: analysisResult.pii_detected || [],
+          risk_factors: analysisResult.control_tags || [],
+          mapped_controls: analysisResult.control_tags || []
+        },
+        platform: promptData.platform || 'real-time-detection',
+        model: promptData.model || 'Unknown',
+        url: promptData.url || (typeof window !== 'undefined' ? window.location?.href : 'unknown'),
+        timestamp: promptData.timestamp || new Date().toISOString()
+      });
       
       return analysisResult;
     } catch (error) {
@@ -1228,6 +1507,64 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
         optimized_prompt: promptData.prompt,
         pii_detected: []
       };
+    }
+  }
+
+  // NEW: Quick sync for immediate blocking (no AI processing delays)
+  async handleImmediateSync(promptData) {
+    try {
+      console.log('Complyze: 🚀 Immediate sync for blocked prompt');
+      
+      // Get user ID from multiple sources
+      let userId = null;
+      if (this.user && this.user.id) {
+        userId = this.user.id;
+      } else {
+        const storage = await chrome.storage.local.get(['userId', 'complyze_uid', 'supabase_uid']);
+        userId = storage.userId || storage.complyze_uid || storage.supabase_uid;
+      }
+      
+      if (!userId) {
+        console.warn('Complyze: No user ID for immediate sync, skipping');
+        return;
+      }
+      
+      // Calculate basic metrics
+      const promptTokens = Math.ceil(promptData.prompt.length / 4);
+      const estimatedCost = promptTokens * 0.0001;
+      const integrityScore = promptData.risk_level === 'critical' ? 20 :
+                            promptData.risk_level === 'high' ? 40 :
+                            promptData.risk_level === 'medium' ? 70 : 90;
+      
+      // Create event for immediate sync
+      const promptEvent = {
+        user_id: userId,
+        model: 'chrome-extension-blocked',
+        usd_cost: parseFloat(estimatedCost.toFixed(4)),
+        prompt_tokens: promptTokens,
+        completion_tokens: 0,
+        integrity_score: integrityScore,
+        risk_type: promptData.detected_pii?.[0] || 'Sensitive Data',
+        risk_level: promptData.risk_level === 'critical' ? 'high' : promptData.risk_level,
+        captured_at: promptData.timestamp,
+        prompt_text: promptData.prompt,
+        response_text: null,
+        source: 'chrome_extension_blocked',
+        metadata: {
+          platform: promptData.platform,
+          url: promptData.url,
+          detected_risks: promptData.detected_pii || [],
+          flagged: true,
+          blocked: promptData.blocked || true,
+          immediate_sync: true
+        }
+      };
+      
+      // Send to Supabase immediately
+      await syncPromptEventToSupabase(promptEvent);
+      
+    } catch (error) {
+      console.log('Complyze: Immediate sync error (non-blocking):', error);
     }
   }
 
@@ -1633,28 +1970,35 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
   // NEW: Save flagged prompt to database
   async saveFlaggedPrompt(data) {
     try {
-      console.log('🚨 Complyze: FLAGGED PROMPT DETECTED - Saving to database');
+      console.log('📋 Complyze: PROMPT ANALYZED - Saving to database');
       console.log('🎯 Target API:', this.apiBase);
       console.log('📊 Dashboard Location:', this.dashboardUrl);
       console.log('🤖 Model Information:', data.model || 'Unknown');
+      console.log('⚠️  Risk Level:', data.analysis?.risk_level || 'unknown');
       
       // Check authentication first
       const isAuthenticated = await this.checkUserAuth();
-      if (!isAuthenticated) {
-        console.log('❌ Complyze: User not authenticated, cannot save flagged prompt');
+      if (!isAuthenticated || !this.user?.id) {
+        console.log('❌ Complyze: User not authenticated or missing user ID, cannot save prompt');
+        console.log('🔍 Auth Status:', { 
+          isAuthenticated, 
+          hasUser: !!this.user, 
+          userId: this.user?.id || 'none',
+          hasToken: !!this.accessToken 
+        });
         console.log('💡 Please login at:', this.dashboardUrl);
         return;
       }
 
-      // Prepare the flagged prompt data with all necessary fields including model info
+      // Prepare the prompt data with all necessary fields including model info
       const flaggedPromptData = {
         prompt: data.prompt,
         platform: data.platform || 'chrome_extension',
         url: data.url || 'unknown',
         timestamp: data.timestamp || new Date().toISOString(),
         source: 'chrome_extension_realtime',
-        status: 'flagged', // Explicitly set as flagged
-        risk_level: data.analysis?.risk_level || 'high', // Default to high if not specified
+        status: (data.analysis?.risk_level === 'high' || data.analysis?.risk_level === 'critical') ? 'flagged' : 'processed', // Set status based on actual risk
+        risk_level: data.analysis?.risk_level || 'low', // Use actual risk level, default to low
         analysis_metadata: {
           detection_method: 'real_time_analysis',
           detected_pii: data.analysis?.detectedPII || [],
@@ -1679,21 +2023,55 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
         target_environment: flaggedPromptData.analysis_metadata.saved_from
       });
       
-      // Send to the API endpoint
-      const response = await fetch(`${this.apiBase}/prompts/ingest`, {
+      // Send to the ingest API endpoint with ALL required fields for prompt_events table
+      const ingestData = {
+        user_id: this.user?.id, // Required field - will only reach here if user is authenticated
+        model: data.model || 'Unknown',
+        usd_cost: parseFloat((0.001).toFixed(4)), // Estimated cost for analysis with proper precision
+        prompt_tokens: Math.ceil(data.prompt.length / 4), // Rough token estimate
+        completion_tokens: 50, // Estimated completion tokens
+        integrity_score: data.analysis?.risk_level === 'high' ? 20 : 
+                        data.analysis?.risk_level === 'critical' ? 15 :
+                        data.analysis?.risk_level === 'medium' ? 60 : 90,
+        risk_type: data.analysis?.detectedPII?.length > 0 ? 'PII' : 
+                  data.analysis?.risk_level === 'high' ? 'Credential Exposure' : 'Compliance',
+        risk_level: data.analysis?.risk_level || 'low', // Use actual risk level, default to low
+        captured_at: data.timestamp || new Date().toISOString(),
+        prompt_text: data.prompt,
+        response_text: null, // Optional field
+        source: 'chrome_extension',
+        metadata: {
+          platform: data.platform || 'chrome_extension',
+          url: data.url || 'unknown',
+          detection_method: 'real_time_analysis',
+          detected_pii: data.analysis?.detectedPII || [],
+          risk_factors: data.analysis?.risk_factors || [],
+          mapped_controls: data.analysis?.mapped_controls || [],
+          flagged_at: new Date().toISOString(),
+          extension_version: 'v2.0.8',
+          auto_flagged: data.analysis?.risk_level === 'high' || data.analysis?.risk_level === 'critical',
+          model_used: data.model || 'Unknown',
+          cost_breakdown: {
+            input: parseFloat((0.0005).toFixed(4)),
+            output: parseFloat((0.0005).toFixed(4))
+          }
+        }
+      };
+
+      const response = await fetch(`${this.apiBase}/ingest`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(flaggedPromptData)
+        body: JSON.stringify(ingestData)
       });
 
       if (response.ok) {
         const result = await response.json();
         const isProduction = this.apiBase.includes('complyze.co');
         
-        console.log('🎉 SUCCESS! Flagged prompt saved to ' + (isProduction ? 'PRODUCTION' : 'LOCAL'));
+        console.log('🎉 SUCCESS! Prompt saved to ' + (isProduction ? 'PRODUCTION' : 'LOCAL'));
         console.log('📋 Details:', {
           logId: result.logId,
           status: result.status,
@@ -1704,19 +2082,19 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
         });
         
         if (isProduction) {
-          console.log('🌐 VIEW YOUR FLAGGED PROMPT AT: https://complyze.co/dashboard');
-          console.log('🔄 Click the "Refresh" button in the Flagged Prompts section to see it appear');
+          console.log('🌐 VIEW YOUR PROMPT AT: https://complyze.co/dashboard');
+          console.log('🔄 Click the "Refresh" button in the dashboard to see it appear');
         } else {
-          console.log('🔧 VIEW YOUR FLAGGED PROMPT AT:', this.dashboardUrl);
+          console.log('🔧 VIEW YOUR PROMPT AT:', this.dashboardUrl);
         }
         
         // Update local statistics
-        await this.updateStats('flagged', data.platform);
+        await this.updateStats(data.analysis?.risk_level || 'low', data.platform);
         
         return result.logId;
       } else {
         const errorData = await response.json();
-        console.error('❌ Complyze: Failed to save flagged prompt:', {
+        console.error('❌ Complyze: Failed to save prompt:', {
           status: response.status,
           statusText: response.statusText,
           error: errorData,
@@ -1724,7 +2102,7 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
         });
       }
     } catch (error) {
-      console.error('❌ Complyze: Error saving flagged prompt:', error);
+      console.error('❌ Complyze: Error saving prompt:', error);
       console.log('🔧 API Target:', this.apiBase);
       console.log('📊 Dashboard:', this.dashboardUrl);
     }
@@ -1778,203 +2156,345 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
     // 🔒 PERSONAL IDENTIFIERS
     const emailMatches = prompt.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g);
     if (emailMatches) {
-      emailMatches.forEach(email => sensitiveDataRemoved.push(`Email address: ${email}`));
-      cleaned = cleaned.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL_REDACTED]');
+      emailMatches.forEach(email => sensitiveDataRemoved.push({ type: 'Email', value: email }));
+      cleaned = cleaned.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, 'an email address');
     }
     
+    // FIXED: Process SSN before phone numbers to avoid conflicts
+    // SSN with hyphens (XXX-XX-XXXX)
     const ssnMatches = prompt.match(/\b\d{3}-\d{2}-\d{4}\b/g);
     if (ssnMatches) {
-      ssnMatches.forEach(ssn => sensitiveDataRemoved.push(`Social Security Number: ${ssn}`));
-      cleaned = cleaned.replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN_REDACTED]');
+      ssnMatches.forEach(ssn => sensitiveDataRemoved.push({ type: 'SSN', value: ssn }));
+      cleaned = cleaned.replace(/\b\d{3}-\d{2}-\d{4}\b/g, 'a social security number');
     }
     
-    const ssnNoHyphenMatches = prompt.match(/\b\d{9}\b/g);
+    // SSN without hyphens (9 consecutive digits, avoiding phone numbers and other IDs)
+    const ssnNoHyphenMatches = prompt.match(/\b(?<![\d-])\d{9}(?![\d-])\b/g);
     if (ssnNoHyphenMatches) {
-      ssnNoHyphenMatches.forEach(ssn => sensitiveDataRemoved.push(`Social Security Number: ${ssn}`));
-      cleaned = cleaned.replace(/\b\d{9}\b/g, '[SSN_REDACTED]');
+      ssnNoHyphenMatches.forEach(ssn => sensitiveDataRemoved.push({ type: 'SSN', value: ssn }));
+      cleaned = cleaned.replace(/\b(?<![\d-])\d{9}(?![\d-])\b/g, 'a social security number');
     }
     
     const ccMatches = prompt.match(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g);
     if (ccMatches) {
-      ccMatches.forEach(cc => sensitiveDataRemoved.push(`Credit card number: ${cc}`));
-      cleaned = cleaned.replace(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, '[CREDIT_CARD_REDACTED]');
+      ccMatches.forEach(cc => sensitiveDataRemoved.push({ type: 'Credit Card', value: cc }));
+      cleaned = cleaned.replace(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, 'a credit card number');
     }
     
-    const phoneMatches = prompt.match(/\b\d{3}-\d{3}-\d{4}\b/g);
-    if (phoneMatches) {
-      phoneMatches.forEach(phone => sensitiveDataRemoved.push(`Phone number: ${phone}`));
-      cleaned = cleaned.replace(/\b\d{3}-\d{3}-\d{4}\b/g, '[PHONE_REDACTED]');
+    // Phone numbers (more specific patterns to avoid API key conflicts)
+    // Only match phone numbers with clear phone context or standard US phone formatting
+    const phoneContextMatches = prompt.match(/\b(?:phone|tel|telephone|call|contact|mobile|cell)[\s:]*\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b/gi);
+    if (phoneContextMatches) {
+      phoneContextMatches.forEach(phone => sensitiveDataRemoved.push({ type: 'Phone', value: phone }));
+      cleaned = cleaned.replace(/\b(?:phone|tel|telephone|call|contact|mobile|cell)[\s:]*\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b/gi, 'a phone number');
     }
     
     const phoneParenMatches = prompt.match(/\b\(\d{3}\)\s?\d{3}-\d{4}\b/g);
     if (phoneParenMatches) {
-      phoneParenMatches.forEach(phone => sensitiveDataRemoved.push(`Phone number: ${phone}`));
-      cleaned = cleaned.replace(/\b\(\d{3}\)\s?\d{3}-\d{4}\b/g, '[PHONE_REDACTED]');
+      phoneParenMatches.forEach(phone => sensitiveDataRemoved.push({ type: 'Phone', value: phone }));
+      cleaned = cleaned.replace(/\b\(\d{3}\)\s?\d{3}-\d{4}\b/g, 'a phone number');
     }
     
     const ipMatches = prompt.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g);
     if (ipMatches) {
-      ipMatches.forEach(ip => sensitiveDataRemoved.push(`IP address: ${ip}`));
-      cleaned = cleaned.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[IP_ADDRESS_REDACTED]');
+      ipMatches.forEach(ip => sensitiveDataRemoved.push({ type: 'IP Address', value: ip }));
+      cleaned = cleaned.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, 'an IP address');
+    }
+    
+    // 🧠 PRODUCT & TECHNICAL IP DETECTION
+    
+    // Source code snippets and programming patterns
+    const codeMatches = prompt.match(/(?:function\s+\w+|class\s+\w+|import\s+.+from|const\s+\w+\s*=|def\s+\w+\(|public\s+class|private\s+\w+)/g);
+    if (codeMatches) {
+      codeMatches.forEach(code => sensitiveDataRemoved.push({ type: 'Source Code', value: code.substring(0, 50) + '...' }));
+      cleaned = cleaned.replace(/(?:function\s+\w+|class\s+\w+|import\s+.+from|const\s+\w+\s*=|def\s+\w+\(|public\s+class|private\s+\w+)/g, 'code implementation');
+    }
+    
+    // Internal algorithms and model weights
+    const algorithmMatches = prompt.match(/\b(?:neural\s+network|model\s+weights?|algorithm|optimization|gradient|backprop|transformer|attention)\s+(?:for|in|of)\s+\w+/gi);
+    if (algorithmMatches) {
+      algorithmMatches.forEach(algo => sensitiveDataRemoved.push({ type: 'Algorithm', value: algo }));
+      cleaned = cleaned.replace(/\b(?:neural\s+network|model\s+weights?|algorithm|optimization|gradient|backprop|transformer|attention)\s+(?:for|in|of)\s+\w+/gi, 'algorithmic approach');
+    }
+    
+    // Prompt engineering strategies
+    const promptStrategyMatches = prompt.match(/\b(?:system\s+prompt|prompt\s+template|instruction\s+template|chat\s+template|prompt\s+engineering)\b/gi);
+    if (promptStrategyMatches) {
+      promptStrategyMatches.forEach(strategy => sensitiveDataRemoved.push({ type: 'Prompt Strategy', value: strategy }));
+      cleaned = cleaned.replace(/\b(?:system\s+prompt|prompt\s+template|instruction\s+template|chat\s+template|prompt\s+engineering)\b/gi, 'prompt methodology');
+    }
+    
+    // API schema and endpoints
+    const apiMatches = prompt.match(/\/api\/v?\d*\/[\w\/-]+|(?:GET|POST|PUT|DELETE|PATCH)\s+\/[\w\/-]+/g);
+    if (apiMatches) {
+      apiMatches.forEach(api => sensitiveDataRemoved.push({ type: 'API Endpoint', value: api }));
+      cleaned = cleaned.replace(/\/api\/v?\d*\/[\w\/-]+|(?:GET|POST|PUT|DELETE|PATCH)\s+\/[\w\/-]+/g, 'API endpoint');
+    }
+    
+    // Architecture diagrams and system design
+    const archMatches = prompt.match(/\b(?:microservice|load\s+balancer|database\s+schema|system\s+architecture|deployment\s+diagram)\s+(?:for|of)\s+\w+/gi);
+    if (archMatches) {
+      archMatches.forEach(arch => sensitiveDataRemoved.push({ type: 'Architecture', value: arch }));
+      cleaned = cleaned.replace(/\b(?:microservice|load\s+balancer|database\s+schema|system\s+architecture|deployment\s+diagram)\s+(?:for|of)\s+\w+/gi, 'system architecture');
+    }
+    
+    // Configuration files
+    const configMatches = prompt.match(/\.env(?:\.\w+)?|docker-compose\.ya?ml|kubernetes\.ya?ml|config\.json|settings\.py|\.config/g);
+    if (configMatches) {
+      configMatches.forEach(config => sensitiveDataRemoved.push({ type: 'Config File', value: config }));
+      cleaned = cleaned.replace(/\.env(?:\.\w+)?|docker-compose\.ya?ml|kubernetes\.ya?ml|config\.json|settings\.py|\.config/g, 'configuration file');
+    }
+    
+    // Proprietary model names and internal codenames
+    const codeNameMatches = prompt.match(/\b(?:Project|Operation|Model|System)\s+[A-Z]\w+(?:AI|ML|Bot|Engine|Platform)?\b/g);
+    if (codeNameMatches) {
+      codeNameMatches.forEach(name => sensitiveDataRemoved.push({ type: 'Internal Codename', value: name }));
+      cleaned = cleaned.replace(/\b(?:Project|Operation|Model|System)\s+[A-Z]\w+(?:AI|ML|Bot|Engine|Platform)?\b/g, 'internal project');
+    }
+    
+    // 💼 BUSINESS & OPERATIONAL IP
+    
+    // Product roadmaps and strategic plans
+    const roadmapMatches = prompt.match(/\b(?:Q[1-4]\s+\d{4}|roadmap|launch\s+plan|release\s+strategy|go-to-market)\s+(?:for|of)\s+[\w\s]+/gi);
+    if (roadmapMatches) {
+      roadmapMatches.forEach(roadmap => sensitiveDataRemoved.push({ type: 'Strategic Plan', value: roadmap }));
+      cleaned = cleaned.replace(/\b(?:Q[1-4]\s+\d{4}|roadmap|launch\s+plan|release\s+strategy|go-to-market)\s+(?:for|of)\s+[\w\s]+/gi, 'strategic planning');
+    }
+    
+    // Market differentiation tactics
+    const competitiveMatches = prompt.match(/\b(?:competitive\s+advantage|market\s+differentiation|unique\s+selling\s+proposition|moat)\s+(?:for|of|in)\s+[\w\s]+/gi);
+    if (competitiveMatches) {
+      competitiveMatches.forEach(comp => sensitiveDataRemoved.push({ type: 'Competitive Strategy', value: comp }));
+      cleaned = cleaned.replace(/\b(?:competitive\s+advantage|market\s+differentiation|unique\s+selling\s+proposition|moat)\s+(?:for|of|in)\s+[\w\s]+/gi, 'competitive strategy');
+    }
+    
+    // Pricing models and financial projections
+    const pricingMatches = prompt.match(/\$\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*(?:per\s+month|\/month|annually|ARR|MRR))/g);
+    if (pricingMatches) {
+      pricingMatches.forEach(price => sensitiveDataRemoved.push({ type: 'Pricing Info', value: price }));
+      cleaned = cleaned.replace(/\$\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*(?:per\s+month|\/month|annually|ARR|MRR))/g, 'pricing model');
+    }
+    
+    // 📊 DATA & ANALYTICS IP
+    
+    // Proprietary datasets and schemas
+    const datasetMatches = prompt.match(/\b(?:dataset|data\s+schema|training\s+data|proprietary\s+data)\s+(?:for|of)\s+[\w\s]+/gi);
+    if (datasetMatches) {
+      datasetMatches.forEach(dataset => sensitiveDataRemoved.push({ type: 'Dataset', value: dataset }));
+      cleaned = cleaned.replace(/\b(?:dataset|data\s+schema|training\s+data|proprietary\s+data)\s+(?:for|of)\s+[\w\s]+/gi, 'dataset');
+    }
+    
+    // SQL queries and data pipeline logic
+    const sqlMatches = prompt.match(/(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\s+[\w\s,*()='.]+(?:FROM|INTO|TABLE|WHERE)/gi);
+    if (sqlMatches) {
+      sqlMatches.forEach(sql => sensitiveDataRemoved.push({ type: 'SQL Query', value: sql.substring(0, 50) + '...' }));
+      cleaned = cleaned.replace(/(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\s+[\w\s,*()='.]+(?:FROM|INTO|TABLE|WHERE)/gi, 'database query');
+    }
+    
+    // KPI formulas and metrics
+    const kpiMatches = prompt.match(/\b(?:KPI|metric|formula)\s+(?:for|of)\s+[\w\s]+:\s*[\w\s+\-*/()]+/gi);
+    if (kpiMatches) {
+      kpiMatches.forEach(kpi => sensitiveDataRemoved.push({ type: 'KPI Formula', value: kpi }));
+      cleaned = cleaned.replace(/\b(?:KPI|metric|formula)\s+(?:for|of)\s+[\w\s]+:\s*[\w\s+\-*/()]+/gi, 'performance metric');
+    }
+    
+    // 🧾 LEGAL & LICENSING IP
+    
+    // Draft patents and trade secrets
+    const patentMatches = prompt.match(/\b(?:patent\s+application|trade\s+secret|proprietary\s+method|intellectual\s+property)\s+(?:for|of)\s+[\w\s]+/gi);
+    if (patentMatches) {
+      patentMatches.forEach(patent => sensitiveDataRemoved.push({ type: 'Legal IP', value: patent }));
+      cleaned = cleaned.replace(/\b(?:patent\s+application|trade\s+secret|proprietary\s+method|intellectual\s+property)\s+(?:for|of)\s+[\w\s]+/gi, 'intellectual property');
+    }
+    
+    // Licensing terms and legal agreements
+    const licenseMatches = prompt.match(/\b(?:licensing\s+agreement|NDA|non-disclosure|confidentiality\s+clause|IP\s+ownership)/gi);
+    if (licenseMatches) {
+      licenseMatches.forEach(license => sensitiveDataRemoved.push({ type: 'Legal Agreement', value: license }));
+      cleaned = cleaned.replace(/\b(?:licensing\s+agreement|NDA|non-disclosure|confidentiality\s+clause|IP\s+ownership)/gi, 'legal agreement');
+    }
+    
+    // 🤝 CUSTOMER & PARTNER IP
+    
+    // Client names with strategy context
+    const clientStrategyMatches = prompt.match(/\b(?:client|customer|partner)\s+[A-Z]\w+\s+(?:strategy|implementation|integration|partnership)/gi);
+    if (clientStrategyMatches) {
+      clientStrategyMatches.forEach(client => sensitiveDataRemoved.push({ type: 'Client Strategy', value: client }));
+      cleaned = cleaned.replace(/\b(?:client|customer|partner)\s+[A-Z]\w+\s+(?:strategy|implementation|integration|partnership)/gi, 'client engagement');
+    }
+    
+    // OEM and white-label relationships
+    const oemMatches = prompt.match(/\b(?:OEM|white-label|private\s+label)\s+(?:with|for|partnership)\s+[A-Z]\w+/gi);
+    if (oemMatches) {
+      oemMatches.forEach(oem => sensitiveDataRemoved.push({ type: 'OEM Relationship', value: oem }));
+      cleaned = cleaned.replace(/\b(?:OEM|white-label|private\s+label)\s+(?:with|for|partnership)\s+[A-Z]\w+/gi, 'partner relationship');
+    }
+    
+    // Unreleased product names tied to partners
+    const partnerProductMatches = prompt.match(/\b[A-Z]\w+\s+(?:integration|partnership|collaboration)\s+for\s+[A-Z]\w+/g);
+    if (partnerProductMatches) {
+      partnerProductMatches.forEach(prod => sensitiveDataRemoved.push({ type: 'Partner Product', value: prod }));
+      cleaned = cleaned.replace(/\b[A-Z]\w+\s+(?:integration|partnership|collaboration)\s+for\s+[A-Z]\w+/g, 'partner solution');
     }
     
     // 🏦 FINANCIAL DATA
-    const bankAccountMatches = prompt.match(/\b\d{10,12}\b/g);
+    const bankAccountMatches = prompt.match(/\b\d{8,17}\b/g);
     if (bankAccountMatches) {
-      bankAccountMatches.forEach(account => sensitiveDataRemoved.push(`Bank account number: ${account}`));
-      cleaned = cleaned.replace(/\b\d{10,12}\b/g, '[BANK_ACCOUNT_REDACTED]');
+      bankAccountMatches.forEach(account => sensitiveDataRemoved.push({ type: 'Bank Account', value: account }));
+      cleaned = cleaned.replace(/\b\d{8,17}\b/g, 'a bank account number');
     }
     
     // 📄 GOVERNMENT IDs
     const passportMatches = prompt.match(/\b[a-z]{1,2}\d{6,8}\b/gi);
     if (passportMatches) {
-      passportMatches.forEach(passport => sensitiveDataRemoved.push(`Passport number: ${passport}`));
-      cleaned = cleaned.replace(/\b[a-z]{1,2}\d{6,8}\b/gi, '[PASSPORT_REDACTED]');
+      passportMatches.forEach(passport => sensitiveDataRemoved.push({ type: 'Passport', value: passport }));
+      cleaned = cleaned.replace(/\b[a-z]{1,2}\d{6,8}\b/gi, 'a passport number');
     }
     
     const driverLicenseMatches = prompt.match(/\b[a-z]\d{7,8}\b/gi);
     if (driverLicenseMatches) {
-      driverLicenseMatches.forEach(dl => sensitiveDataRemoved.push(`Driver's license: ${dl}`));
-      cleaned = cleaned.replace(/\b[a-z]\d{7,8}\b/gi, '[DRIVERS_LICENSE_REDACTED]');
+      driverLicenseMatches.forEach(dl => sensitiveDataRemoved.push({ type: 'Drivers License', value: dl }));
+      cleaned = cleaned.replace(/\b[a-z]\d{7,8}\b/gi, 'a driver\'s license number');
     }
     
     // 🏥 HEALTHCARE DATA
     const mrnMatches = prompt.match(/\bmrn[\s:]*\d{6,10}/gi);
     if (mrnMatches) {
-      mrnMatches.forEach(mrn => sensitiveDataRemoved.push(`Medical record number: ${mrn}`));
-      cleaned = cleaned.replace(/\bmrn[\s:]*\d{6,10}/gi, '[MRN_REDACTED]');
+      mrnMatches.forEach(mrn => sensitiveDataRemoved.push({ type: 'MRN', value: mrn }));
+      cleaned = cleaned.replace(/\bmrn[\s:]*\d{6,10}/gi, 'a medical record number');
     }
     
     const patientIdMatches = prompt.match(/\bpatient[\s-_]?id[\s:]*\d+/gi);
     if (patientIdMatches) {
-      patientIdMatches.forEach(pid => sensitiveDataRemoved.push(`Patient ID: ${pid}`));
-      cleaned = cleaned.replace(/\bpatient[\s-_]?id[\s:]*\d+/gi, '[PATIENT_ID_REDACTED]');
+      patientIdMatches.forEach(pid => sensitiveDataRemoved.push({ type: 'Patient ID', value: pid }));
+      cleaned = cleaned.replace(/\bpatient[\s-_]?id[\s:]*\d+/gi, 'a patient identifier');
     }
     
     // 🔧 TECHNICAL IDENTIFIERS
     const macMatches = prompt.match(/\b[0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}\b/gi);
     if (macMatches) {
-      macMatches.forEach(mac => sensitiveDataRemoved.push(`MAC address: ${mac}`));
-      cleaned = cleaned.replace(/\b[0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}\b/gi, '[MAC_ADDRESS_REDACTED]');
+      macMatches.forEach(mac => sensitiveDataRemoved.push({ type: 'MAC Address', value: mac }));
+      cleaned = cleaned.replace(/\b[0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}\b/gi, 'a MAC address');
     }
     
-    // 🔑 AUTHENTICATION & API KEYS (COMPREHENSIVE)
+    // 🔑 AUTHENTICATION & API KEYS (COMPREHENSIVE) - Process context-sensitive patterns FIRST
     
+    // Context-aware API key detection (check these FIRST before generic patterns)
+    const apiKeyWithContextMatches = prompt.match(/\b(?:api[\s_-]?key|secret[\s_-]?key|access[\s_-]?token)[\s:=]+[a-zA-Z0-9\-_./+]{16,}/gi);
+    if (apiKeyWithContextMatches) {
+      apiKeyWithContextMatches.forEach(key => sensitiveDataRemoved.push({ type: 'API Key', value: key.substring(0, 25) + '...' }));
+      cleaned = cleaned.replace(/\b(?:api[\s_-]?key|secret[\s_-]?key|access[\s_-]?token)[\s:=]+[a-zA-Z0-9\-_./+]{16,}/gi, 'API credentials');
+    }
+    
+    // Context-aware secret detection
+    const secretWithContextMatches = prompt.match(/\b(?:secret|password|token|credential)[\s:=]+[a-zA-Z0-9\-_./+]{8,}/gi);
+    if (secretWithContextMatches) {
+      secretWithContextMatches.forEach(secret => sensitiveDataRemoved.push({ type: 'Secret', value: secret.substring(0, 25) + '...' }));
+      cleaned = cleaned.replace(/\b(?:secret|password|token|credential)[\s:=]+[a-zA-Z0-9\-_./+]{8,}/gi, 'authentication secret');
+    }
+    
+    // Named entity detection (names with context)
+    const personNameMatches = prompt.match(/\b(?:name|called|named)[\s:]+[A-Z][a-z]+ [A-Z][a-z]+/gi);
+    if (personNameMatches) {
+      personNameMatches.forEach(name => sensitiveDataRemoved.push({ type: 'Person Name', value: name }));
+      cleaned = cleaned.replace(/\b(?:name|called|named)[\s:]+[A-Z][a-z]+ [A-Z][a-z]+/gi, 'named individual');
+    }
+    
+    // Specific API Keys (more precise patterns)
     // OpenAI API Keys
     const openaiMatches = prompt.match(/\bsk-[a-zA-Z0-9]{48,64}\b/g);
     if (openaiMatches) {
-      openaiMatches.forEach(key => sensitiveDataRemoved.push(`OpenAI API key: ${key.substring(0, 10)}...`));
-      cleaned = cleaned.replace(/\bsk-[a-zA-Z0-9]{48,64}\b/g, '[OPENAI_API_KEY_REDACTED]');
+      openaiMatches.forEach(key => sensitiveDataRemoved.push({ type: 'API Key (OpenAI)', value: key.substring(0, 10) + '...' }));
+      cleaned = cleaned.replace(/\bsk-[a-zA-Z0-9]{48,64}\b/g, 'OpenAI API credentials');
     }
     
     // OpenRouter API Keys
     const openrouterMatches = prompt.match(/\bsk-or-v1-[a-f0-9]{64}\b/g);
     if (openrouterMatches) {
-      openrouterMatches.forEach(key => sensitiveDataRemoved.push(`OpenRouter API key: ${key.substring(0, 15)}...`));
-      cleaned = cleaned.replace(/\bsk-or-v1-[a-f0-9]{64}\b/g, '[OPENROUTER_API_KEY_REDACTED]');
+      openrouterMatches.forEach(key => sensitiveDataRemoved.push({ type: 'API Key (OpenRouter)', value: key.substring(0, 15) + '...' }));
+      cleaned = cleaned.replace(/\bsk-or-v1-[a-f0-9]{64}\b/g, 'OpenRouter API credentials');
     }
     
     // Anthropic API Keys
     const anthropicMatches = prompt.match(/\bsk-ant-[a-zA-Z0-9\-_]{95,105}\b/g);
     if (anthropicMatches) {
-      anthropicMatches.forEach(key => sensitiveDataRemoved.push(`Anthropic API key: ${key.substring(0, 10)}...`));
-      cleaned = cleaned.replace(/\bsk-ant-[a-zA-Z0-9\-_]{95,105}\b/g, '[ANTHROPIC_API_KEY_REDACTED]');
+      anthropicMatches.forEach(key => sensitiveDataRemoved.push({ type: 'API Key (Anthropic)', value: key.substring(0, 10) + '...' }));
+      cleaned = cleaned.replace(/\bsk-ant-[a-zA-Z0-9\-_]{95,105}\b/g, 'Anthropic API credentials');
     }
     
     // Google API Keys
     const googleMatches = prompt.match(/\bAIza[a-zA-Z0-9\-_]{35}\b/g);
     if (googleMatches) {
-      googleMatches.forEach(key => sensitiveDataRemoved.push(`Google API key: ${key.substring(0, 10)}...`));
-      cleaned = cleaned.replace(/\bAIza[a-zA-Z0-9\-_]{35}\b/g, '[GOOGLE_API_KEY_REDACTED]');
+      googleMatches.forEach(key => sensitiveDataRemoved.push({ type: 'API Key (Google)', value: key.substring(0, 10) + '...' }));
+      cleaned = cleaned.replace(/\bAIza[a-zA-Z0-9\-_]{35}\b/g, 'Google API credentials');
     }
     
     // AWS Access Keys
     const awsMatches = prompt.match(/\bAKIA[a-zA-Z0-9]{16}\b/g);
     if (awsMatches) {
-      awsMatches.forEach(key => sensitiveDataRemoved.push(`AWS Access Key: ${key.substring(0, 8)}...`));
-      cleaned = cleaned.replace(/\bAKIA[a-zA-Z0-9]{16}\b/g, '[AWS_ACCESS_KEY_REDACTED]');
-    }
-    
-    // AWS Secret Keys
-    const awsSecretMatches = prompt.match(/\b[a-zA-Z0-9\/\+]{40}\b/g);
-    if (awsSecretMatches && prompt.toLowerCase().includes('secret')) {
-      awsSecretMatches.forEach(key => sensitiveDataRemoved.push(`AWS Secret Key: ${key.substring(0, 10)}...`));
-      cleaned = cleaned.replace(/\b[a-zA-Z0-9\/\+]{40}\b/g, '[AWS_SECRET_KEY_REDACTED]');
+      awsMatches.forEach(key => sensitiveDataRemoved.push({ type: 'AWS Access Key', value: key.substring(0, 8) + '...' }));
+      cleaned = cleaned.replace(/\bAKIA[a-zA-Z0-9]{16}\b/g, 'AWS access credentials');
     }
     
     // GitHub Personal Access Tokens
     const githubMatches = prompt.match(/\bghp_[a-zA-Z0-9]{36}\b/g);
     if (githubMatches) {
-      githubMatches.forEach(token => sensitiveDataRemoved.push(`GitHub Token: ${token.substring(0, 8)}...`));
-      cleaned = cleaned.replace(/\bghp_[a-zA-Z0-9]{36}\b/g, '[GITHUB_TOKEN_REDACTED]');
+      githubMatches.forEach(token => sensitiveDataRemoved.push({ type: 'GitHub Token', value: token.substring(0, 8) + '...' }));
+      cleaned = cleaned.replace(/\bghp_[a-zA-Z0-9]{36}\b/g, 'GitHub access credentials');
     }
     
     // Stripe API Keys
     const stripeMatches = prompt.match(/\b(?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,}\b/g);
     if (stripeMatches) {
-      stripeMatches.forEach(key => sensitiveDataRemoved.push(`Stripe API key: ${key.substring(0, 12)}...`));
-      cleaned = cleaned.replace(/\b(?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,}\b/g, '[STRIPE_API_KEY_REDACTED]');
-    }
-    
-    // Generic API Key patterns
-    const apiKeyMatches = prompt.match(/\bapi[\s_-]?key[\s:=]+[a-z0-9\-_]{16,}/gi);
-    if (apiKeyMatches) {
-      apiKeyMatches.forEach(key => sensitiveDataRemoved.push(`API key: ${key.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\bapi[\s_-]?key[\s:=]+[a-z0-9\-_]{16,}/gi, '[API_KEY_REDACTED]');
-    }
-    
-    // Generic tokens
-    const tokenMatches = prompt.match(/\btoken[\s:=]+[a-z0-9\-_\.]{20,}/gi);
-    if (tokenMatches) {
-      tokenMatches.forEach(token => sensitiveDataRemoved.push(`Auth token: ${token.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\btoken[\s:=]+[a-z0-9\-_\.]{20,}/gi, '[TOKEN_REDACTED]');
+      stripeMatches.forEach(key => sensitiveDataRemoved.push({ type: 'Stripe API Key', value: key.substring(0, 12) + '...' }));
+      cleaned = cleaned.replace(/\b(?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,}\b/g, 'payment processing credentials');
     }
     
     // Bearer tokens
     const bearerMatches = prompt.match(/\bbearer\s+[a-z0-9\-_\.]{20,}/gi);
     if (bearerMatches) {
-      bearerMatches.forEach(bearer => sensitiveDataRemoved.push(`Bearer token: ${bearer.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\bbearer\s+[a-z0-9\-_\.]{20,}/gi, '[BEARER_TOKEN_REDACTED]');
+      bearerMatches.forEach(bearer => sensitiveDataRemoved.push({ type: 'Bearer Token', value: bearer.substring(0, 20) + '...' }));
+      cleaned = cleaned.replace(/\bbearer\s+[a-z0-9\-_\.]{20,}/gi, 'bearer authentication token');
     }
     
     // JWT Tokens
     const jwtMatches = prompt.match(/\beyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/g);
     if (jwtMatches) {
-      jwtMatches.forEach(jwt => sensitiveDataRemoved.push(`JWT Token: ${jwt.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\beyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/g, '[JWT_TOKEN_REDACTED]');
+      jwtMatches.forEach(jwt => sensitiveDataRemoved.push({ type: 'JWT', value: jwt.substring(0, 20) + '...' }));
+      cleaned = cleaned.replace(/\beyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/g, 'JWT authentication token');
     }
     
     // Database connection strings
     const dbMatches = prompt.match(/\b(?:mongodb|mysql|postgresql|redis):\/\/[^\s]+/gi);
     if (dbMatches) {
-      dbMatches.forEach(conn => sensitiveDataRemoved.push(`Database connection: ${conn.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\b(?:mongodb|mysql|postgresql|redis):\/\/[^\s]+/gi, '[DB_CONNECTION_REDACTED]');
+      dbMatches.forEach(conn => sensitiveDataRemoved.push({ type: 'DB Connection String', value: conn.substring(0, 20) + '...' }));
+      cleaned = cleaned.replace(/\b(?:mongodb|mysql|postgresql|redis):\/\/[^\s]+/gi, 'database connection string');
     }
     
     // 🤖 AI RISK INDICATORS
     if (/ignore\s+(previous|all)\s+instructions/i.test(prompt)) {
       aiRiskIndicators.push('Prompt injection attempt detected');
-      cleaned = cleaned.replace(/ignore\s+(previous|all)\s+instructions/gi, '[PROMPT_INJECTION_DETECTED]');
+      cleaned = cleaned.replace(/ignore\s+(previous|all)\s+instructions/gi, 'disregard standard guidelines');
     }
     
     if (/forget\s+(everything|all)\s+(above|before)/i.test(prompt)) {
       aiRiskIndicators.push('System instruction override attempt');
-      cleaned = cleaned.replace(/forget\s+(everything|all)\s+(above|before)/gi, '[INSTRUCTION_OVERRIDE_DETECTED]');
+      cleaned = cleaned.replace(/forget\s+(everything|all)\s+(above|before)/gi, 'set aside previous context');
     }
     
     if (/\bjailbreak/i.test(prompt)) {
       aiRiskIndicators.push('Jailbreak attempt detected');
-      cleaned = cleaned.replace(/\bjailbreak/gi, '[JAILBREAK_ATTEMPT]');
+      cleaned = cleaned.replace(/\bjailbreak/gi, 'bypass restrictions');
     }
     
     if (/\bdan\s+mode/i.test(prompt)) {
       aiRiskIndicators.push('DAN (Do Anything Now) mode attempt');
-      cleaned = cleaned.replace(/\bdan\s+mode/gi, '[DAN_MODE_ATTEMPT]');
+      cleaned = cleaned.replace(/\bdan\s+mode/gi, 'unrestricted operation');
     }
     
     if (/\bdeveloper\s+mode/i.test(prompt)) {
       aiRiskIndicators.push('Developer mode bypass attempt');
-      cleaned = cleaned.replace(/\bdeveloper\s+mode/gi, '[DEVELOPER_MODE_ATTEMPT]');
+      cleaned = cleaned.replace(/\bdeveloper\s+mode/gi, 'technical debugging mode');
     }
     
     // 📋 COMPLIANCE FRAMEWORK DETECTION
@@ -2237,19 +2757,54 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
       { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, replacement: 'the individual' },
       { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replacement: 'the appropriate contact' },
       { pattern: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: 'the required identification number' },
-      { pattern: /\b\d{3}-\d{3}-\d{4}\b/g, replacement: 'the contact number' },
+      { pattern: /\b(?<![\d-])\d{9}(?![\d-])\b/g, replacement: 'the required identification number' },
+      { pattern: /\b(?:phone|tel|telephone|call|contact|mobile|cell)[\s:]*\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b/gi, replacement: 'the contact number' },
       
       // Addresses - keep structure but remove specifics
       { pattern: /\b\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Drive|Dr|Road|Rd|Lane|Ln|Boulevard|Blvd),?\s*[A-Za-z\s]+,?\s*[A-Z]{2}\b/g, 
         replacement: 'the business address' },
       
-      // API Keys and credentials
-      { pattern: /\bsk-[a-zA-Z0-9]{48,64}\b/g, replacement: 'the API authentication credentials' },
-      { pattern: /\bsk-or-v1-[a-f0-9]{64}\b/g, replacement: 'the API authentication credentials' },
-      { pattern: /\bsk-ant-[a-zA-Z0-9\-_]{95,105}\b/g, replacement: 'the API authentication credentials' },
-      { pattern: /\bAIza[a-zA-Z0-9\-_]{35}\b/g, replacement: 'the API authentication credentials' },
-      { pattern: /\bsk_live_[a-zA-Z0-9]{24,}\b/g, replacement: 'the payment processing credentials' },
-      { pattern: /\bAKIA[a-zA-Z0-9]{16}\b/g, replacement: 'the cloud service credentials' },
+      // 🧠 Product & Technical IP patterns
+      { pattern: /(?:function\s+\w+|class\s+\w+|import\s+.+from|const\s+\w+\s*=|def\s+\w+\()/g, replacement: 'code implementation' },
+      { pattern: /\b(?:neural\s+network|model\s+weights?|algorithm|optimization)\s+(?:for|in|of)\s+\w+/gi, replacement: 'algorithmic approach' },
+      { pattern: /\b(?:system\s+prompt|prompt\s+template|instruction\s+template)\b/gi, replacement: 'prompt methodology' },
+      { pattern: /\/api\/v?\d*\/[\w\/-]+|(?:GET|POST|PUT|DELETE|PATCH)\s+\/[\w\/-]+/g, replacement: 'API endpoint' },
+      { pattern: /\.env(?:\.\w+)?|docker-compose\.ya?ml|config\.json/g, replacement: 'configuration file' },
+      { pattern: /\b(?:Project|Operation|Model|System)\s+[A-Z]\w+(?:AI|ML|Bot|Engine|Platform)?\b/g, replacement: 'internal project' },
+      
+      // 💼 Business & Operational IP patterns
+      { pattern: /\b(?:Q[1-4]\s+\d{4}|roadmap|launch\s+plan|release\s+strategy)\s+(?:for|of)\s+[\w\s]+/gi, replacement: 'strategic planning' },
+      { pattern: /\b(?:competitive\s+advantage|market\s+differentiation|unique\s+selling\s+proposition)\s+(?:for|of|in)\s+[\w\s]+/gi, replacement: 'competitive strategy' },
+      { pattern: /\$\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*(?:per\s+month|\/month|annually|ARR|MRR))/g, replacement: 'pricing model' },
+      
+      // 📊 Data & Analytics IP patterns
+      { pattern: /\b(?:dataset|data\s+schema|training\s+data|proprietary\s+data)\s+(?:for|of)\s+[\w\s]+/gi, replacement: 'dataset' },
+      { pattern: /(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\s+[\w\s,*()='.]+(?:FROM|INTO|TABLE|WHERE)/gi, replacement: 'database query' },
+      { pattern: /\b(?:KPI|metric|formula)\s+(?:for|of)\s+[\w\s]+:\s*[\w\s+\-*/()]+/gi, replacement: 'performance metric' },
+      
+      // 🧾 Legal & Licensing IP patterns
+      { pattern: /\b(?:patent\s+application|trade\s+secret|proprietary\s+method|intellectual\s+property)\s+(?:for|of)\s+[\w\s]+/gi, replacement: 'intellectual property' },
+      { pattern: /\b(?:licensing\s+agreement|NDA|non-disclosure|confidentiality\s+clause|IP\s+ownership)/gi, replacement: 'legal agreement' },
+      
+      // 🤝 Customer & Partner IP patterns
+      { pattern: /\b(?:client|customer|partner)\s+[A-Z]\w+\s+(?:strategy|implementation|integration|partnership)/gi, replacement: 'client engagement' },
+      { pattern: /\b(?:OEM|white-label|private\s+label)\s+(?:with|for|partnership)\s+[A-Z]\w+/gi, replacement: 'partner relationship' },
+      { pattern: /\b[A-Z]\w+\s+(?:integration|partnership|collaboration)\s+for\s+[A-Z]\w+/g, replacement: 'partner solution' },
+      
+      // Context-sensitive detection (process FIRST)
+      { pattern: /\b(?:api[\s_-]?key|secret[\s_-]?key|access[\s_-]?token)[\s:=]+[a-zA-Z0-9\-_]{16,}/gi, replacement: 'API credentials' },
+      { pattern: /\b(?:secret|password|token|credential)[\s:=]+[a-zA-Z0-9\-_]{8,}/gi, replacement: 'authentication secret' },
+      { pattern: /\b(?:name|called|named)[\s:]+[A-Z][a-z]+ [A-Z][a-z]+/gi, replacement: 'named individual' },
+      
+      // Specific API Keys and credentials
+      { pattern: /\bsk-[a-zA-Z0-9]{48,64}\b/g, replacement: 'OpenAI API credentials' },
+      { pattern: /\bsk-or-v1-[a-f0-9]{64}\b/g, replacement: 'OpenRouter API credentials' },
+      { pattern: /\bsk-ant-[a-zA-Z0-9\-_]{95,105}\b/g, replacement: 'Anthropic API credentials' },
+      { pattern: /\bAIza[a-zA-Z0-9\-_]{35}\b/g, replacement: 'Google API credentials' },
+      { pattern: /\bghp_[a-zA-Z0-9]{36}\b/g, replacement: 'GitHub access credentials' },
+      { pattern: /\b(?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,}\b/g, replacement: 'payment processing credentials' },
+      { pattern: /\bAKIA[a-zA-Z0-9]{16}\b/g, replacement: 'AWS access credentials' },
+      { pattern: /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g, replacement: 'JWT authentication token' },
       
       // Financial and business info - preserve business context
       { pattern: /\$\d+(?:\.\d{2})?\/month/g, replacement: 'the standard pricing' },
@@ -2424,7 +2979,7 @@ Use these patterns to improve your redaction and optimization approach for this 
         
         platform: 'chrome_extension',
         source_url: typeof window !== 'undefined' ? window.location?.href : 'unknown',
-        model_used: 'google/gemini-2.5-pro-preview',
+        model_used: 'google/gemini-2.5-flash-preview-05-20',
         
         processing_time_ms: processingTime,
         api_provider: 'openrouter',
@@ -2502,6 +3057,107 @@ Use these patterns to improve your redaction and optimization approach for this 
       detected_intent: intent.type,
       optimization_reason: 'Local optimization applied to rephrase sensitive content naturally'
     };
+  }
+
+  mapPlatformName(platform) {
+    switch (platform) {
+      case 'chrome_extension':
+        return 'Chrome Extension';
+      case 'context-menu':
+        return 'Context Menu';
+      case 'real-time-detection':
+        return 'Real-Time Detection';
+      case 'blocked':
+        return 'Blocked Prompt';
+      default:
+        return platform;
+    }
+  }
+
+  formatDetectedPII(detectedPII) {
+    if (!Array.isArray(detectedPII)) return [];
+    
+    return detectedPII.map(item => {
+      if (typeof item === 'string') {
+        // Extract type from "type: value" format
+        const match = item.match(/^([^:]+):/);
+        if (match) {
+          return match[1].trim().toUpperCase();
+        }
+        return item.toUpperCase();
+      } else if (item && item.type) {
+        return item.type.toUpperCase();
+      }
+      return 'UNKNOWN';
+    });
+  }
+
+  generateMappedControls(analysis, primaryRiskType) {
+    const controls = [];
+    
+    // Generate control mappings based on risk type
+    if (primaryRiskType === 'financial') {
+      controls.push(
+        { controlId: 'PCI-DSS-3.4', description: 'Render PAN unreadable anywhere it is stored' },
+        { controlId: 'NIST-SC-28', description: 'Protection of Information at Rest' }
+      );
+    } else if (primaryRiskType === 'personal_id') {
+      controls.push(
+        { controlId: 'NIST-IA-5', description: 'Authenticator Management' },
+        { controlId: 'Privacy-PII', description: 'Personally Identifiable Information Protection' }
+      );
+    } else if (primaryRiskType === 'contact') {
+      controls.push(
+        { controlId: 'NIST-AC-2', description: 'Account Management' },
+        { controlId: 'Privacy-Contact', description: 'Contact Information Protection' }
+      );
+    } else if (primaryRiskType === 'location') {
+      controls.push(
+        { controlId: 'NIST-SC-7', description: 'Boundary Protection' },
+        { controlId: 'Privacy-Location', description: 'Location Data Protection' }
+      );
+    } else if (primaryRiskType === 'technical') {
+      controls.push(
+        { controlId: 'NIST-SC-8', description: 'Transmission Confidentiality and Integrity' },
+        { controlId: 'OWASP-A1', description: 'Injection Prevention' }
+      );
+    } else if (primaryRiskType === 'security') {
+      controls.push(
+        { controlId: 'NIST-IA-2', description: 'Identification and Authentication' },
+        { controlId: 'OWASP-LLM-01', description: 'Prompt Injection Prevention' }
+      );
+    } else if (primaryRiskType === 'medical') {
+      controls.push(
+        { controlId: 'HIPAA-164.312', description: 'Technical Safeguards for PHI' },
+        { controlId: 'NIST-SC-28', description: 'Protection of Information at Rest' }
+      );
+    } else if (primaryRiskType === 'ethics') {
+      controls.push(
+        { controlId: 'NIST-AI-RMF-1', description: 'AI Risk Management Framework' },
+        { controlId: 'Ethics-Bias', description: 'Bias Prevention and Mitigation' }
+      );
+    } else { // compliance or unknown
+      controls.push(
+        { controlId: 'NIST-AI-RMF-2', description: 'AI Governance and Oversight' },
+        { controlId: 'SOC2-CC6.1', description: 'Logical and Physical Access Controls' }
+      );
+    }
+    
+    // Add detected PII specific controls
+    const detectedPII = analysis.detectedPII || [];
+    detectedPII.forEach(item => {
+      const piiType = typeof item === 'string' ? item.split(':')[0].trim().toLowerCase() : '';
+      
+      if (piiType.includes('credit') || piiType.includes('card')) {
+        controls.push({ controlId: 'PCI-DSS-4.1', description: 'Use strong cryptography for transmission' });
+      } else if (piiType.includes('ssn') || piiType.includes('social')) {
+        controls.push({ controlId: 'NIST-IA-5', description: 'SSN Protection Controls' });
+      } else if (piiType.includes('email')) {
+        controls.push({ controlId: 'Privacy-Email', description: 'Email Privacy Protection' });
+      }
+    });
+    
+    return controls;
   }
 }
 

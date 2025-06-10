@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complyze Extension Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #FF6F3C;
+            text-align: center;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .chatgpt-style {
+            border: 2px solid #10A37F;
+            background-color: #f7f7f8;
+        }
+        .claude-style {
+            border: 2px solid #CC785C;
+            background-color: #faf9f7;
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            resize: vertical;
+        }
+        button {
+            background-color: #FF6F3C;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #e55a2b;
+        }
+        .submit-button {
+            background-color: #10A37F;
+        }
+        .submit-button:hover {
+            background-color: #0d8f6a;
+        }
+        .debug-info {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .warning { background-color: #fff3cd; color: #856404; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .test-prompt {
+            font-style: italic;
+            color: #666;
+            cursor: pointer;
+            margin: 5px 0;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+        }
+        .test-prompt:hover {
+            background-color: #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ Complyze Extension Debug Test</h1>
+        
+        <div class="status" id="status">
+            <strong>Status:</strong> Checking extension...
+        </div>
+
+        <div class="test-section chatgpt-style">
+            <h3>🤖 ChatGPT-Style Test</h3>
+            <p>This simulates a ChatGPT prompt input:</p>
+            <textarea 
+                id="chatgpt-prompt" 
+                placeholder="Type your prompt here to test Complyze detection..."
+                data-testid="textbox"
+            ></textarea>
+            <br>
+            <button class="submit-button" onclick="testPrompt('chatgpt')">Send Message</button>
+            
+            <div class="test-prompt" onclick="fillTestPrompt('chatgpt', 'sensitive')">
+                📋 Test Sensitive Data: "My email is john.doe@company.com and my phone is 555-123-4567"
+            </div>
+            <div class="test-prompt" onclick="fillTestPrompt('chatgpt', 'api')">
+                🔑 Test API Key: "Here's my API key: sk-1234567890abcdef for OpenAI"
+            </div>
+            <div class="test-prompt" onclick="fillTestPrompt('chatgpt', 'safe')">
+                ✅ Test Safe Prompt: "What are the best practices for writing clean code?"
+            </div>
+        </div>
+
+        <div class="test-section claude-style">
+            <h3>🧠 Claude-Style Test</h3>
+            <p>This simulates a Claude prompt input:</p>
+            <textarea 
+                id="claude-prompt" 
+                placeholder="Type your prompt here to test Complyze detection..."
+                contenteditable="true"
+            ></textarea>
+            <br>
+            <button class="submit-button" onclick="testPrompt('claude')">Send Message</button>
+            
+            <div class="test-prompt" onclick="fillTestPrompt('claude', 'sensitive')">
+                📋 Test Sensitive Data: "Process this patient data: John Smith, DOB: 01/15/1980, SSN: 123-45-6789"
+            </div>
+            <div class="test-prompt" onclick="fillTestPrompt('claude', 'hipaa')">
+                🏥 Test HIPAA Data: "Patient Mary Johnson has diabetes and takes insulin"
+            </div>
+            <div class="test-prompt" onclick="fillTestPrompt('claude', 'safe')">
+                ✅ Test Safe Prompt: "Explain machine learning algorithms"
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔧 Extension Debug Controls</h3>
+            <button onclick="checkExtensionStatus()">Check Extension Status</button>
+            <button onclick="testExtensionMessaging()">Test Extension Messaging</button>
+            <button onclick="checkAuthentication()">Check Authentication</button>
+            <button onclick="viewStorageData()">View Storage Data</button>
+            <button onclick="clearExtensionData()">Clear Extension Data</button>
+        </div>
+
+        <div class="debug-info" id="debug-output">
+            <strong>Debug Output:</strong><br>
+            Waiting for tests...
+        </div>
+    </div>
+
+    <script>
+        let debugLog = [];
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLog.push(`[${timestamp}] ${message}`);
+            updateDebugOutput();
+            console.log(`Complyze Debug: ${message}`);
+        }
+
+        function updateDebugOutput() {
+            const output = document.getElementById('debug-output');
+            output.innerHTML = '<strong>Debug Output:</strong><br>' + 
+                debugLog.slice(-10).join('<br>'); // Show last 10 entries
+        }
+
+        function fillTestPrompt(platform, type) {
+            const prompts = {
+                sensitive: "My email is john.doe@company.com and my phone is 555-123-4567",
+                api: "Here's my API key: sk-1234567890abcdef for OpenAI",
+                hipaa: "Patient Mary Johnson has diabetes and takes insulin. Her SSN is 123-45-6789",
+                safe: "What are the best practices for writing clean code?"
+            };
+            
+            const elementId = platform === 'chatgpt' ? 'chatgpt-prompt' : 'claude-prompt';
+            document.getElementById(elementId).value = prompts[type];
+            log(`Filled ${platform} input with ${type} test prompt`);
+        }
+
+        function testPrompt(platform) {
+            const elementId = platform === 'chatgpt' ? 'chatgpt-prompt' : 'claude-prompt';
+            const prompt = document.getElementById(elementId).value;
+            
+            if (!prompt.trim()) {
+                log('No prompt entered', 'warning');
+                return;
+            }
+
+            log(`Testing ${platform} prompt: ${prompt.substring(0, 50)}...`);
+            
+            // Simulate what the extension would do
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+                chrome.runtime.sendMessage({
+                    type: 'analyze_prompt',
+                    payload: {
+                        prompt: prompt,
+                        platform: platform,
+                        url: window.location.href,
+                        timestamp: new Date().toISOString()
+                    }
+                }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        log(`Extension messaging error: ${chrome.runtime.lastError.message}`, 'error');
+                    } else {
+                        log(`Extension response: ${JSON.stringify(response)}`, 'success');
+                    }
+                });
+            } else {
+                log('Chrome extension API not available', 'error');
+            }
+        }
+
+        function checkExtensionStatus() {
+            log('Checking extension status...');
+            
+            const checks = {
+                'Chrome API': typeof chrome !== 'undefined',
+                'Runtime API': typeof chrome !== 'undefined' && chrome.runtime,
+                'Messaging API': typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage,
+                'Storage API': typeof chrome !== 'undefined' && chrome.storage,
+            };
+
+            for (const [check, result] of Object.entries(checks)) {
+                log(`${check}: ${result ? '✅' : '❌'}`);
+            }
+        }
+
+        function testExtensionMessaging() {
+            log('Testing extension messaging...');
+            
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+                chrome.runtime.sendMessage({
+                    type: 'debug_test',
+                    payload: { test: true }
+                }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        log(`Messaging failed: ${chrome.runtime.lastError.message}`, 'error');
+                    } else {
+                        log(`Messaging success: ${JSON.stringify(response)}`, 'success');
+                    }
+                });
+            } else {
+                log('Chrome messaging API not available', 'error');
+            }
+        }
+
+        function checkAuthentication() {
+            log('Checking authentication status...');
+            
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+                chrome.runtime.sendMessage({
+                    type: 'get_auth_status'
+                }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        log(`Auth check failed: ${chrome.runtime.lastError.message}`, 'error');
+                    } else {
+                        log(`Auth status: ${JSON.stringify(response)}`, response.isAuthenticated ? 'success' : 'warning');
+                        if (!response.isAuthenticated) {
+                            log('❌ Extension is not authenticated! This is why prompts aren\'t being saved.', 'error');
+                            log('💡 To fix: Go to https://complyze.co/dashboard and login, then refresh this page.', 'warning');
+                        } else {
+                            log('✅ Extension is authenticated. User ID: ' + (response.user?.id || 'unknown'), 'success');
+                        }
+                    }
+                });
+            } else {
+                log('Cannot check auth - Chrome API not available', 'error');
+            }
+        }
+
+        function viewStorageData() {
+            log('Viewing extension storage data...');
+            
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.get(null, (data) => {
+                    log(`Storage data: ${JSON.stringify(data, null, 2)}`);
+                });
+            } else {
+                log('Chrome storage API not available', 'error');
+            }
+        }
+
+        function clearExtensionData() {
+            if (confirm('Clear all extension data? This will log you out.')) {
+                log('Clearing extension data...');
+                
+                if (typeof chrome !== 'undefined' && chrome.storage) {
+                    chrome.storage.local.clear(() => {
+                        log('Extension data cleared', 'success');
+                    });
+                } else {
+                    log('Chrome storage API not available', 'error');
+                }
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            log('Debug page loaded');
+            checkExtensionStatus();
+            
+            // Set initial status
+            const statusEl = document.getElementById('status');
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                statusEl.innerHTML = '<strong>Status:</strong> ✅ Chrome extension APIs detected';
+                statusEl.className = 'status success';
+            } else {
+                statusEl.innerHTML = '<strong>Status:</strong> ❌ Chrome extension APIs not available';
+                statusEl.className = 'status error';
+            }
+        });
+
+        // Listen for messages from the extension
+        if (typeof chrome !== 'undefined' && chrome.runtime) {
+            chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+                log(`Received message from extension: ${JSON.stringify(message)}`);
+                return true;
+            });
+        }
+    </script>
+</body>
+</html> 
