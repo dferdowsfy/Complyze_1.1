@@ -1804,83 +1804,223 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
     const emailMatches = prompt.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g);
     if (emailMatches) {
       emailMatches.forEach(email => sensitiveDataRemoved.push(`Email address: ${email}`));
-      cleaned = cleaned.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL_REDACTED]');
+      cleaned = cleaned.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, 'an email address');
     }
     
+    // FIXED: Process SSN before phone numbers to avoid conflicts
+    // SSN with hyphens (XXX-XX-XXXX)
     const ssnMatches = prompt.match(/\b\d{3}-\d{2}-\d{4}\b/g);
     if (ssnMatches) {
       ssnMatches.forEach(ssn => sensitiveDataRemoved.push(`Social Security Number: ${ssn}`));
-      cleaned = cleaned.replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN_REDACTED]');
+      cleaned = cleaned.replace(/\b\d{3}-\d{2}-\d{4}\b/g, 'a social security number');
     }
     
-    const ssnNoHyphenMatches = prompt.match(/\b\d{9}\b/g);
+    // SSN without hyphens (9 consecutive digits, avoiding phone numbers and other IDs)
+    const ssnNoHyphenMatches = prompt.match(/\b(?<![\d-])\d{9}(?![\d-])\b/g);
     if (ssnNoHyphenMatches) {
       ssnNoHyphenMatches.forEach(ssn => sensitiveDataRemoved.push(`Social Security Number: ${ssn}`));
-      cleaned = cleaned.replace(/\b\d{9}\b/g, '[SSN_REDACTED]');
+      cleaned = cleaned.replace(/\b(?<![\d-])\d{9}(?![\d-])\b/g, 'a social security number');
     }
     
     const ccMatches = prompt.match(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g);
     if (ccMatches) {
       ccMatches.forEach(cc => sensitiveDataRemoved.push(`Credit card number: ${cc}`));
-      cleaned = cleaned.replace(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, '[CREDIT_CARD_REDACTED]');
+      cleaned = cleaned.replace(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, 'a credit card number');
     }
     
+    // Phone numbers (process after SSN to avoid conflicts)
     const phoneMatches = prompt.match(/\b\d{3}-\d{3}-\d{4}\b/g);
     if (phoneMatches) {
       phoneMatches.forEach(phone => sensitiveDataRemoved.push(`Phone number: ${phone}`));
-      cleaned = cleaned.replace(/\b\d{3}-\d{3}-\d{4}\b/g, '[PHONE_REDACTED]');
+      cleaned = cleaned.replace(/\b\d{3}-\d{3}-\d{4}\b/g, 'a phone number');
     }
     
     const phoneParenMatches = prompt.match(/\b\(\d{3}\)\s?\d{3}-\d{4}\b/g);
     if (phoneParenMatches) {
       phoneParenMatches.forEach(phone => sensitiveDataRemoved.push(`Phone number: ${phone}`));
-      cleaned = cleaned.replace(/\b\(\d{3}\)\s?\d{3}-\d{4}\b/g, '[PHONE_REDACTED]');
+      cleaned = cleaned.replace(/\b\(\d{3}\)\s?\d{3}-\d{4}\b/g, 'a phone number');
     }
     
     const ipMatches = prompt.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g);
     if (ipMatches) {
       ipMatches.forEach(ip => sensitiveDataRemoved.push(`IP address: ${ip}`));
-      cleaned = cleaned.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '[IP_ADDRESS_REDACTED]');
+      cleaned = cleaned.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, 'an IP address');
+    }
+    
+    // 🧠 PRODUCT & TECHNICAL IP DETECTION
+    
+    // Source code snippets and programming patterns
+    const codeMatches = prompt.match(/(?:function\s+\w+|class\s+\w+|import\s+.+from|const\s+\w+\s*=|def\s+\w+\(|public\s+class|private\s+\w+)/g);
+    if (codeMatches) {
+      codeMatches.forEach(code => sensitiveDataRemoved.push(`Source code: ${code.substring(0, 30)}...`));
+      cleaned = cleaned.replace(/(?:function\s+\w+|class\s+\w+|import\s+.+from|const\s+\w+\s*=|def\s+\w+\(|public\s+class|private\s+\w+)/g, 'code implementation');
+    }
+    
+    // Internal algorithms and model weights
+    const algorithmMatches = prompt.match(/\b(?:neural\s+network|model\s+weights?|algorithm|optimization|gradient|backprop|transformer|attention)\s+(?:for|in|of)\s+\w+/gi);
+    if (algorithmMatches) {
+      algorithmMatches.forEach(algo => sensitiveDataRemoved.push(`Algorithm reference: ${algo}`));
+      cleaned = cleaned.replace(/\b(?:neural\s+network|model\s+weights?|algorithm|optimization|gradient|backprop|transformer|attention)\s+(?:for|in|of)\s+\w+/gi, 'algorithmic approach');
+    }
+    
+    // Prompt engineering strategies
+    const promptStrategyMatches = prompt.match(/\b(?:system\s+prompt|prompt\s+template|instruction\s+template|chat\s+template|prompt\s+engineering)\b/gi);
+    if (promptStrategyMatches) {
+      promptStrategyMatches.forEach(strategy => sensitiveDataRemoved.push(`Prompt strategy: ${strategy}`));
+      cleaned = cleaned.replace(/\b(?:system\s+prompt|prompt\s+template|instruction\s+template|chat\s+template|prompt\s+engineering)\b/gi, 'prompt methodology');
+    }
+    
+    // API schema and endpoints
+    const apiMatches = prompt.match(/\/api\/v?\d*\/[\w\/-]+|(?:GET|POST|PUT|DELETE|PATCH)\s+\/[\w\/-]+/g);
+    if (apiMatches) {
+      apiMatches.forEach(api => sensitiveDataRemoved.push(`API endpoint: ${api}`));
+      cleaned = cleaned.replace(/\/api\/v?\d*\/[\w\/-]+|(?:GET|POST|PUT|DELETE|PATCH)\s+\/[\w\/-]+/g, 'API endpoint');
+    }
+    
+    // Architecture diagrams and system design
+    const archMatches = prompt.match(/\b(?:microservice|load\s+balancer|database\s+schema|system\s+architecture|deployment\s+diagram)\s+(?:for|of)\s+\w+/gi);
+    if (archMatches) {
+      archMatches.forEach(arch => sensitiveDataRemoved.push(`Architecture reference: ${arch}`));
+      cleaned = cleaned.replace(/\b(?:microservice|load\s+balancer|database\s+schema|system\s+architecture|deployment\s+diagram)\s+(?:for|of)\s+\w+/gi, 'system architecture');
+    }
+    
+    // Configuration files
+    const configMatches = prompt.match(/\.env(?:\.\w+)?|docker-compose\.ya?ml|kubernetes\.ya?ml|config\.json|settings\.py|\.config/g);
+    if (configMatches) {
+      configMatches.forEach(config => sensitiveDataRemoved.push(`Config file: ${config}`));
+      cleaned = cleaned.replace(/\.env(?:\.\w+)?|docker-compose\.ya?ml|kubernetes\.ya?ml|config\.json|settings\.py|\.config/g, 'configuration file');
+    }
+    
+    // Proprietary model names and internal codenames
+    const codeNameMatches = prompt.match(/\b(?:Project|Operation|Model|System)\s+[A-Z]\w+(?:AI|ML|Bot|Engine|Platform)?\b/g);
+    if (codeNameMatches) {
+      codeNameMatches.forEach(name => sensitiveDataRemoved.push(`Internal codename: ${name}`));
+      cleaned = cleaned.replace(/\b(?:Project|Operation|Model|System)\s+[A-Z]\w+(?:AI|ML|Bot|Engine|Platform)?\b/g, 'internal project');
+    }
+    
+    // 💼 BUSINESS & OPERATIONAL IP
+    
+    // Product roadmaps and strategic plans
+    const roadmapMatches = prompt.match(/\b(?:Q[1-4]\s+\d{4}|roadmap|launch\s+plan|release\s+strategy|go-to-market)\s+(?:for|of)\s+[\w\s]+/gi);
+    if (roadmapMatches) {
+      roadmapMatches.forEach(roadmap => sensitiveDataRemoved.push(`Strategic plan: ${roadmap}`));
+      cleaned = cleaned.replace(/\b(?:Q[1-4]\s+\d{4}|roadmap|launch\s+plan|release\s+strategy|go-to-market)\s+(?:for|of)\s+[\w\s]+/gi, 'strategic planning');
+    }
+    
+    // Market differentiation tactics
+    const competitiveMatches = prompt.match(/\b(?:competitive\s+advantage|market\s+differentiation|unique\s+selling\s+proposition|moat)\s+(?:for|of|in)\s+[\w\s]+/gi);
+    if (competitiveMatches) {
+      competitiveMatches.forEach(comp => sensitiveDataRemoved.push(`Competitive strategy: ${comp}`));
+      cleaned = cleaned.replace(/\b(?:competitive\s+advantage|market\s+differentiation|unique\s+selling\s+proposition|moat)\s+(?:for|of|in)\s+[\w\s]+/gi, 'competitive strategy');
+    }
+    
+    // Pricing models and financial projections
+    const pricingMatches = prompt.match(/\$\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*(?:per\s+month|\/month|annually|ARR|MRR))/g);
+    if (pricingMatches) {
+      pricingMatches.forEach(price => sensitiveDataRemoved.push(`Pricing info: ${price}`));
+      cleaned = cleaned.replace(/\$\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*(?:per\s+month|\/month|annually|ARR|MRR))/g, 'pricing model');
+    }
+    
+    // 📊 DATA & ANALYTICS IP
+    
+    // Proprietary datasets and schemas
+    const datasetMatches = prompt.match(/\b(?:dataset|data\s+schema|training\s+data|proprietary\s+data)\s+(?:for|of)\s+[\w\s]+/gi);
+    if (datasetMatches) {
+      datasetMatches.forEach(dataset => sensitiveDataRemoved.push(`Dataset reference: ${dataset}`));
+      cleaned = cleaned.replace(/\b(?:dataset|data\s+schema|training\s+data|proprietary\s+data)\s+(?:for|of)\s+[\w\s]+/gi, 'dataset');
+    }
+    
+    // SQL queries and data pipeline logic
+    const sqlMatches = prompt.match(/(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\s+[\w\s,*()='.]+(?:FROM|INTO|TABLE|WHERE)/gi);
+    if (sqlMatches) {
+      sqlMatches.forEach(sql => sensitiveDataRemoved.push(`SQL query: ${sql.substring(0, 50)}...`));
+      cleaned = cleaned.replace(/(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\s+[\w\s,*()='.]+(?:FROM|INTO|TABLE|WHERE)/gi, 'database query');
+    }
+    
+    // KPI formulas and metrics
+    const kpiMatches = prompt.match(/\b(?:KPI|metric|formula)\s+(?:for|of)\s+[\w\s]+:\s*[\w\s+\-*/()]+/gi);
+    if (kpiMatches) {
+      kpiMatches.forEach(kpi => sensitiveDataRemoved.push(`KPI formula: ${kpi}`));
+      cleaned = cleaned.replace(/\b(?:KPI|metric|formula)\s+(?:for|of)\s+[\w\s]+:\s*[\w\s+\-*/()]+/gi, 'performance metric');
+    }
+    
+    // 🧾 LEGAL & LICENSING IP
+    
+    // Draft patents and trade secrets
+    const patentMatches = prompt.match(/\b(?:patent\s+application|trade\s+secret|proprietary\s+method|intellectual\s+property)\s+(?:for|of)\s+[\w\s]+/gi);
+    if (patentMatches) {
+      patentMatches.forEach(patent => sensitiveDataRemoved.push(`Legal IP: ${patent}`));
+      cleaned = cleaned.replace(/\b(?:patent\s+application|trade\s+secret|proprietary\s+method|intellectual\s+property)\s+(?:for|of)\s+[\w\s]+/gi, 'intellectual property');
+    }
+    
+    // Licensing terms and legal agreements
+    const licenseMatches = prompt.match(/\b(?:licensing\s+agreement|NDA|non-disclosure|confidentiality\s+clause|IP\s+ownership)/gi);
+    if (licenseMatches) {
+      licenseMatches.forEach(license => sensitiveDataRemoved.push(`Legal agreement: ${license}`));
+      cleaned = cleaned.replace(/\b(?:licensing\s+agreement|NDA|non-disclosure|confidentiality\s+clause|IP\s+ownership)/gi, 'legal agreement');
+    }
+    
+    // 🤝 CUSTOMER & PARTNER IP
+    
+    // Client names with strategy context
+    const clientStrategyMatches = prompt.match(/\b(?:client|customer|partner)\s+[A-Z]\w+\s+(?:strategy|implementation|integration|partnership)/gi);
+    if (clientStrategyMatches) {
+      clientStrategyMatches.forEach(client => sensitiveDataRemoved.push(`Client strategy: ${client}`));
+      cleaned = cleaned.replace(/\b(?:client|customer|partner)\s+[A-Z]\w+\s+(?:strategy|implementation|integration|partnership)/gi, 'client engagement');
+    }
+    
+    // OEM and white-label relationships
+    const oemMatches = prompt.match(/\b(?:OEM|white-label|private\s+label)\s+(?:with|for|partnership)\s+[A-Z]\w+/gi);
+    if (oemMatches) {
+      oemMatches.forEach(oem => sensitiveDataRemoved.push(`OEM relationship: ${oem}`));
+      cleaned = cleaned.replace(/\b(?:OEM|white-label|private\s+label)\s+(?:with|for|partnership)\s+[A-Z]\w+/gi, 'partner relationship');
+    }
+    
+    // Unreleased product names tied to partners
+    const partnerProductMatches = prompt.match(/\b[A-Z]\w+\s+(?:integration|partnership|collaboration)\s+for\s+[A-Z]\w+/g);
+    if (partnerProductMatches) {
+      partnerProductMatches.forEach(prod => sensitiveDataRemoved.push(`Partner product: ${prod}`));
+      cleaned = cleaned.replace(/\b[A-Z]\w+\s+(?:integration|partnership|collaboration)\s+for\s+[A-Z]\w+/g, 'partner solution');
     }
     
     // 🏦 FINANCIAL DATA
     const bankAccountMatches = prompt.match(/\b\d{10,12}\b/g);
     if (bankAccountMatches) {
       bankAccountMatches.forEach(account => sensitiveDataRemoved.push(`Bank account number: ${account}`));
-      cleaned = cleaned.replace(/\b\d{10,12}\b/g, '[BANK_ACCOUNT_REDACTED]');
+      cleaned = cleaned.replace(/\b\d{10,12}\b/g, 'a bank account number');
     }
     
     // 📄 GOVERNMENT IDs
     const passportMatches = prompt.match(/\b[a-z]{1,2}\d{6,8}\b/gi);
     if (passportMatches) {
       passportMatches.forEach(passport => sensitiveDataRemoved.push(`Passport number: ${passport}`));
-      cleaned = cleaned.replace(/\b[a-z]{1,2}\d{6,8}\b/gi, '[PASSPORT_REDACTED]');
+      cleaned = cleaned.replace(/\b[a-z]{1,2}\d{6,8}\b/gi, 'a passport number');
     }
     
     const driverLicenseMatches = prompt.match(/\b[a-z]\d{7,8}\b/gi);
     if (driverLicenseMatches) {
       driverLicenseMatches.forEach(dl => sensitiveDataRemoved.push(`Driver's license: ${dl}`));
-      cleaned = cleaned.replace(/\b[a-z]\d{7,8}\b/gi, '[DRIVERS_LICENSE_REDACTED]');
+      cleaned = cleaned.replace(/\b[a-z]\d{7,8}\b/gi, 'a driver\'s license number');
     }
     
     // 🏥 HEALTHCARE DATA
     const mrnMatches = prompt.match(/\bmrn[\s:]*\d{6,10}/gi);
     if (mrnMatches) {
       mrnMatches.forEach(mrn => sensitiveDataRemoved.push(`Medical record number: ${mrn}`));
-      cleaned = cleaned.replace(/\bmrn[\s:]*\d{6,10}/gi, '[MRN_REDACTED]');
+      cleaned = cleaned.replace(/\bmrn[\s:]*\d{6,10}/gi, 'a medical record number');
     }
     
     const patientIdMatches = prompt.match(/\bpatient[\s-_]?id[\s:]*\d+/gi);
     if (patientIdMatches) {
       patientIdMatches.forEach(pid => sensitiveDataRemoved.push(`Patient ID: ${pid}`));
-      cleaned = cleaned.replace(/\bpatient[\s-_]?id[\s:]*\d+/gi, '[PATIENT_ID_REDACTED]');
+      cleaned = cleaned.replace(/\bpatient[\s-_]?id[\s:]*\d+/gi, 'a patient identifier');
     }
     
     // 🔧 TECHNICAL IDENTIFIERS
     const macMatches = prompt.match(/\b[0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}\b/gi);
     if (macMatches) {
       macMatches.forEach(mac => sensitiveDataRemoved.push(`MAC address: ${mac}`));
-      cleaned = cleaned.replace(/\b[0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}\b/gi, '[MAC_ADDRESS_REDACTED]');
+      cleaned = cleaned.replace(/\b[0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}\b/gi, 'a MAC address');
     }
     
     // 🔑 AUTHENTICATION & API KEYS (COMPREHENSIVE)
@@ -1889,117 +2029,117 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
     const openaiMatches = prompt.match(/\bsk-[a-zA-Z0-9]{48,64}\b/g);
     if (openaiMatches) {
       openaiMatches.forEach(key => sensitiveDataRemoved.push(`OpenAI API key: ${key.substring(0, 10)}...`));
-      cleaned = cleaned.replace(/\bsk-[a-zA-Z0-9]{48,64}\b/g, '[OPENAI_API_KEY_REDACTED]');
+      cleaned = cleaned.replace(/\bsk-[a-zA-Z0-9]{48,64}\b/g, 'an OpenAI API key');
     }
     
     // OpenRouter API Keys
     const openrouterMatches = prompt.match(/\bsk-or-v1-[a-f0-9]{64}\b/g);
     if (openrouterMatches) {
       openrouterMatches.forEach(key => sensitiveDataRemoved.push(`OpenRouter API key: ${key.substring(0, 15)}...`));
-      cleaned = cleaned.replace(/\bsk-or-v1-[a-f0-9]{64}\b/g, '[OPENROUTER_API_KEY_REDACTED]');
+      cleaned = cleaned.replace(/\bsk-or-v1-[a-f0-9]{64}\b/g, 'an API key');
     }
     
     // Anthropic API Keys
     const anthropicMatches = prompt.match(/\bsk-ant-[a-zA-Z0-9\-_]{95,105}\b/g);
     if (anthropicMatches) {
       anthropicMatches.forEach(key => sensitiveDataRemoved.push(`Anthropic API key: ${key.substring(0, 10)}...`));
-      cleaned = cleaned.replace(/\bsk-ant-[a-zA-Z0-9\-_]{95,105}\b/g, '[ANTHROPIC_API_KEY_REDACTED]');
+      cleaned = cleaned.replace(/\bsk-ant-[a-zA-Z0-9\-_]{95,105}\b/g, 'an Anthropic API key');
     }
     
     // Google API Keys
     const googleMatches = prompt.match(/\bAIza[a-zA-Z0-9\-_]{35}\b/g);
     if (googleMatches) {
       googleMatches.forEach(key => sensitiveDataRemoved.push(`Google API key: ${key.substring(0, 10)}...`));
-      cleaned = cleaned.replace(/\bAIza[a-zA-Z0-9\-_]{35}\b/g, '[GOOGLE_API_KEY_REDACTED]');
+      cleaned = cleaned.replace(/\bAIza[a-zA-Z0-9\-_]{35}\b/g, 'a Google API key');
     }
     
     // AWS Access Keys
     const awsMatches = prompt.match(/\bAKIA[a-zA-Z0-9]{16}\b/g);
     if (awsMatches) {
       awsMatches.forEach(key => sensitiveDataRemoved.push(`AWS Access Key: ${key.substring(0, 8)}...`));
-      cleaned = cleaned.replace(/\bAKIA[a-zA-Z0-9]{16}\b/g, '[AWS_ACCESS_KEY_REDACTED]');
+      cleaned = cleaned.replace(/\bAKIA[a-zA-Z0-9]{16}\b/g, 'AWS access credentials');
     }
     
     // AWS Secret Keys
     const awsSecretMatches = prompt.match(/\b[a-zA-Z0-9\/\+]{40}\b/g);
     if (awsSecretMatches && prompt.toLowerCase().includes('secret')) {
       awsSecretMatches.forEach(key => sensitiveDataRemoved.push(`AWS Secret Key: ${key.substring(0, 10)}...`));
-      cleaned = cleaned.replace(/\b[a-zA-Z0-9\/\+]{40}\b/g, '[AWS_SECRET_KEY_REDACTED]');
+      cleaned = cleaned.replace(/\b[a-zA-Z0-9\/\+]{40}\b/g, 'AWS secret credentials');
     }
     
     // GitHub Personal Access Tokens
     const githubMatches = prompt.match(/\bghp_[a-zA-Z0-9]{36}\b/g);
     if (githubMatches) {
       githubMatches.forEach(token => sensitiveDataRemoved.push(`GitHub Token: ${token.substring(0, 8)}...`));
-      cleaned = cleaned.replace(/\bghp_[a-zA-Z0-9]{36}\b/g, '[GITHUB_TOKEN_REDACTED]');
+      cleaned = cleaned.replace(/\bghp_[a-zA-Z0-9]{36}\b/g, 'a GitHub access token');
     }
     
     // Stripe API Keys
     const stripeMatches = prompt.match(/\b(?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,}\b/g);
     if (stripeMatches) {
       stripeMatches.forEach(key => sensitiveDataRemoved.push(`Stripe API key: ${key.substring(0, 12)}...`));
-      cleaned = cleaned.replace(/\b(?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,}\b/g, '[STRIPE_API_KEY_REDACTED]');
+      cleaned = cleaned.replace(/\b(?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,}\b/g, 'payment processing credentials');
     }
     
     // Generic API Key patterns
     const apiKeyMatches = prompt.match(/\bapi[\s_-]?key[\s:=]+[a-z0-9\-_]{16,}/gi);
     if (apiKeyMatches) {
       apiKeyMatches.forEach(key => sensitiveDataRemoved.push(`API key: ${key.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\bapi[\s_-]?key[\s:=]+[a-z0-9\-_]{16,}/gi, '[API_KEY_REDACTED]');
+      cleaned = cleaned.replace(/\bapi[\s_-]?key[\s:=]+[a-z0-9\-_]{16,}/gi, 'API credentials');
     }
     
     // Generic tokens
     const tokenMatches = prompt.match(/\btoken[\s:=]+[a-z0-9\-_\.]{20,}/gi);
     if (tokenMatches) {
       tokenMatches.forEach(token => sensitiveDataRemoved.push(`Auth token: ${token.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\btoken[\s:=]+[a-z0-9\-_\.]{20,}/gi, '[TOKEN_REDACTED]');
+      cleaned = cleaned.replace(/\btoken[\s:=]+[a-z0-9\-_\.]{20,}/gi, 'authentication token');
     }
     
     // Bearer tokens
     const bearerMatches = prompt.match(/\bbearer\s+[a-z0-9\-_\.]{20,}/gi);
     if (bearerMatches) {
       bearerMatches.forEach(bearer => sensitiveDataRemoved.push(`Bearer token: ${bearer.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\bbearer\s+[a-z0-9\-_\.]{20,}/gi, '[BEARER_TOKEN_REDACTED]');
+      cleaned = cleaned.replace(/\bbearer\s+[a-z0-9\-_\.]{20,}/gi, 'bearer authentication');
     }
     
     // JWT Tokens
     const jwtMatches = prompt.match(/\beyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/g);
     if (jwtMatches) {
       jwtMatches.forEach(jwt => sensitiveDataRemoved.push(`JWT Token: ${jwt.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\beyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/g, '[JWT_TOKEN_REDACTED]');
+      cleaned = cleaned.replace(/\beyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/g, 'a JWT token');
     }
     
     // Database connection strings
     const dbMatches = prompt.match(/\b(?:mongodb|mysql|postgresql|redis):\/\/[^\s]+/gi);
     if (dbMatches) {
       dbMatches.forEach(conn => sensitiveDataRemoved.push(`Database connection: ${conn.substring(0, 20)}...`));
-      cleaned = cleaned.replace(/\b(?:mongodb|mysql|postgresql|redis):\/\/[^\s]+/gi, '[DB_CONNECTION_REDACTED]');
+      cleaned = cleaned.replace(/\b(?:mongodb|mysql|postgresql|redis):\/\/[^\s]+/gi, 'database connection string');
     }
     
     // 🤖 AI RISK INDICATORS
     if (/ignore\s+(previous|all)\s+instructions/i.test(prompt)) {
       aiRiskIndicators.push('Prompt injection attempt detected');
-      cleaned = cleaned.replace(/ignore\s+(previous|all)\s+instructions/gi, '[PROMPT_INJECTION_DETECTED]');
+      cleaned = cleaned.replace(/ignore\s+(previous|all)\s+instructions/gi, 'disregard standard guidelines');
     }
     
     if (/forget\s+(everything|all)\s+(above|before)/i.test(prompt)) {
       aiRiskIndicators.push('System instruction override attempt');
-      cleaned = cleaned.replace(/forget\s+(everything|all)\s+(above|before)/gi, '[INSTRUCTION_OVERRIDE_DETECTED]');
+      cleaned = cleaned.replace(/forget\s+(everything|all)\s+(above|before)/gi, 'set aside previous context');
     }
     
     if (/\bjailbreak/i.test(prompt)) {
       aiRiskIndicators.push('Jailbreak attempt detected');
-      cleaned = cleaned.replace(/\bjailbreak/gi, '[JAILBREAK_ATTEMPT]');
+      cleaned = cleaned.replace(/\bjailbreak/gi, 'bypass restrictions');
     }
     
     if (/\bdan\s+mode/i.test(prompt)) {
       aiRiskIndicators.push('DAN (Do Anything Now) mode attempt');
-      cleaned = cleaned.replace(/\bdan\s+mode/gi, '[DAN_MODE_ATTEMPT]');
+      cleaned = cleaned.replace(/\bdan\s+mode/gi, 'unrestricted operation');
     }
     
     if (/\bdeveloper\s+mode/i.test(prompt)) {
       aiRiskIndicators.push('Developer mode bypass attempt');
-      cleaned = cleaned.replace(/\bdeveloper\s+mode/gi, '[DEVELOPER_MODE_ATTEMPT]');
+      cleaned = cleaned.replace(/\bdeveloper\s+mode/gi, 'technical debugging mode');
     }
     
     // 📋 COMPLIANCE FRAMEWORK DETECTION
@@ -2262,11 +2402,39 @@ Take your time to thoroughly analyze and optimize. Use the full token allocation
       { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g, replacement: 'the individual' },
       { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replacement: 'the appropriate contact' },
       { pattern: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: 'the required identification number' },
+      { pattern: /\b(?<![\d-])\d{9}(?![\d-])\b/g, replacement: 'the required identification number' },
       { pattern: /\b\d{3}-\d{3}-\d{4}\b/g, replacement: 'the contact number' },
       
       // Addresses - keep structure but remove specifics
       { pattern: /\b\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Drive|Dr|Road|Rd|Lane|Ln|Boulevard|Blvd),?\s*[A-Za-z\s]+,?\s*[A-Z]{2}\b/g, 
         replacement: 'the business address' },
+      
+      // 🧠 Product & Technical IP patterns
+      { pattern: /(?:function\s+\w+|class\s+\w+|import\s+.+from|const\s+\w+\s*=|def\s+\w+\()/g, replacement: 'code implementation' },
+      { pattern: /\b(?:neural\s+network|model\s+weights?|algorithm|optimization)\s+(?:for|in|of)\s+\w+/gi, replacement: 'algorithmic approach' },
+      { pattern: /\b(?:system\s+prompt|prompt\s+template|instruction\s+template)\b/gi, replacement: 'prompt methodology' },
+      { pattern: /\/api\/v?\d*\/[\w\/-]+|(?:GET|POST|PUT|DELETE|PATCH)\s+\/[\w\/-]+/g, replacement: 'API endpoint' },
+      { pattern: /\.env(?:\.\w+)?|docker-compose\.ya?ml|config\.json/g, replacement: 'configuration file' },
+      { pattern: /\b(?:Project|Operation|Model|System)\s+[A-Z]\w+(?:AI|ML|Bot|Engine|Platform)?\b/g, replacement: 'internal project' },
+      
+      // 💼 Business & Operational IP patterns
+      { pattern: /\b(?:Q[1-4]\s+\d{4}|roadmap|launch\s+plan|release\s+strategy)\s+(?:for|of)\s+[\w\s]+/gi, replacement: 'strategic planning' },
+      { pattern: /\b(?:competitive\s+advantage|market\s+differentiation|unique\s+selling\s+proposition)\s+(?:for|of|in)\s+[\w\s]+/gi, replacement: 'competitive strategy' },
+      { pattern: /\$\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*(?:per\s+month|\/month|annually|ARR|MRR))/g, replacement: 'pricing model' },
+      
+      // 📊 Data & Analytics IP patterns
+      { pattern: /\b(?:dataset|data\s+schema|training\s+data|proprietary\s+data)\s+(?:for|of)\s+[\w\s]+/gi, replacement: 'dataset' },
+      { pattern: /(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\s+[\w\s,*()='.]+(?:FROM|INTO|TABLE|WHERE)/gi, replacement: 'database query' },
+      { pattern: /\b(?:KPI|metric|formula)\s+(?:for|of)\s+[\w\s]+:\s*[\w\s+\-*/()]+/gi, replacement: 'performance metric' },
+      
+      // 🧾 Legal & Licensing IP patterns
+      { pattern: /\b(?:patent\s+application|trade\s+secret|proprietary\s+method|intellectual\s+property)\s+(?:for|of)\s+[\w\s]+/gi, replacement: 'intellectual property' },
+      { pattern: /\b(?:licensing\s+agreement|NDA|non-disclosure|confidentiality\s+clause|IP\s+ownership)/gi, replacement: 'legal agreement' },
+      
+      // 🤝 Customer & Partner IP patterns
+      { pattern: /\b(?:client|customer|partner)\s+[A-Z]\w+\s+(?:strategy|implementation|integration|partnership)/gi, replacement: 'client engagement' },
+      { pattern: /\b(?:OEM|white-label|private\s+label)\s+(?:with|for|partnership)\s+[A-Z]\w+/gi, replacement: 'partner relationship' },
+      { pattern: /\b[A-Z]\w+\s+(?:integration|partnership|collaboration)\s+for\s+[A-Z]\w+/g, replacement: 'partner solution' },
       
       // API Keys and credentials
       { pattern: /\bsk-[a-zA-Z0-9]{48,64}\b/g, replacement: 'the API authentication credentials' },
