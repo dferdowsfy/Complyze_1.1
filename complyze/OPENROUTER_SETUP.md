@@ -76,7 +76,7 @@ The system now supports 8 compliance report templates:
 
 ## How It Works
 
-1. **Data Collection:** System aggregates real data from `prompt_logs` table
+1. **Data Collection:** System aggregates real data from `prompt_events` table
 2. **Risk Analysis:** Analyzes redaction patterns, risk levels, and control mappings
 3. **LLM Generation:** Sends structured data to OpenRouter for intelligent report generation
 4. **Template Formatting:** Formats output according to compliance standards

@@ -85,7 +85,7 @@ The database includes these main tables:
 - Each user gets a default project
 - Can be extended for multi-project support
 
-### `prompt_logs`
+### `prompt_events`
 - Stores all captured prompts
 - Includes original, redacted, and optimized versions
 - Risk scores and compliance mappings

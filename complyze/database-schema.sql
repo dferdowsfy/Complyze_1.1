@@ -54,14 +54,23 @@ CREATE TABLE IF NOT EXISTS public.prompt_events (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   model TEXT NOT NULL, -- e.g. gpt-4, claude-3, gemini-pro
-  usd_cost DECIMAL(10,4) NOT NULL, -- Cost in USD with 4 decimal precision
-  prompt_tokens INTEGER NOT NULL,
-  completion_tokens INTEGER NOT NULL,
-  integrity_score INTEGER NOT NULL CHECK (integrity_score >= 0 AND integrity_score <= 100),
+  llm_provider TEXT, -- e.g. OpenAI, Anthropic, Google
+  usd_cost DECIMAL(10,4) NOT NULL DEFAULT 0, -- Cost in USD with 4 decimal precision
+  prompt_tokens INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  integrity_score INTEGER NOT NULL DEFAULT 0 CHECK (integrity_score >= 0 AND integrity_score <= 100),
+  compliance_score INTEGER DEFAULT 0 CHECK (compliance_score >= 0 AND compliance_score <= 100),
   risk_type TEXT NOT NULL, -- PII, IP, Compliance, Jailbreak, etc.
-  risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high')),
+  risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processed', 'approved', 'flagged', 'blocked')),
+  platform TEXT, -- ChatGPT, Claude, Gemini, etc.
+  url TEXT, -- URL where prompt was captured
+  category TEXT, -- High-level categorization
+  subcategory TEXT, -- More specific categorization
+  framework_tags TEXT[] DEFAULT '{}', -- Array of framework tags (NIST, OWASP, etc.)
+  pii_types TEXT[] DEFAULT '{}', -- Array of PII types detected
   captured_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), -- When prompt was captured
-  prompt_text TEXT, -- Optional: actual prompt content
+  prompt_text TEXT, -- Optional: actual prompt content (encrypted)
   response_text TEXT, -- Optional: model response content
   source TEXT DEFAULT 'api' CHECK (source IN ('chrome_extension', 'desktop_agent', 'api')),
   metadata JSONB DEFAULT '{}', -- Additional telemetry data
