@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
+import { createSafePreview } from '@/lib/encryption';
 
 export async function GET(req: NextRequest) {
   try {
@@ -58,10 +59,9 @@ export async function GET(req: NextRequest) {
       // Use the pii_types field directly from prompt_events
       const piiTypes = prompt.pii_types || [];
 
-      // Create summary from prompt_text (first 80 characters)
-      const summary = prompt.prompt_text && prompt.prompt_text.length > 80 
-        ? prompt.prompt_text.substring(0, 80) + '...'
-        : prompt.prompt_text || 'No prompt text';
+      // Create summary from prompt_text (decrypt first, then truncate)
+      const decryptedText = createSafePreview(prompt.prompt_text || '', 80);
+      const summary = decryptedText || 'No prompt text available';
 
       // Format date using captured_at or created_at
       const date = new Date(prompt.captured_at || prompt.created_at);

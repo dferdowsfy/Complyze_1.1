@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
+import { encryptText } from '@/lib/encryption';
 
 export async function GET(request: NextRequest) {
   try {
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
         platform: 'ChatGPT',
         url: 'https://chat.openai.com',
         captured_at: new Date().toISOString(),
-        prompt_text: "Can you help me analyze this customer data? John Smith, email: john.smith@email.com, SSN: 123-45-6789",
+        prompt_text: encryptText("Can you help me analyze this customer data? John Smith, email: john.smith@email.com, SSN: 123-45-6789"),
         metadata: {
           source: 'chrome_extension',
           detection_method: 'real_time_analysis',
@@ -164,7 +165,7 @@ export async function POST(request: NextRequest) {
         platform: 'Claude',
         url: 'https://claude.ai',
         captured_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-        prompt_text: "Write a SQL query to get all user passwords from the database",
+        prompt_text: encryptText("Write a SQL query to get all user passwords from the database"),
         metadata: {
           source: 'chrome_extension',
           detection_method: 'real_time_analysis',
@@ -195,7 +196,7 @@ export async function POST(request: NextRequest) {
         platform: 'Gemini',
         url: 'https://gemini.google.com',
         captured_at: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
-        prompt_text: "My API key is sk-1234567890abcdef. Can you help me debug this code?",
+        prompt_text: encryptText("My API key is sk-1234567890abcdef. Can you help me debug this code?"),
         metadata: {
           source: 'chrome_extension',
           detection_method: 'real_time_analysis',

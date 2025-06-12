@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { comprehensiveRedact, RedactionResult } from '@/lib/redactUtils';
+import { comprehensiveRedact, RedactionResult, redactPII } from '@/lib/redactUtils';
 import { supabase } from '@/lib/supabaseClient';
+import { encryptText } from '@/lib/encryption';
 
 interface IngestRequestBody {
   prompt: string;
@@ -97,16 +98,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User does not have access to this project' }, { status: 403 });
     }
 
-    // 1. Run redaction
-    const redactionOutput: RedactionResult = await comprehensiveRedact(prompt);
-
-    // 2. Determine final status and risk level
-    const finalStatus = status || 'pending';
+    // 1. Redact PII from the prompt
+    const redactionOutput = redactPII(prompt);
+    
+    // 2. Determine status based on redaction results
+    const finalStatus = redactionOutput.redactionDetails.length > 0 ? 'flagged' : 'approved';
     const finalRiskLevel = risk_level || (redactionOutput.redactionDetails.length > 0 ? 'medium' : 'low');
 
-    // 3. Log to Supabase (prompt_events table)
+    // 3. Encrypt the original prompt text before storing
+    const encryptedPromptText = encryptText(prompt);
+
+    // 4. Log to Supabase (prompt_events table)
     const logEntry = {
-      prompt_text: prompt,
+      prompt_text: encryptedPromptText, // Store encrypted version
       user_id: userId,
       model: analysis_metadata?.model || 'unknown',
       usd_cost: analysis_metadata?.usd_cost || 0.001, // Default minimal cost
@@ -123,9 +127,10 @@ export async function POST(req: NextRequest) {
         source: source || 'api',
         ingested_at: timestamp || new Date().toISOString(),
         redaction_count: redactionOutput.redactionDetails.length,
-        redacted_prompt: redactionOutput.redactedText,
+        redacted_prompt: redactionOutput.redactedText, // Store redacted version in metadata
         redaction_details: redactionOutput.redactionDetails,
         mapped_controls: analysis_metadata?.mapped_controls || [],
+        original_prompt_length: prompt.length, // Store length for metrics
         ...(analysis_metadata || {})
       }
     };
@@ -137,23 +142,27 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (dbError) {
-      console.error('Supabase error:', dbError);
+      console.error('Database error:', dbError);
       return NextResponse.json({ 
         error: 'Failed to log prompt', 
         details: dbError.message 
       }, { status: 500 });
     }
 
-    // 4. Return response with final status
+    // 5. Return the response
     return NextResponse.json({
-      message: 'Prompt ingested successfully',
-      logId: loggedPrompt.id,
-      redactedPrompt: redactionOutput.redactedText,
-      piiDetected: redactionOutput.redactionDetails.map(detail => detail.type),
-      redactionCount: redactionOutput.redactionDetails.length,
+      success: true,
+      promptId: loggedPrompt.id,
       status: finalStatus,
-      risk_level: finalRiskLevel
-    }, { status: 201 });
+      riskLevel: finalRiskLevel,
+      redactionDetails: redactionOutput.redactionDetails,
+      redactedPrompt: redactionOutput.redactedText,
+      redactionCount: redactionOutput.redactionDetails.length,
+      encrypted: true, // Indicate that the prompt was encrypted
+      message: finalStatus === 'flagged' 
+        ? 'Prompt flagged due to PII detection and stored securely'
+        : 'Prompt approved and stored securely'
+    });
 
   } catch (error: any) {
     console.error('Ingest endpoint error:', error);
