@@ -21,20 +21,20 @@ export async function GET(request: NextRequest) {
 
     console.log('Projects table test:', { data: projectsTest, error: projectsError?.message });
 
-    // Test 3: Check if prompt_logs table exists
-    const { data: promptLogsTest, error: promptLogsError } = await supabase
-      .from('prompt_logs')
+    // Test 3: Check if prompt_events table exists
+    const { data: promptEventsTest, error: promptEventsError } = await supabase
+      .from('prompt_events')
       .select('count')
       .limit(1);
 
-    console.log('Prompt logs table test:', { data: promptLogsTest, error: promptLogsError?.message });
+    console.log('Prompt events table test:', { data: promptEventsTest, error: promptEventsError?.message });
 
     return NextResponse.json({
       success: true,
       tests: {
         users: { success: !usersError, error: usersError?.message },
         projects: { success: !projectsError, error: projectsError?.message },
-        prompt_logs: { success: !promptLogsError, error: promptLogsError?.message }
+        prompt_events: { success: !promptEventsError, error: promptEventsError?.message }
       }
     });
 

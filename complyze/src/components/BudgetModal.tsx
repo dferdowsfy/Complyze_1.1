@@ -39,9 +39,9 @@ export function BudgetModal({ isOpen, onClose, currentBudget, userId, onBudgetUp
     const rect = sliderRef.current.getBoundingClientRect();
     const percentage = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     
-    // Budget range: $50 to $5000
+    // Budget range: $50 to $100,000
     const minBudget = 50;
-    const maxBudget = 5000;
+    const maxBudget = 100000;
     const newBudget = Math.round(minBudget + (percentage * (maxBudget - minBudget)));
     
     setBudget(newBudget);
@@ -85,7 +85,7 @@ export function BudgetModal({ isOpen, onClose, currentBudget, userId, onBudgetUp
 
   const getSliderPosition = () => {
     const minBudget = 50;
-    const maxBudget = 5000;
+    const maxBudget = 100000;
     return ((budget - minBudget) / (maxBudget - minBudget)) * 100;
   };
 
@@ -135,9 +135,9 @@ export function BudgetModal({ isOpen, onClose, currentBudget, userId, onBudgetUp
             {/* Scale markers */}
             <div className="flex justify-between text-xs text-gray-500 mt-2">
               <span>$50</span>
-              <span>$1,000</span>
-              <span>$2,500</span>
-              <span>$5,000</span>
+              <span>$25K</span>
+              <span>$50K</span>
+              <span>$100K</span>
             </div>
           </div>
 
@@ -148,7 +148,7 @@ export function BudgetModal({ isOpen, onClose, currentBudget, userId, onBudgetUp
 
         {/* Preset Buttons */}
         <div className="grid grid-cols-4 gap-2 mb-6">
-          {[100, 250, 500, 1000].map((presetBudget) => (
+          {[1000, 5000, 25000, 50000].map((presetBudget) => (
             <button
               key={presetBudget}
               onClick={() => setBudget(presetBudget)}
@@ -158,7 +158,7 @@ export function BudgetModal({ isOpen, onClose, currentBudget, userId, onBudgetUp
                   : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
               }`}
             >
-              ${presetBudget}
+              ${presetBudget >= 1000 ? `${presetBudget / 1000}K` : presetBudget}
             </button>
           ))}
         </div>

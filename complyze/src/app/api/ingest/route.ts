@@ -19,6 +19,15 @@ interface PromptEventBody {
 
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication (optional for now, but log it)
+    const authHeader = req.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    
+    if (!token) {
+      console.warn('Ingest API: No authentication token provided');
+      // For now, continue without auth but log it
+    }
+
     const body = await req.json() as PromptEventBody;
     const {
       user_id,
@@ -73,6 +82,51 @@ export async function POST(req: NextRequest) {
       source: source || 'api',
       metadata: metadata || {}
     };
+
+    // Validate user exists, create if missing (fallback safety)
+    const { data: userExists, error: userError } = await supabase
+      .from('users')
+      .select('id, email')
+      .eq('id', user_id)
+      .single();
+
+    if (userError || !userExists) {
+      console.warn('User profile missing, attempting to create from auth.users:', user_id);
+      
+      // Try to get user info from auth.users and create profile
+      const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(user_id);
+      
+      if (authError || !authUser.user) {
+        console.error('User not found in auth.users either:', authError);
+        return NextResponse.json({ 
+          error: 'Invalid user_id - user not found in authentication system', 
+          details: `User ${user_id} does not exist in auth.users` 
+        }, { status: 400 });
+      }
+      
+      // Create missing user profile
+      const { data: newUser, error: createError } = await supabase
+        .from('users')
+        .insert({
+          id: authUser.user.id,
+          email: authUser.user.email || '',
+          full_name: authUser.user.user_metadata?.full_name || authUser.user.user_metadata?.name || null,
+          plan: 'free',
+          budget: 500.00
+        })
+        .select('id, email')
+        .single();
+        
+      if (createError) {
+        console.error('Failed to create user profile:', createError);
+        return NextResponse.json({ 
+          error: 'Failed to create user profile', 
+          details: createError.message 
+        }, { status: 500 });
+      }
+      
+      console.log('Auto-created user profile during ingest for user:', authUser.user.email);
+    }
 
     // Insert into prompt_events table
     const { data: insertedEvent, error: dbError } = await supabase

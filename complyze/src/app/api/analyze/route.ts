@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { comprehensiveRedact } from '@/lib/redactUtils'
 
 // Use OpenRouter API key and endpoint
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 async function optimizePrompt(prompt: string): Promise<string> {

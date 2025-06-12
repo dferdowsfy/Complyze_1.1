@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
+import { decryptPromptText, getPromptPreview, isEncrypted } from '@/lib/encryption';
 
 export async function GET(req: NextRequest) {
   try {
@@ -8,7 +9,7 @@ export async function GET(req: NextRequest) {
     const projectId = searchParams.get('projectId');
     const limit = parseInt(searchParams.get('limit') || '20');
 
-    // Build query for flagged prompts from prompt_events table
+    // Build query for ALL prompts from prompt_events table with enhanced fields
     let query = supabase
       .from('prompt_events')
       .select(`
@@ -20,9 +21,17 @@ export async function GET(req: NextRequest) {
         captured_at,
         model,
         source,
-        integrity_score
+        integrity_score,
+        platform,
+        url,
+        status,
+        llm_provider,
+        category,
+        subcategory,
+        framework_tags,
+        pii_types,
+        compliance_score
       `)
-      .in('risk_level', ['high', 'medium'])
       .order('captured_at', { ascending: false })
       .limit(limit);
 
@@ -48,9 +57,15 @@ export async function GET(req: NextRequest) {
 
     // Transform data for frontend
     const transformedPrompts = flaggedPrompts?.map(prompt => {
-      // Extract control families from metadata
+      // Use framework_tags column if available, otherwise extract from metadata
       const controlFamilies = new Set<string>();
-      if (prompt.metadata?.mapped_controls && Array.isArray(prompt.metadata.mapped_controls)) {
+      
+      // Priority 1: Use the new framework_tags column
+      if (prompt.framework_tags && Array.isArray(prompt.framework_tags)) {
+        prompt.framework_tags.forEach(tag => controlFamilies.add(tag));
+      } 
+      // Fallback: Extract from metadata (for backward compatibility)
+      else if (prompt.metadata?.mapped_controls && Array.isArray(prompt.metadata.mapped_controls)) {
         prompt.metadata.mapped_controls.forEach((control: any) => {
           if (control.controlId) {
             // Extract framework from control ID (e.g., "NIST-SC-28" -> "NIST")
@@ -68,9 +83,15 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Extract PII types from metadata
+      // Use pii_types column if available, otherwise extract from metadata
       const piiTypes = new Set<string>();
-      if (prompt.metadata?.detected_pii && Array.isArray(prompt.metadata.detected_pii)) {
+      
+      // Priority 1: Use the new pii_types column
+      if (prompt.pii_types && Array.isArray(prompt.pii_types)) {
+        prompt.pii_types.forEach(type => piiTypes.add(type.toUpperCase()));
+      }
+      // Fallback: Extract from metadata (for backward compatibility)
+      else if (prompt.metadata?.detected_pii && Array.isArray(prompt.metadata.detected_pii)) {
         prompt.metadata.detected_pii.forEach((pii: any) => {
           if (typeof pii === 'string') {
             piiTypes.add(pii.toUpperCase());
@@ -85,10 +106,25 @@ export async function GET(req: NextRequest) {
         controlFamilies.add(prompt.risk_type.toUpperCase());
       }
 
-      // Create summary from prompt text (first 80 characters)
-      const summary = prompt.prompt_text && prompt.prompt_text.length > 80 
-        ? prompt.prompt_text.substring(0, 80) + '...'
-        : prompt.prompt_text || 'No prompt text available';
+      // Create summary from prompt text with decryption
+      let summary = 'No prompt text available';
+      if (prompt.prompt_text) {
+        try {
+          // Check if the prompt text is encrypted
+          if (isEncrypted(prompt.prompt_text)) {
+            // Use safe preview function for encrypted content
+            summary = getPromptPreview(prompt.prompt_text, 80);
+          } else {
+            // Handle plain text (for backward compatibility)
+            summary = prompt.prompt_text.length > 80 
+              ? prompt.prompt_text.substring(0, 80) + '...'
+              : prompt.prompt_text;
+          }
+        } catch (error) {
+          console.error('Error processing prompt text:', error);
+          summary = 'Encrypted prompt (preview unavailable)';
+        }
+      }
 
       // Format date
       const date = new Date(prompt.captured_at);
@@ -114,12 +150,17 @@ export async function GET(req: NextRequest) {
         date: dateString,
         risk: prompt.risk_level === 'high' ? 'High' : 
               prompt.risk_level === 'medium' ? 'Medium' : 'Low',
-        status: 'flagged', // All entries from prompt_events are considered flagged
-        platform: prompt.metadata?.platform || prompt.source || 'unknown',
-        url: prompt.metadata?.url || 'unknown',
+        status: prompt.status || 'flagged', // Use status column if available
+        platform: prompt.platform || prompt.metadata?.platform || prompt.source || 'unknown',
+        url: prompt.url || prompt.metadata?.url || 'unknown',
         piiTypes: Array.from(piiTypes),
         mappedControls: prompt.metadata?.mapped_controls || [],
-        detectionTime: prompt.captured_at
+        detectionTime: prompt.captured_at,
+        // Include new categorization fields
+        llmProvider: prompt.llm_provider,
+        category: prompt.category,
+        subcategory: prompt.subcategory,
+        complianceScore: prompt.compliance_score
       };
     }) || [];
 

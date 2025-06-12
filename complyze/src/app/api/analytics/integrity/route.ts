@@ -3,14 +3,14 @@ import { supabase } from '@/lib/supabaseClient';
 
 export async function GET(req: NextRequest) {
   try {
-    // Get all prompt logs with their risk levels and redaction details
+    // Get all prompt events with their integrity scores and risk levels
     const { data: prompts, error } = await supabase
-      .from('prompt_logs')
-      .select('risk_level, redaction_details, metadata')
+      .from('prompt_events')
+      .select('integrity_score, risk_level, compliance_score, metadata')
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching prompt logs:', error);
+      console.error('Error fetching prompt events:', error);
       return NextResponse.json({ 
         error: 'Failed to fetch prompt data', 
         details: error.message 
@@ -27,41 +27,38 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Calculate integrity scores based on risk levels and redaction counts
-    let totalScore = 0;
+    // Use the built-in integrity_score and compliance_score fields
+    let totalIntegrityScore = 0;
     let stable = 0;
     let suspicious = 0;
     let critical = 0;
 
     prompts.forEach(prompt => {
-      let score = 100; // Start with perfect score
-      
-      // Deduct points based on risk level
-      switch (prompt.risk_level) {
-        case 'critical':
-          score -= 40;
-          break;
-        case 'high':
-          score -= 30;
-          break;
-        case 'medium':
-          score -= 15;
-          break;
-        case 'low':
-          score -= 5;
-          break;
+      // Use the existing integrity_score or compliance_score, fallback to calculation
+      let score = prompt.integrity_score || prompt.compliance_score || 50;
+
+      // If no score exists, calculate based on risk level
+      if (!score) {
+        score = 100;
+        switch (prompt.risk_level) {
+          case 'critical':
+            score = 20;
+            break;
+          case 'high':
+            score = 40;
+            break;
+          case 'medium':
+            score = 70;
+            break;
+          case 'low':
+            score = 90;
+            break;
+        }
       }
 
-      // Deduct points based on redaction count
-      const redactionCount = prompt.redaction_details?.length || 0;
-      score -= Math.min(redactionCount * 5, 30); // Max 30 points deduction for redactions
+      totalIntegrityScore += score;
 
-      // Ensure score doesn't go below 0
-      score = Math.max(score, 0);
-      
-      totalScore += score;
-
-      // Categorize based on final score
+      // Categorize based on integrity score
       if (score >= 80) {
         stable++;
       } else if (score >= 60) {
@@ -71,7 +68,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const avgIntegrity = Math.round(totalScore / prompts.length);
+    const avgIntegrity = Math.round(totalIntegrityScore / prompts.length);
 
     return NextResponse.json({
       avg_integrity: avgIntegrity,

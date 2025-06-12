@@ -7,9 +7,9 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Fetch all prompts from the last 7 days
+    // Fetch all prompts from the last 7 days from prompt_events table
     const { data: prompts, error } = await supabase
-      .from('prompt_logs')
+      .from('prompt_events')
       .select('created_at, risk_level, status')
       .gte('created_at', sevenDaysAgo.toISOString())
       .order('created_at', { ascending: true });

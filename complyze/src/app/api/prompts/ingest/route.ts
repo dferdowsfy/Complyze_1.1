@@ -104,28 +104,34 @@ export async function POST(req: NextRequest) {
     const finalStatus = status || 'pending';
     const finalRiskLevel = risk_level || (redactionOutput.redactionDetails.length > 0 ? 'medium' : 'low');
 
-    // 3. Log to Supabase (prompt_logs table)
+    // 3. Log to Supabase (prompt_events table)
     const logEntry = {
-      original_prompt: prompt,
-      redacted_prompt: redactionOutput.redactedText,
+      prompt_text: prompt,
       user_id: userId,
-      project_id: projectId,
+      model: analysis_metadata?.model || 'unknown',
+      usd_cost: analysis_metadata?.usd_cost || 0.001, // Default minimal cost
+      prompt_tokens: analysis_metadata?.prompt_tokens || Math.ceil(prompt.length / 4),
+      completion_tokens: analysis_metadata?.completion_tokens || 0,
+      integrity_score: analysis_metadata?.integrity_score || 75,
+      risk_type: analysis_metadata?.risk_type || 'pii',
+      risk_level: finalRiskLevel,
+      status: finalStatus,
       platform: platform || null,
       url: url || null,
-      redaction_details: redactionOutput.redactionDetails,
-      status: finalStatus,
-      risk_level: finalRiskLevel,
-      mapped_controls: analysis_metadata?.mapped_controls || [],
+      captured_at: timestamp || new Date().toISOString(),
       metadata: {
         source: source || 'api',
         ingested_at: timestamp || new Date().toISOString(),
         redaction_count: redactionOutput.redactionDetails.length,
+        redacted_prompt: redactionOutput.redactedText,
+        redaction_details: redactionOutput.redactionDetails,
+        mapped_controls: analysis_metadata?.mapped_controls || [],
         ...(analysis_metadata || {})
       }
     };
 
     const { data: loggedPrompt, error: dbError } = await supabase
-      .from('prompt_logs')
+      .from('prompt_events')
       .insert(logEntry)
       .select()
       .single();

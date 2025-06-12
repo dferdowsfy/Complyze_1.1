@@ -1,41 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 
-// Model pricing per 1M tokens (input/output)
-const MODEL_PRICING = {
-  'GPT-4o': { input: 3.00, output: 10.00 },
-  'GPT-4 Turbo': { input: 10.00, output: 30.00 },
-  'GPT-4': { input: 30.00, output: 60.00 },
-  'Claude 3 Opus': { input: 15.00, output: 75.00 },
-  'Claude 3 Sonnet': { input: 3.00, output: 15.00 },
-  'Claude 3 Haiku': { input: 0.25, output: 1.25 },
-  'Gemini 1.5 Pro': { input: 3.50, output: 10.50 },
-  'Gemini 1.5 Flash': { input: 0.10, output: 0.40 },
-  'Google Gemini': { input: 0.10, output: 0.40 }, // Fallback for generic "Google Gemini"
-  'OpenAI GPT-4': { input: 30.00, output: 60.00 }, // Fallback for generic "OpenAI GPT-4"
-  'Anthropic Claude': { input: 15.00, output: 75.00 }, // Fallback for generic "Anthropic Claude"
-};
-
-// Function to estimate tokens from text (rough approximation: 1 token ≈ 4 characters)
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-// Function to calculate cost for a prompt
-function calculatePromptCost(prompt: any): number {
-  const model = prompt.metadata?.model_used || prompt.platform || 'GPT-4o';
-  const pricing = MODEL_PRICING[model as keyof typeof MODEL_PRICING] || MODEL_PRICING['GPT-4o'];
-  
-  // Estimate tokens from prompt text
-  const inputTokens = estimateTokens(prompt.original_prompt || '');
-  const outputTokens = estimateTokens(prompt.metadata?.response_text || '') || Math.floor(inputTokens * 0.3); // Assume 30% of input as output if no response
-  
-  // Calculate cost
-  const inputCost = (inputTokens / 1_000_000) * pricing.input;
-  const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  
-  return inputCost + outputCost;
-}
+// Cost calculation is now handled by using the existing usd_cost field from prompt_events table
 
 export async function GET(req: NextRequest) {
   try {
@@ -48,13 +14,18 @@ export async function GET(req: NextRequest) {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-    // Build query for current month's prompts
+    // Build query for current month's prompts from prompt_events table
     let query = supabase
-      .from('prompt_logs')
+      .from('prompt_events')
       .select(`
         id,
-        original_prompt,
+        prompt_text,
+        model,
+        llm_provider,
         platform,
+        usd_cost,
+        prompt_tokens,
+        completion_tokens,
         metadata,
         created_at
       `)
@@ -92,14 +63,8 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Calculate costs for each prompt
-    const promptsWithCost = prompts.map(prompt => ({
-      ...prompt,
-      cost: calculatePromptCost(prompt)
-    }));
-
-    // 1. Budget Tracker
-    const totalSpend = promptsWithCost.reduce((sum, prompt) => sum + prompt.cost, 0);
+    // 1. Budget Tracker - use existing usd_cost field
+    const totalSpend = prompts.reduce((sum, prompt) => sum + (prompt.usd_cost || 0), 0);
     const percentDelta = ((totalSpend - budget) / budget) * 100;
     const isOverBudget = totalSpend > budget;
 
@@ -111,22 +76,23 @@ export async function GET(req: NextRequest) {
       indicator: isOverBudget ? "↑" : "↓"
     };
 
-    // 2. Top 5 Most Expensive Prompts
-    const topPrompts = promptsWithCost
-      .sort((a, b) => b.cost - a.cost)
+    // 2. Top 5 Most Expensive Prompts - use existing usd_cost field
+    const topPrompts = prompts
+      .filter(prompt => prompt.usd_cost > 0) // Only include prompts with cost data
+      .sort((a, b) => (b.usd_cost || 0) - (a.usd_cost || 0))
       .slice(0, 5)
       .map(prompt => ({
-        prompt: prompt.original_prompt.length > 35 
-          ? prompt.original_prompt.substring(0, 35) + "..." 
-          : prompt.original_prompt,
-        model: prompt.metadata?.model_used || prompt.platform || 'Unknown',
-        cost: parseFloat(prompt.cost.toFixed(2))
+        prompt: prompt.prompt_text && prompt.prompt_text.length > 35 
+          ? prompt.prompt_text.substring(0, 35) + "..." 
+          : prompt.prompt_text || "No prompt text",
+        model: prompt.llm_provider || prompt.model || prompt.platform || 'Unknown',
+        cost: parseFloat((prompt.usd_cost || 0).toFixed(4)) // Show more precision for small costs
       }));
 
-    // 3. Most Used Model
+    // 3. Most Used Model - use llm_provider field from prompt_events
     const modelCounts: Record<string, number> = {};
-    promptsWithCost.forEach(prompt => {
-      const model = prompt.metadata?.model_used || prompt.platform || 'Unknown';
+    prompts.forEach(prompt => {
+      const model = prompt.llm_provider || prompt.model || prompt.platform || 'Unknown';
       modelCounts[model] = (modelCounts[model] || 0) + 1;
     });
 
