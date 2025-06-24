@@ -9,12 +9,7 @@ export async function GET(req: NextRequest) {
     const userId = searchParams.get('user_id');
     const budget = parseFloat(searchParams.get('budget') || '500');
 
-    // Get current month's date range
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    // Build query for current month's prompts from prompt_events table
+    // Build query for all prompts from prompt_events table (temporary: no date filtering)
     let query = supabase
       .from('prompt_events')
       .select(`
@@ -27,11 +22,9 @@ export async function GET(req: NextRequest) {
         prompt_tokens,
         completion_tokens,
         metadata,
-        created_at
+        captured_at
       `)
-      .gte('created_at', startOfMonth.toISOString())
-      .lte('created_at', endOfMonth.toISOString())
-      .order('created_at', { ascending: false });
+      .order('captured_at', { ascending: false });
 
     // Filter by user if provided
     if (userId) {

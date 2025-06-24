@@ -904,16 +904,42 @@ function PromptRiskTrendsCard({ data }: { data: any }) {
     );
   }
 
-  // Create sparkline path
-  const maxValue = Math.max(...data.high_risk_prompts, 1);
-  const height = 60;
-  const width = 200;
+  // Calculate metrics
+  const totalPrompts = data.total_prompts.reduce((a: number, b: number) => a + b, 0);
+  const totalHighRisk = data.high_risk_prompts.reduce((a: number, b: number) => a + b, 0);
+  const riskPercentage = totalPrompts > 0 ? Math.round((totalHighRisk / totalPrompts) * 100) : 0;
   
-  const points = data.high_risk_prompts.map((value: number, index: number) => {
-    const x = (index / (data.high_risk_prompts.length - 1)) * width;
-    const y = height - (value / maxValue) * height;
-    return `${x},${y}`;
-  }).join(' ');
+  // Determine trend direction and status
+  const getTrendInfo = () => {
+    if (totalHighRisk === 0) {
+      return { status: 'Excellent', emoji: '🟢', color: '#10b981', description: 'No high-risk prompts detected' };
+    } else if (riskPercentage <= 10) {
+      return { status: 'Good', emoji: '🟡', color: '#f59e0b', description: `${riskPercentage}% high-risk prompts` };
+    } else {
+      return { status: 'Needs Attention', emoji: '🔴', color: '#ef4444', description: `${riskPercentage}% high-risk prompts` };
+    }
+  };
+  
+  const trendInfo = getTrendInfo();
+  
+  // Create enhanced chart
+  const maxValue = Math.max(...data.total_prompts, ...data.high_risk_prompts, 1);
+  const height = 120;
+  const width = 280;
+  const padding = 20;
+  
+  // Generate points for both lines
+  const totalPromptPoints = data.total_prompts.map((value: number, index: number) => {
+    const x = padding + (index / (data.total_prompts.length - 1)) * (width - 2 * padding);
+    const y = height - padding - ((value / maxValue) * (height - 2 * padding));
+    return { x, y, value };
+  });
+  
+  const highRiskPoints = data.high_risk_prompts.map((value: number, index: number) => {
+    const x = padding + (index / (data.high_risk_prompts.length - 1)) * (width - 2 * padding);
+    const y = height - padding - ((value / maxValue) * (height - 2 * padding));
+    return { x, y, value };
+  });
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
@@ -922,25 +948,62 @@ function PromptRiskTrendsCard({ data }: { data: any }) {
         <span className="text-sm text-gray-500">Last 7 Days</span>
       </div>
       
-      {/* Sparkline Chart */}
+      {/* Enhanced Chart */}
       <div className="flex justify-center items-center mb-4">
-        <svg width={width} height={height} className="border rounded bg-gray-50">
+        <svg width={width} height={height} className="border rounded-lg bg-gradient-to-br from-slate-50 to-white">
           {/* Grid lines */}
           {[0, 1, 2, 3, 4].map(i => (
             <line
               key={i}
-              x1="0"
-              y1={i * (height / 4)}
-              x2={width}
-              y2={i * (height / 4)}
-              stroke="#e5e7eb"
+              x1={padding}
+              y1={padding + (i * (height - 2 * padding) / 4)}
+              x2={width - padding}
+              y2={padding + (i * (height - 2 * padding) / 4)}
+              stroke="#f1f5f9"
               strokeWidth="1"
             />
           ))}
           
-          {/* Trend line */}
+          {/* Vertical grid lines */}
+          {data.total_prompts.map((_: any, index: number) => (
+            <line
+              key={`v-${index}`}
+              x1={padding + (index / (data.total_prompts.length - 1)) * (width - 2 * padding)}
+              y1={padding}
+              x2={padding + (index / (data.total_prompts.length - 1)) * (width - 2 * padding)}
+              y2={height - padding}
+              stroke="#f8fafc"
+              strokeWidth="1"
+            />
+          ))}
+          
+          {/* Total prompts area fill */}
+          <path
+            d={`M ${totalPromptPoints[0].x},${height - padding} L ${totalPromptPoints.map((p: { x: number; y: number; value: number }) => `${p.x},${p.y}`).join(' L ')} L ${totalPromptPoints[totalPromptPoints.length - 1].x},${height - padding} Z`}
+            fill="url(#totalGradient)"
+            opacity="0.3"
+          />
+          
+          {/* High risk area fill */}
+          <path
+            d={`M ${highRiskPoints[0].x},${height - padding} L ${highRiskPoints.map((p: { x: number; y: number; value: number }) => `${p.x},${p.y}`).join(' L ')} L ${highRiskPoints[highRiskPoints.length - 1].x},${height - padding} Z`}
+            fill="url(#riskGradient)"
+            opacity="0.4"
+          />
+          
+          {/* Total prompts line */}
           <polyline
-            points={points}
+            points={totalPromptPoints.map((p: { x: number; y: number; value: number }) => `${p.x},${p.y}`).join(' ')}
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          
+          {/* High risk line */}
+          <polyline
+            points={highRiskPoints.map((p: { x: number; y: number; value: number }) => `${p.x},${p.y}`).join(' ')}
             fill="none"
             stroke="#ef4444"
             strokeWidth="3"
@@ -948,47 +1011,80 @@ function PromptRiskTrendsCard({ data }: { data: any }) {
             strokeLinejoin="round"
           />
           
-          {/* Data points */}
-          {data.high_risk_prompts.map((value: number, index: number) => {
-            const x = (index / (data.high_risk_prompts.length - 1)) * width;
-            const y = height - (value / maxValue) * height;
-            return (
-              <circle
-                key={index}
-                cx={x}
-                cy={y}
-                r="4"
-                fill="#ef4444"
-                stroke="white"
-                strokeWidth="2"
-              />
-            );
-          })}
+          {/* Data points for total prompts */}
+          {totalPromptPoints.map((point: { x: number; y: number; value: number }, index: number) => (
+            <circle
+              key={`total-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r="4"
+              fill="#3b82f6"
+              stroke="white"
+              strokeWidth="2"
+            />
+          ))}
+          
+          {/* Data points for high risk */}
+          {highRiskPoints.map((point: { x: number; y: number; value: number }, index: number) => (
+            <circle
+              key={`risk-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r="4"
+              fill="#ef4444"
+              stroke="white"
+              strokeWidth="2"
+            />
+          ))}
+          
+          {/* Gradients */}
+          <defs>
+            <linearGradient id="totalGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.5"/>
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.1"/>
+            </linearGradient>
+            <linearGradient id="riskGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.6"/>
+              <stop offset="100%" stopColor="#ef4444" stopOpacity="0.1"/>
+            </linearGradient>
+          </defs>
         </svg>
       </div>
 
-      {/* Trend Summary */}
-      <div className="text-center">
-        <div className="text-3xl mb-2">{data.emoji}</div>
-        <div className="text-lg font-semibold text-[#0E1E36] mb-1">
-          {data.status}
+      {/* Legend */}
+      <div className="flex justify-center gap-6 mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+          <span className="text-sm text-gray-600">Total Prompts</span>
         </div>
-        <div className="text-sm text-gray-600">
-          High-risk prompts: {data.trend_percent > 0 ? '+' : ''}{data.trend_percent}%
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+          <span className="text-sm text-gray-600">High Risk</span>
         </div>
       </div>
 
-      {/* Weekly Summary */}
-      <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t">
+      {/* Status Summary */}
+      <div className="text-center mb-4">
+        <div className="text-3xl mb-2">{trendInfo.emoji}</div>
+        <div className="text-lg font-semibold text-[#0E1E36] mb-1">
+          {trendInfo.status}
+        </div>
+        <div className="text-sm text-gray-600">
+          {trendInfo.description}
+        </div>
+      </div>
+
+      {/* Detailed Summary */}
+      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
         <div className="text-center">
-          <div className="text-2xl font-bold text-[#0E1E36]">
-            {data.total_prompts.reduce((a: number, b: number) => a + b, 0)}
+          <div className="text-2xl font-bold text-blue-600">
+            {totalPrompts}
           </div>
           <div className="text-xs text-gray-600">Total Prompts</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-red-600">
-            {data.high_risk_prompts.reduce((a: number, b: number) => a + b, 0)}
+            {totalHighRisk}
           </div>
           <div className="text-xs text-gray-600">High Risk</div>
         </div>

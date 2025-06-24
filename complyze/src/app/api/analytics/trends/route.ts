@@ -10,9 +10,9 @@ export async function GET(req: NextRequest) {
     // Fetch all prompts from the last 7 days from prompt_events table
     const { data: prompts, error } = await supabase
       .from('prompt_events')
-      .select('created_at, risk_level, status')
-      .gte('created_at', sevenDaysAgo.toISOString())
-      .order('created_at', { ascending: true });
+      .select('captured_at, risk_level, status')
+      .gte('captured_at', sevenDaysAgo.toISOString())
+      .order('captured_at', { ascending: true });
 
     if (error) {
       console.error('Error fetching trends data:', error);
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 
     // Count prompts by day
     prompts.forEach(prompt => {
-      const date = new Date(prompt.created_at);
+      const date = new Date(prompt.captured_at);
       const dateKey = date.toISOString().split('T')[0];
       
       if (dailyData[dateKey]) {
