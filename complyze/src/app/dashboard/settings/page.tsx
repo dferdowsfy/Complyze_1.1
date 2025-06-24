@@ -182,6 +182,7 @@ const CategorySection = ({
 
 export default function Settings() {
   const pathname = usePathname();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [settings, setSettings] = useState<Record<string, boolean>>({});
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [customTerms, setCustomTerms] = useState<string>('');
@@ -192,6 +193,18 @@ export default function Settings() {
 
   // Mock user ID - in a real app, this would come from authentication
   const userId = 'user_123';
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownOpen && !(event.target as Element)?.closest('.user-dropdown')) {
+        setDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [dropdownOpen]);
 
   // Load settings on component mount
   useEffect(() => {
@@ -368,12 +381,29 @@ export default function Settings() {
             </Link>
             <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
               Settings
-              {pathname && pathname.includes('settings') && (
+              {pathname && pathname.includes('settings') && !pathname.includes('admin') && (
                 <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                   <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
                 </span>
               )}
             </Link>
+            {/* Admin link - only visible to admin users */}
+            {(() => {
+              let user = null;
+              if (typeof window !== 'undefined') {
+                try {
+                  user = JSON.parse(localStorage.getItem('complyze_user') || '{}');
+                } catch {}
+              }
+              if (user && (user.role === 'admin' || user.role === 'super_admin' || user.plan === 'enterprise')) {
+                return (
+                  <Link href="/dashboard/admin" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
+                    Admin
+                  </Link>
+                );
+              }
+              return null;
+            })()}
           </div>
           {/* Right: User Info Pill */}
           <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
@@ -447,12 +477,34 @@ export default function Settings() {
           </Link>
           <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Settings
-            {pathname && pathname.includes('settings') && (
+            {pathname && pathname.includes('settings') && !pathname.includes('admin') && (
               <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
             )}
           </Link>
+          {/* Admin link - only visible to admin users */}
+          {(() => {
+            let user = null;
+            if (typeof window !== 'undefined') {
+              try {
+                user = JSON.parse(localStorage.getItem('complyze_user') || '{}');
+              } catch {}
+            }
+            if (user && (user.role === 'admin' || user.role === 'super_admin' || user.plan === 'enterprise')) {
+              return (
+                <Link href="/dashboard/admin" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
+                  Admin
+                  {pathname && pathname.includes('admin') && (
+                    <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
+                      <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+                    </span>
+                  )}
+                </Link>
+              );
+            }
+            return null;
+          })()}
         </div>
         {/* Right: User Info Pill */}
         <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
@@ -466,18 +518,51 @@ export default function Settings() {
             }
             if (user && user.email) {
               return (
-                <div className="relative group">
-                  <span
-                    className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20 text-sm sm:text-base"
+                <div className="relative user-dropdown">
+                  <button
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 hover:bg-white/20 text-sm sm:text-base flex items-center gap-2"
                     title={user.email}
-                    style={{ display: 'inline-block' }}
                   >
-                    {user.full_name || user.email}
-                  </span>
-                  {/* Tooltip on hover */}
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block bg-[#222] text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
-                    {user.email}
-                  </div>
+                    <span style={{ display: 'inline-block' }}>
+                      {user.full_name || user.email}
+                    </span>
+                    <svg 
+                      className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {/* Dropdown Menu */}
+                  {dropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-lg shadow-lg border border-gray-200 min-w-[160px] overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {user.full_name || 'User'}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {user.email}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          localStorage.removeItem('complyze_token');
+                          localStorage.removeItem('complyze_user');
+                          window.location.href = '/';
+                        }}
+                        className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Logout
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -602,19 +687,7 @@ export default function Settings() {
           </button>
         </div>
 
-        {/* Logout Button */}
-        <div className="flex justify-center mb-4 sm:mb-6">
-          <button
-            onClick={() => {
-              localStorage.removeItem('complyze_token');
-              localStorage.removeItem('complyze_user');
-              window.location.href = '/';
-            }}
-            className="px-4 sm:px-6 py-2 bg-gray-200 text-[#E53935] rounded-lg font-semibold text-sm sm:text-base hover:bg-red-100 transition border border-gray-300 shadow-sm"
-          >
-            Logout
-          </button>
-        </div>
+
 
         {/* Info Panel */}
         <div className="mt-8 sm:mt-12 bg-blue-50 border border-blue-200 rounded-xl p-4 sm:p-6">

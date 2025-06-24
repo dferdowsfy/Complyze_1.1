@@ -1038,25 +1038,13 @@ function AnalyticsPanel({ userId }: { userId: string }) {
 }
 
 export default function Dashboard() {
-  const { isAuthenticated, user, loading, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
+  const userId = user?.id || 'fa166056-023d-4822-b250-b5b5a47f9df8';
+
   const [optimizerOpen, setOptimizerOpen] = useState(false);
-  const [enhancedPrompt, setEnhancedPrompt] = useState<string>('');
+  const [enhancedPrompt, setEnhancedPrompt] = useState('');
   const [copied, setCopied] = useState(false);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0E1E36]">
-        <div className="text-white text-lg">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated || !user) {
-    return null; // This will be handled by the auth redirect
-  }
-
-  // Get user ID from the authenticated user
-  const userId = user?.id || "test-user-123"; // Fallback for development
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const handleOptimize = ({ prompt, model, optimizeForCost }: { prompt: string; model: string; optimizeForCost: boolean }) => {
     console.log('Optimizing:', { prompt, model, optimizeForCost });
@@ -1075,12 +1063,38 @@ export default function Dashboard() {
   const router = useRouter();
   const pathname = usePathname();
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownOpen && !(event.target as Element)?.closest('.user-dropdown')) {
+        setDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [dropdownOpen]);
+
   // Risk breakdown data for pie chart
   const riskBreakdown = [
     { label: 'Low Risk', value: 45, color: '#10b981' },
     { label: 'Medium Risk', value: 35, color: '#f59e0b' },
     { label: 'High Risk', value: 20, color: '#ef4444' },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0E1E36]">
+        <div className="text-white text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null; // This will be handled by the auth redirect
+  }
+
+
 
   // --- Prompt Optimizer Panel Component ---
   function PromptOptimizerPanel({ onOptimize }: { onOptimize: (data: any) => void }) {
@@ -1225,18 +1239,50 @@ export default function Dashboard() {
         {/* Right: User Info Pill */}
         <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
           {user?.email && (
-            <div className="relative group">
-              <span
-                className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20 text-sm sm:text-base"
+            <div className="relative user-dropdown">
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 hover:bg-white/20 text-sm sm:text-base flex items-center gap-2"
                 title={user.email}
-                style={{ display: 'inline-block' }}
               >
-                {user.full_name || user.email}
-              </span>
-              {/* Tooltip on hover */}
-              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block bg-[#222] text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
-                {user.email}
-              </div>
+                <span style={{ display: 'inline-block' }}>
+                  {user.full_name || user.email}
+                </span>
+                <svg 
+                  className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {/* Dropdown Menu */}
+              {dropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-lg shadow-lg border border-gray-200 min-w-[160px] overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      {user.full_name || 'User'}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {user.email}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      logout();
+                      setDropdownOpen(false);
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

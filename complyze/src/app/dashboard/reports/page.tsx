@@ -268,14 +268,21 @@ function useAuth() {
     }
   }, []);
   
-  return { user };
+  const logout = () => {
+    localStorage.removeItem('complyze_token');
+    localStorage.removeItem('complyze_user');
+    window.location.href = '/';
+  };
+  
+  return { user, logout };
 }
 
 type TemplateId = string;
 
 export default function Reports() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId | null>(null);
   const [reportSections, setReportSections] = useState<ReportSection[]>([]);
   const [dataInfo, setDataInfo] = useState<any>(null);
@@ -403,6 +410,18 @@ export default function Reports() {
     }
   };
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownOpen && !(event.target as Element)?.closest('.user-dropdown')) {
+        setDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [dropdownOpen]);
+
   // Auto-regenerate report when date range changes
   useEffect(() => {
     if (selectedTemplate) {
@@ -436,18 +455,60 @@ export default function Reports() {
           <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Settings
           </Link>
+          {/* Admin link - only visible to admin users */}
+          {user && (user.role === 'admin' || user.role === 'super_admin' || user.plan === 'enterprise') && (
+            <Link href="/dashboard/admin" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
+              Admin
+            </Link>
+          )}
         </div>
         {/* Right: User Info Pill */}
         <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
           {user?.email && (
-            <div className="relative group">
-              <span
-                className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 group-hover:bg-white/20 text-sm sm:text-base"
+            <div className="relative user-dropdown">
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 hover:bg-white/20 text-sm sm:text-base flex items-center gap-2"
                 title={user.email}
-                style={{ display: 'inline-block' }}
               >
-                {user.full_name || user.email}
-              </span>
+                <span style={{ display: 'inline-block' }}>
+                  {user.full_name || user.email}
+                </span>
+                <svg 
+                  className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {/* Dropdown Menu */}
+              {dropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-lg shadow-lg border border-gray-200 min-w-[160px] overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      {user.full_name || 'User'}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {user.email}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      logout();
+                      setDropdownOpen(false);
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
