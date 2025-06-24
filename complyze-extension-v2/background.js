@@ -15,7 +15,7 @@ const CONFIG = {
   OPENROUTER: {
     BASE_URL: 'https://openrouter.ai/api/v1/chat/completions',
     MODEL: 'google/gemini-2.5-pro-preview',
-    DEFAULT_API_KEY: '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'
+    DEFAULT_API_KEY: null // API key should be loaded from secure storage
   }
 };
 
