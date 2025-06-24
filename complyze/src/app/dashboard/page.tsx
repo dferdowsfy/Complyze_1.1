@@ -303,6 +303,9 @@ interface FlaggedPrompt {
   piiTypes?: string[];
   mappedControls?: any[];
   detectionTime: string;
+  category?: string;
+  subcategory?: string;
+  riskType?: string;
 }
 
 function FrameworkTag({ fw }: { fw: string }) {
@@ -312,12 +315,135 @@ function FrameworkTag({ fw }: { fw: string }) {
   );
 }
 
+// Component to display flagged categories with reveal functionality
+function FlaggedCategoriesDisplay({ 
+  prompt, 
+  isRevealed, 
+  decryptedText, 
+  onReveal, 
+  isAdmin 
+}: { 
+  prompt: FlaggedPrompt; 
+  isRevealed: boolean; 
+  decryptedText?: string; 
+  onReveal: () => void; 
+  isAdmin: boolean; 
+}) {
+  const getFlaggedCategories = () => {
+    const categories: string[] = [];
+    
+    // Add PII types with better formatting
+    if (prompt.piiTypes && prompt.piiTypes.length > 0) {
+      const piiItems = prompt.piiTypes.map(type => {
+        // Format common PII types to be more readable
+        switch (type.toLowerCase()) {
+          case 'email': return 'Email Address';
+          case 'phone': return 'Phone Number';
+          case 'ssn': return 'Social Security Number';
+          case 'credit_card': return 'Credit Card';
+          case 'api_key': return 'API Key';
+          case 'password': return 'Password';
+          case 'address': return 'Physical Address';
+          case 'name': return 'Personal Name';
+          case 'medical': return 'Medical Information';
+          case 'financial': return 'Financial Data';
+          default: return type.charAt(0).toUpperCase() + type.slice(1);
+        }
+      });
+      categories.push(...piiItems);
+    }
+    
+    // Add risk type with better formatting
+    if (prompt.riskType) {
+      const formattedRisk = prompt.riskType.charAt(0).toUpperCase() + prompt.riskType.slice(1);
+      categories.push(`${formattedRisk} Risk`);
+    }
+    
+    // Add category if available
+    if (prompt.category && prompt.category.toLowerCase() !== 'general') {
+      categories.push(prompt.category);
+    }
+    
+    // Add subcategory if available and different from category
+    if (prompt.subcategory && prompt.subcategory !== prompt.category) {
+      categories.push(prompt.subcategory);
+    }
+    
+    return categories;
+  };
+
+  const categories = getFlaggedCategories();
+
+  if (isRevealed && decryptedText) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-700">Original Prompt:</span>
+          {isAdmin && (
+            <button
+              onClick={() => window.location.reload()} // Simple way to hide again
+              className="text-xs text-gray-500 hover:text-gray-700"
+            >
+              Hide
+            </button>
+          )}
+        </div>
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-sm text-gray-900 whitespace-pre-wrap font-mono">
+            {decryptedText}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 mb-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">Flagged Content:</span>
+        {isAdmin && (
+          <button
+            onClick={onReveal}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            Reveal
+          </button>
+        )}
+      </div>
+      
+      {categories.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {categories.map((category, index) => (
+            <span 
+              key={index}
+              className="inline-block px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800"
+            >
+              {category}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-gray-500 italic">
+          Sensitive content detected - admin required to view
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FlaggedPromptsPanel() {
   const [flaggedPrompts, setFlaggedPrompts] = useState<FlaggedPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [revealedPrompts, setRevealedPrompts] = useState<Set<string>>(new Set());
+  const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchFlaggedPrompts();
@@ -379,6 +505,48 @@ function FlaggedPromptsPanel() {
     } catch (error) {
       console.error('Failed to create test data:', error);
       setError('Failed to create test data: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  const revealPrompt = async (promptId: string) => {
+    if (!user?.id) {
+      console.error('User not authenticated');
+      return;
+    }
+
+    try {
+      console.log('Complyze Dashboard: Revealing prompt:', promptId);
+      
+      const response = await fetch('/api/prompts/decrypt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          promptId,
+          userId: user.id
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (response.status === 403) {
+          alert('Access denied. Admin privileges required to view original prompts.');
+          return;
+        }
+        throw new Error(errorData.error || 'Failed to decrypt prompt');
+      }
+
+      const data = await response.json();
+      console.log('Complyze Dashboard: Prompt revealed:', data);
+
+      // Update the revealed prompts set and decrypted texts map
+      setRevealedPrompts(prev => new Set([...prev, promptId]));
+      setDecryptedTexts(prev => new Map([...prev, [promptId, data.decryptedText]]));
+
+    } catch (error) {
+      console.error('Failed to reveal prompt:', error);
+      alert('Failed to reveal prompt: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
@@ -474,7 +642,14 @@ function FlaggedPromptsPanel() {
       {flaggedPrompts.map((row, i) => (
         <div key={row.id || i} className="flex flex-col lg:flex-row lg:items-start justify-between border-b border-gray-100 py-3 sm:py-4 last:border-b-0 gap-3 lg:gap-4">
           <div className="flex-1">
-            <div className="font-semibold text-sm sm:text-base text-[#0E1E36] mb-2">{row.summary}</div>
+            {/* Replaced summary with flagged categories display */}
+            <FlaggedCategoriesDisplay
+              prompt={row}
+              isRevealed={revealedPrompts.has(row.id)}
+              decryptedText={decryptedTexts.get(row.id)}
+              onReveal={() => revealPrompt(row.id)}
+              isAdmin={user?.plan === 'enterprise'}
+            />
             
             {/* Framework Tags */}
             <div className="flex flex-wrap gap-1 mb-2">
