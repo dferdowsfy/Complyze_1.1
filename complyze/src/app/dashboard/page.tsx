@@ -1188,7 +1188,7 @@ export default function Dashboard() {
         <div className="flex flex-wrap sm:flex-nowrap gap-4 sm:gap-8 lg:gap-12 items-center justify-center w-full sm:w-auto mt-3 sm:mt-0">
           <Link href="/dashboard" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Dashboard
-            {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && (
+            {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && !pathname.includes('admin') && (
               <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
@@ -1204,12 +1204,23 @@ export default function Dashboard() {
           </Link>
           <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
             Settings
-            {pathname && pathname.includes('settings') && (
+            {pathname && pathname.includes('settings') && !pathname.includes('admin') && (
               <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
                 <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
               </span>
             )}
           </Link>
+          {/* Admin link - only visible to admin users */}
+          {user && (user.role === 'admin' || user.role === 'super_admin' || user.plan === 'enterprise') && (
+            <Link href="/dashboard/admin" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
+              Admin
+              {pathname && pathname.includes('admin') && (
+                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
+                  <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
+                </span>
+              )}
+            </Link>
+          )}
         </div>
         {/* Right: User Info Pill */}
         <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
