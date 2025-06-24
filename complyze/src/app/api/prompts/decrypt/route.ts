@@ -15,10 +15,10 @@ export async function POST(req: NextRequest) {
 
     console.log('Decrypt request for prompt:', promptId, 'by user:', userId);
 
-    // First, verify the user is admin (enterprise plan)
+    // First, verify the user is admin
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('plan')
+      .select('plan, role')
       .eq('id', userId)
       .single();
 
@@ -29,9 +29,10 @@ export async function POST(req: NextRequest) {
       }, { status: 404 });
     }
 
-    // Check if user has admin privileges (enterprise plan)
-    if (user.plan !== 'enterprise') {
-      console.log('Access denied - user plan:', user.plan);
+    // Check if user has admin privileges (admin role or enterprise plan)
+    const isAdmin = user.role === 'admin' || user.role === 'super_admin' || user.plan === 'enterprise';
+    if (!isAdmin) {
+      console.log('Access denied - user role:', user.role, 'plan:', user.plan);
       return NextResponse.json({ 
         error: 'Access denied. Admin privileges required.' 
       }, { status: 403 });

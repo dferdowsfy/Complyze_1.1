@@ -648,7 +648,7 @@ function FlaggedPromptsPanel() {
               isRevealed={revealedPrompts.has(row.id)}
               decryptedText={decryptedTexts.get(row.id)}
               onReveal={() => revealPrompt(row.id)}
-              isAdmin={user?.plan === 'enterprise'}
+              isAdmin={user?.role === 'admin' || user?.role === 'super_admin' || user?.plan === 'enterprise'}
             />
             
             {/* Framework Tags */}

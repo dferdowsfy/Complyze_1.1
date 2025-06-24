@@ -40,6 +40,7 @@ export interface User {
   full_name?: string;
   avatar_url?: string;
   plan?: 'free' | 'pro' | 'enterprise';
+  role?: 'user' | 'admin' | 'super_admin';
 }
 
 export interface Project {
@@ -78,6 +79,12 @@ export interface RedactionSettings {
   item_key: string;
   enabled: boolean;
 }
+
+// Helper function to check if user is admin
+export const isAdmin = (user: User | null): boolean => {
+  if (!user) return false;
+  return user.role === 'admin' || user.role === 'super_admin' || user.plan === 'enterprise';
+};
 
 // You might also want to export the anon key if you plan to use it on the client-side elsewhere,
 // but for these API routes, the service role key is appropriate.
