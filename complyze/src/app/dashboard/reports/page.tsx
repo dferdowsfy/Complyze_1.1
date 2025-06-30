@@ -3,89 +3,74 @@
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import PromptRiskAssessmentReport from "@/app/components/PromptRiskAssessmentReport";
 
-// Framework color codes
-const FRAMEWORK_COLORS = {
-  NIST: "#6366F1",
-  AI_RMF: "#4F46E5",
-  FedRAMP: "#EF4444",
-  OWASP: "#F97316",
-  SOC2: "#10B981",
-  ISO: "#06B6D4",
-};
-
-const TEMPLATES: Array<{
-  id: string;
-  name: string;
-  description: string;
-  frameworks: (keyof typeof FRAMEWORK_COLORS)[];
-}> = [
+// New Report Templates
+const TEMPLATES = [
   {
-    id: "framework-coverage-matrix",
-    name: "Framework-Coverage Matrix",
-    description: "Table: Control ID → Met/Partially Met/Not Applicable, evidence links.",
-    frameworks: ["NIST", "FedRAMP", "ISO"],
+    id: "exec-ai-risk-summary",
+    name: "🔐 1. Executive AI Risk & Compliance Summary",
+    description: "High-level overview of organizational LLM usage, redaction events, flagged risks, and compliance status.",
+    frameworks: ["NIST AI RMF", "ISO", "SOC 2"],
+    gradient: "linear-gradient(109.6deg, rgba(157, 75, 199, 1) 11.2%, rgba(119, 81, 204, 1) 83.1%)"
   },
   {
-    id: "prompt-risk-audit",
-    name: "Prompt Risk Audit (Weekly)",
-    description: "Histogram of high/medium/low flags; top 20 flagged prompts; delta vs previous week.",
-    frameworks: ["AI_RMF", "OWASP"],
+    id: "prompt-risk-audit-log",
+    name: "🛡️ 2. Prompt Risk Audit Log",
+    description: "Shows flagged prompts, types of violations, and actions taken.",
+    frameworks: ["PII", "PHI", "Credentials", "HIPAA"],
+    gradient: "linear-gradient(109.6deg, rgba(62, 161, 219, 1) 11.2%, rgba(93, 52, 236, 1) 100.2%)"
   },
   {
     id: "redaction-effectiveness",
-    name: "Redaction Effectiveness Report",
-    description: "% of prompts with PII; false-positive/negative rates; sample redaction diff.",
-    frameworks: ["AI_RMF", "SOC2"],
+    name: "📊 3. Redaction Effectiveness Report",
+    description: "Evaluate the performance of structured redaction and smart rewrite features.",
+    frameworks: ["Accuracy", "PII", "Performance"],
+    gradient: "linear-gradient(109.6deg, rgba(48, 207, 208, 1) 11.2%, rgba(51, 8, 103, 1) 92.5%)"
   },
   {
-    id: "fedramp-conmon-exec",
-    name: "FedRAMP Continuous-Monitoring Exec Summary",
-    description: "Control status heat-map; open POA&M items; monthly control test coverage.",
-    frameworks: ["FedRAMP"],
+    id: "framework-coverage-matrix",
+    name: "🔍 4. Framework Coverage Matrix",
+    description: "Map prompt behavior and mitigation actions to specific security controls.",
+    frameworks: ["NIST AI RMF", "FedRAMP", "SOC 2", "HIPAA"],
+    gradient: "linear-gradient(109.6deg, rgba(245, 95, 42, 1) 11.2%, rgba(255, 14, 14, 1) 92.5%)"
   },
   {
-    id: "cost-usage-ledger",
-    name: "Cost & Usage Ledger",
-    description: "Daily/monthly token usage, model cost breakdown, projection vs budget.",
-    frameworks: ["NIST"],
+    id: "usage-cost-dashboard",
+    name: "📈 5. Usage & Cost Dashboard",
+    description: "Track model/token usage, cost controls, and user adoption.",
+    frameworks: ["OpenAI", "Claude", "Gemini", "Cost Control"],
+    gradient: "linear-gradient(109.6deg, rgba(255, 107, 107, 1) 11.2%, rgba(255, 93, 208, 1) 98.6%)"
   },
   {
-    id: "ai-rmf-profile",
-    name: "Generative-AI RMF Profile Report",
-    description: "Narrative sections with evidence paragraphs + risk tables keyed to RMF functions.",
-    frameworks: ["AI_RMF"],
+    id: "continuous-monitoring",
+    name: "🔄 6. Continuous Monitoring & POA&M",
+    description: "Support FedRAMP/SOC 2/NIST continuous monitoring and open issues.",
+    frameworks: ["FedRAMP", "SOC 2", "NIST"],
+    gradient: "linear-gradient(109.6deg, rgba(23, 179, 187, 1) 11.2%, rgba(25, 25, 25, 1) 91.1%)"
   },
   {
-    id: "owasp-llm-findings",
-    name: "OWASP LLM Top-10 Findings",
-    description: "Pie chart: occurrences by risk ID (LLM01-LLM10); remediation recommendations.",
-    frameworks: ["OWASP"],
+    id: "llm-governance-policy",
+    name: "🧠 7. LLM Governance Policy Adherence",
+    description: "Ensure employees comply with internal LLM usage policies.",
+    frameworks: ["Internal Policy", "Compliance", "Security"],
+    gradient: "linear-gradient(109.6deg, rgba(119, 44, 232, 1) 11.2%, rgba(119, 44, 232, 1) 11.2%, rgba(103, 4, 112, 1) 78.9%)"
   },
   {
-    id: "soc2-evidence-pack",
-    name: "SOC 2 Type II Evidence Pack",
-    description: "List of prompts sampled, control mappings, audit trail links, monthly diff.",
-    frameworks: ["SOC2"],
-  },
+    id: "ai-threat-intelligence",
+    name: "🤖 8. AI Threat Intelligence Report",
+    description: "Inform CISO about emerging LLM-specific threats and platform response.",
+    frameworks: ["OWASP LLM Top 10", "Threat Intel", "NIST AI RMF"],
+    gradient: "linear-gradient(109.6deg, rgba(12, 12, 12, 1) 11.2%, rgba(12, 12, 12, 1) 11.2%, rgba(102, 34, 34, 1) 78.9%)"
+  }
 ];
 
-const FRAMEWORK_LABELS = {
-  NIST: "NIST 800-53",
-  AI_RMF: "NIST AI RMF",
-  FedRAMP: "FedRAMP",
-  OWASP: "OWASP LLM Top 10",
-  SOC2: "SOC 2",
-  ISO: "ISO 27001",
-};
-
-function FrameworkPill({ fw }: { fw: keyof typeof FRAMEWORK_COLORS }) {
+function FrameworkPill({ fw }: { fw: string }) {
   return (
     <span
-      className="px-2 py-0.5 rounded-full text-xs font-medium mr-1 mb-1"
-      style={{ background: FRAMEWORK_COLORS[fw] + "20", color: FRAMEWORK_COLORS[fw] }}
+      className="px-2 py-0.5 rounded-full text-xs font-medium mr-1 mb-1 border border-white/50 text-white/90"
     >
-      {FRAMEWORK_LABELS[fw]}
+      {fw}
     </span>
   );
 }
@@ -95,21 +80,27 @@ interface TemplateCardProps {
     id: string;
     name: string;
     description: string;
-    frameworks: (keyof typeof FRAMEWORK_COLORS)[];
+    frameworks: string[];
+    gradient: string;
   };
   selected: boolean;
   onClick: () => void;
 }
+
 function TemplateCard({ template, selected, onClick }: TemplateCardProps) {
   return (
     <div
-      className={`bg-white shadow-sm p-3 sm:p-4 rounded-lg hover:ring-2 ring-orange-500 cursor-pointer mb-2 sm:mb-3 border transition ${selected ? "ring-2 ring-orange-500" : ""}`}
-      onClick={onClick}
+      className={`text-white shadow-lg p-4 rounded-xl hover:ring-2 ring-offset-2 ring-offset-slate-900 ring-cyan-400 cursor-pointer mb-4 border-2 border-transparent transition-all duration-300 transform hover:-translate-y-1 ${selected ? "ring-2 ring-cyan-400 border-cyan-400" : ""}`}
+      style={{ background: template.gradient }}
+      onClick={() => {
+        console.log(`--- TEMPLATE CARD CLICKED: ${template.id} ---`);
+        onClick();
+      }}
     >
-      <h3 className="font-semibold mb-1 text-sm sm:text-base">{template.name}</h3>
-      <p className="text-xs sm:text-sm text-slate-500 mb-2">{template.description}</p>
-      <div className="flex gap-1 flex-wrap">
-        {template.frameworks.map((fw: keyof typeof FRAMEWORK_COLORS) => (
+      <h3 className="font-bold text-lg mb-2">{template.name}</h3>
+      <p className="text-sm text-white/80 mb-3 h-12">{template.description}</p>
+      <div className="flex flex-wrap">
+        {template.frameworks.map((fw: string) => (
           <FrameworkPill key={fw} fw={fw} />
         ))}
       </div>
@@ -279,48 +270,33 @@ function useAuth() {
 
 type TemplateId = string;
 
-export default function Reports() {
-  const pathname = usePathname();
-  const { user, logout } = useAuth();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+export default function Reports({ prompts }: { prompts: any[] }) {
+  const { user } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId | null>(null);
+  const [reportHtml, setReportHtml] = useState<string>("");
   const [reportSections, setReportSections] = useState<ReportSection[]>([]);
-  const [dataInfo, setDataInfo] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [dataInfo, setDataInfo] = useState<any>(null);
   const [dateRange, setDateRange] = useState({
-    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
-    end: new Date().toISOString().split('T')[0] // today
+    start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
   });
-  const [projectName, setProjectName] = useState('Complyze AI Compliance');
-
+  const [projectName, setProjectName] = useState("Complyze AI Compliance Report");
+  
   const generateReport = async (templateId: string) => {
     setIsGenerating(true);
     setReportSections([]);
-    setDataInfo(null);
-    
+
     try {
-      console.log(`Generating ${templateId} report for date range: ${dateRange.start} to ${dateRange.end}`);
-      
-      // Set expected data info during generation
-      setDataInfo({
-        dateRange: `${dateRange.start} to ${dateRange.end}`,
-        expectedPrompts: 'Loading...'
-      });
-      
       const response = await fetch('/api/reports/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          template: templateId,
-          dateRange: {
-            start: dateRange.start,
-            end: dateRange.end
-          },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          template: templateId, 
+          dateRange: dateRange,
           project: projectName,
-          format: 'sections',
-          userId: user?.id || "fa166056-023d-4822-b250-b5b5a47f9df8" // Use seeded user ID as fallback
+          userId: user?.id,
+          prompts: prompts,
         }),
       });
 
@@ -329,286 +305,92 @@ export default function Reports() {
       }
 
       const result = await response.json();
-      console.log('Report generated:', result);
-      
-      if (result.sections && Array.isArray(result.sections)) {
-        setReportSections(result.sections);
-        
-        // Set actual data info from response
-        setDataInfo({
-          dateRange: `${dateRange.start} to ${dateRange.end}`,
-          promptCount: result.dataSource?.promptCount || 0,
-          totalCost: result.dataSource?.totalCost,
-          riskBreakdown: result.dataSource?.riskBreakdown,
-          usingDatabase: !result.dataSource?.usingDashboardData
-        });
-      } else {
-        throw new Error('Invalid report format received');
-      }
-      
+      setReportSections(result.sections);
+      setDataInfo(result.dataSource);
     } catch (error) {
-      console.error('Error generating report:', error);
-      setReportSections([
-        {
-          title: 'Error',
-          content: `Failed to generate report: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease check your OpenRouter API configuration and database connection.`,
-          data: {}
-        }
-      ]);
-      
-      setDataInfo({
-        dateRange: `${dateRange.start} to ${dateRange.end}`,
-        promptCount: 0,
-        error: true
-      });
+      console.error("Report generation error:", error);
+      // You could set an error state here to show in the UI
     } finally {
       setIsGenerating(false);
     }
   };
 
+  useEffect(() => {
+    if (selectedTemplate) {
+      const handler = setTimeout(() => {
+        generateReport(selectedTemplate);
+      }, 1000); // Debounce to avoid rapid-firing on input change
+
+      return () => {
+        clearTimeout(handler);
+      };
+    }
+  }, [projectName, dateRange, selectedTemplate]);
+
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
     generateReport(templateId);
   };
-
-  const handleExport = async (format: string) => {
-    if (!selectedTemplate) return;
-    
-    try {
-      if (format === 'share') {
-        // Copy share link to clipboard
-        const shareUrl = `${window.location.origin}/reports/shared/${selectedTemplate}?date=${dateRange.start}_${dateRange.end}`;
-        await navigator.clipboard.writeText(shareUrl);
-        alert('Share link copied to clipboard!');
-        return;
-      }
-      
-      // For other formats, call the export API with date range
-      const response = await fetch(`/api/reports/export?id=${selectedTemplate}&format=${format}&start=${dateRange.start}&end=${dateRange.end}&userId=${user?.id || "fa166056-023d-4822-b250-b5b5a47f9df8"}`, {
-        method: 'GET',
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Export failed: ${response.statusText}`);
-      }
-      
-      // Download the file
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `${selectedTemplate}-${dateRange.start}-${dateRange.end}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-    } catch (error) {
-      console.error('Export error:', error);
-      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownOpen && !(event.target as Element)?.closest('.user-dropdown')) {
-        setDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [dropdownOpen]);
-
-  // Auto-regenerate report when date range changes
-  useEffect(() => {
-    if (selectedTemplate) {
-      const timeoutId = setTimeout(() => {
-        generateReport(selectedTemplate);
-      }, 1000); // Debounce 1 second
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [dateRange.start, dateRange.end, projectName]);
+  
+  if (!user) {
+    return <div>Loading user...</div>;
+  }
 
   return (
-    <div className="h-screen bg-[#0E1E36] font-sans flex flex-col overflow-hidden">
-      {/* Sticky Nav Tabs - Standardized */}
-      <nav className="flex-shrink-0 flex flex-col sm:flex-row px-4 sm:px-8 py-3 sm:py-5 shadow-md justify-between items-center" style={{ background: '#0E1E36' }}>
-        {/* Left: Branding */}
-        <div className="flex items-center gap-6 sm:gap-12 min-w-[180px] w-full sm:w-auto justify-between sm:justify-start">
-          <span className="text-xl sm:text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
-        </div>
-        {/* Center: Nav Links */}
-        <div className="flex flex-wrap sm:flex-nowrap gap-4 sm:gap-8 lg:gap-12 items-center justify-center w-full sm:w-auto mt-3 sm:mt-0">
-          <Link href="/dashboard" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
-            Dashboard
-          </Link>
-          <Link href="/dashboard/reports" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
-            Reports
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
-              <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-            </span>
-          </Link>
-          <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
-            Settings
-          </Link>
-          {/* Admin link - only visible to admin users */}
-          {user && (user.role === 'admin' || user.role === 'super_admin' || user.plan === 'enterprise') && (
-            <Link href="/dashboard/admin" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
-              Admin
-            </Link>
-          )}
-        </div>
-        {/* Right: User Info Pill */}
-        <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
-          {user?.email && (
-            <div className="relative user-dropdown">
-              <button
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 hover:bg-white/20 text-sm sm:text-base flex items-center gap-2"
-                title={user.email}
-              >
-                <span style={{ display: 'inline-block' }}>
-                  {user.full_name || user.email}
-                </span>
-                <svg 
-                  className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} 
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              
-              {/* Dropdown Menu */}
-              {dropdownOpen && (
-                <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-lg shadow-lg border border-gray-200 min-w-[160px] overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <div className="text-sm font-medium text-gray-900 truncate">
-                      {user.full_name || 'User'}
-                    </div>
-                    <div className="text-xs text-gray-500 truncate">
-                      {user.email}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      logout();
-                      setDropdownOpen(false);
-                    }}
-                    className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* Left Sidebar - Templates */}
-        <div className="w-full lg:w-1/3 bg-slate-50 border-r border-slate-200 flex flex-col max-h-[40vh] lg:max-h-full">
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-bold mb-4 text-slate-800">Compliance Report Templates</h2>
-            
-            {/* Date Range Selector */}
-            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-white rounded-lg border">
-              <h3 className="font-semibold mb-3 text-slate-700 text-sm sm:text-base">Report Configuration</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-slate-600 mb-1">Project Name</label>
-                  <input
-                    type="text"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    className="w-full px-2 sm:px-3 py-2 border border-slate-300 rounded-md text-xs sm:text-sm"
-                    placeholder="Project name"
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-slate-600 mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      value={dateRange.start}
-                      onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                      className="w-full px-2 sm:px-3 py-2 border border-slate-300 rounded-md text-xs sm:text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-slate-600 mb-1">End Date</label>
-                    <input
-                      type="date"
-                      value={dateRange.end}
-                      onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                      className="w-full px-2 sm:px-3 py-2 border border-slate-300 rounded-md text-xs sm:text-sm"
-                    />
-                  </div>
-                </div>
-                
-                {/* Date Range Preview */}
-                <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
-                  <strong>Report Period:</strong> {Math.ceil((new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / (1000 * 60 * 60 * 24))} days
-                  <br />
-                  <strong>Data Source:</strong> prompt_events table • Time-filtered
-                </div>
-              </div>
-            </div>
-
-            {/* Template Cards */}
-            {TEMPLATES.map((template) => (
-              <TemplateCard
-                key={template.id}
-                template={template}
-                selected={selectedTemplate === template.id}
-                onClick={() => handleTemplateSelect(template.id)}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+      {/* Left Column: Templates */}
+      <div className="lg:col-span-1 h-full overflow-y-auto bg-[#252945] p-6 rounded-lg custom-scrollbar">
+        <h2 className="text-xl font-bold text-white mb-4 sticky top-0 bg-[#252945] py-2 z-10">Compliance Report Templates</h2>
+        
+        {/* Report Configuration */}
+        <div className="mb-6 p-4 rounded-lg bg-black/20 border border-white/10">
+          <h3 className="text-lg font-semibold text-white mb-3">Report Configuration</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Project Name</label>
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                className="w-full p-2 bg-gray-800 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-            ))}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Date Range (Start)</label>
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                className="w-full p-2 bg-gray-800 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Date Range (End)</label>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                className="w-full p-2 bg-gray-800 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Right Content - Preview */}
-        <div className="flex-1 bg-white flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-            <div className="mb-4 sm:mb-6">
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 mb-2">
-                {selectedTemplate ? 
-                  TEMPLATES.find(t => t.id === selectedTemplate)?.name || 'Report Preview' : 
-                  'AI-Powered Compliance Reports'
-                }
-              </h1>
-              <p className="text-slate-600 text-sm sm:text-base">
-                {selectedTemplate ? 
-                  `Time-based report for ${dateRange.start} to ${dateRange.end} using OpenRouter LLM` :
-                  'Select a template to generate a time-based compliance report with real extension data'
-                }
-              </p>
-            </div>
-            
-            <PreviewAccordion 
-              sections={reportSections} 
-              isGenerating={isGenerating}
-              dataInfo={dataInfo}
+        <div className="space-y-4">
+          {TEMPLATES.map((t) => (
+            <TemplateCard
+              key={t.id}
+              template={t}
+              selected={selectedTemplate === t.id}
+              onClick={() => handleTemplateSelect(t.id)}
             />
-          </div>
-          
-          {/* Export Bar - Inside the right content area */}
-          {selectedTemplate && (
-            <div className="flex-shrink-0">
-              <ExportBar onExport={handleExport} isGenerating={isGenerating} />
-            </div>
-          )}
+          ))}
         </div>
+      </div>
+
+      {/* Right Column: Preview */}
+      <div className="lg:col-span-2 h-full overflow-y-auto custom-scrollbar">
+         <PreviewAccordion sections={reportSections} isGenerating={isGenerating} dataInfo={dataInfo} />
       </div>
     </div>
   );

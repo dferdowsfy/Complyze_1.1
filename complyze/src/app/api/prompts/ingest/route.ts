@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
       redactionCount: redactionOutput.redactionDetails.length,
       encrypted: true, // Indicate that the prompt was encrypted
       message: finalStatus === 'flagged' 
-        ? 'Prompt flagged due to PII detection and stored securely'
+        ? 'Prompt image.png due to PII detection and stored securely'
         : 'Prompt approved and stored securely'
     });
 

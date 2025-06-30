@@ -33,13 +33,29 @@ export interface DashboardMetrics {
   };
 }
 
+export interface PromptEvent {
+  id: string;
+  user_id: string;
+  captured_at: string;
+  prompt_text: string;
+  status: string;
+  risk_level: 'low' | 'medium' | 'high';
+  risk_type: string;
+  model: string;
+  platform?: string;
+  compliance_tags?: string[];
+  [key: string]: any;
+}
+
 export function useDashboardMetrics(userId: string | null): {
   data: DashboardMetrics | null;
+  prompts: PromptEvent[] | null;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 } {
   const [data, setData] = useState<DashboardMetrics | null>(null);
+  const [prompts, setPrompts] = useState<PromptEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +94,8 @@ export function useDashboardMetrics(userId: string | null): {
       if (eventsError) {
         throw new Error(`Failed to fetch prompt events: ${eventsError.message}`);
       }
+
+      setPrompts(promptEvents || []);
 
       if (!promptEvents || promptEvents.length === 0) {
         // Return empty state
@@ -276,10 +294,5 @@ export function useDashboardMetrics(userId: string | null): {
     return () => clearInterval(interval);
   }, [fetchMetrics]);
 
-  return {
-    data,
-    loading,
-    error,
-    refetch: fetchMetrics
-  };
+  return { data, prompts, loading, error, refetch: fetchMetrics };
 } 

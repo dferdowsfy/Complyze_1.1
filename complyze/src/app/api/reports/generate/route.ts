@@ -4,20 +4,20 @@ import { reportDataService } from '@/lib/reportDataService';
 
 export async function POST(req: NextRequest) {
   try {
-    const { template, dateRange, project, format, userId } = await req.json();
+    const { template, dateRange, project, format, userId, prompts } = await req.json();
     
     console.log(`Generating ${template} report for ${dateRange?.start || 'N/A'} to ${dateRange?.end || 'N/A'}...`);
     
     // Validate template
     const validTemplates = [
-      'framework-coverage-matrix',
-      'prompt-risk-audit', 
-      'redaction-effectiveness',
-      'fedramp-conmon-exec',
-      'cost-usage-ledger',
-      'ai-rmf-profile',
-      'owasp-llm-findings',
-      'soc2-evidence-pack'
+      "exec-ai-risk-summary",
+      "prompt-risk-audit-log",
+      "redaction-effectiveness",
+      "framework-coverage-matrix",
+      "usage-cost-dashboard",
+      "continuous-monitoring",
+      "llm-governance-policy",
+      "ai-threat-intelligence",
     ];
     
     if (!validTemplates.includes(template)) {
@@ -56,12 +56,28 @@ export async function POST(req: NextRequest) {
 
     console.log(`Fetching data for user ${userId} from ${startDateTime} to ${endDateTime}`);
 
-    // Aggregate real data from database with time filtering
-    const reportData = await reportDataService.aggregateReportData(
-      template, 
-      { start: startDateTime, end: endDateTime }, 
-      userId
-    );
+    let reportData;
+    if (prompts) {
+      console.log(`Using ${prompts.length} provided prompts for report generation.`);
+      // If prompts are provided, filter them by the date range on the server
+      const startDate = new Date(startDateTime);
+      const endDate = new Date(endDateTime);
+      const filteredPrompts = prompts.filter((p: any) => {
+        const promptDate = new Date(p.captured_at);
+        return promptDate >= startDate && promptDate <= endDate;
+      });
+      // Use a simplified aggregation if prompts are passed directly
+      reportData = await reportDataService.aggregateReportDataFromPrompts(filteredPrompts, template);
+
+    } else {
+       // Aggregate real data from database with time filtering
+      console.log(`Querying database for prompts for user ${userId}.`);
+      reportData = await reportDataService.aggregateReportData(
+        template, 
+        { start: startDateTime, end: endDateTime }, 
+        userId
+      );
+    }
 
     const promptCount = reportData.promptLogs?.length || 0;
     const totalCost = reportData.costData?.total_spend || 0;

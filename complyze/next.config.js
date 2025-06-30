@@ -73,6 +73,20 @@ const nextConfig = {
       ...config.resolve.alias,
       '@': require('path').resolve(__dirname, 'src'),
     };
+
+    // Add fallback for 'buffer'
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      buffer: require.resolve('buffer/'),
+    };
+    
+    // Provide Buffer globally
+    config.plugins.push(
+      new (require('webpack').ProvidePlugin)({
+        Buffer: ['buffer', 'Buffer'],
+      })
+    );
+    
     return config;
   },
 };

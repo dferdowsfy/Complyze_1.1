@@ -82,49 +82,50 @@ class OpenRouterService {
 
   private getTemplateConfig(template: string) {
     const configs = {
-      'framework-coverage-matrix': {
-        title: 'Framework Coverage Matrix',
-        frameworks: ['NIST 800-53', 'FedRAMP', 'ISO 27001'],
-        sections: ['Executive Summary', 'Control Mapping Table', 'Coverage Analysis', 'Recommendations']
+      'exec-ai-risk-summary': {
+        title: 'Executive AI Risk & Compliance Summary',
+        frameworks: ['NIST AI RMF', 'ISO 27001', 'SOC 2'],
+        sections: ['Executive Summary', 'Flagged Prompts Analysis', 'Top Risk Categories', 'Framework Alignment Status', 'Remediation Progress', 'Recommendations']
       },
-      'prompt-risk-audit': {
-        title: 'Weekly Prompt Risk Audit',
-        frameworks: ['NIST AI RMF', 'OWASP LLM Top 10'],
-        sections: ['Executive Summary', 'Risk Histogram', 'Top Flagged Prompts', 'Trend Analysis', 'Recommendations']
+      'prompt-risk-audit-log': {
+        title: 'Prompt Risk Audit Log',
+        frameworks: ['PII', 'PHI', 'HIPAA'],
+        sections: ['Audit Summary', 'Flagged Prompt Log', 'Violation Analysis by Type', 'User and Platform Breakdown', 'Risk Score Analysis']
       },
       'redaction-effectiveness': {
         title: 'Redaction Effectiveness Report',
-        frameworks: ['NIST AI RMF', 'SOC 2'],
-        sections: ['Executive Summary', 'Effectiveness Metrics', 'Redaction Samples', 'False Positive Analysis', 'Recommendations']
+        frameworks: ['Accuracy', 'PII', 'Performance'],
+        sections: ['Effectiveness Summary', 'Redaction Metrics by Type', 'False Positive/Negative Analysis', 'Sample Redactions', 'Model vs. Custom Rule Coverage']
       },
-      'fedramp-conmon-exec': {
-        title: 'FedRAMP Continuous Monitoring Executive Summary',
-        frameworks: ['FedRAMP'],
-        sections: ['Executive Summary', 'Control Status Heatmap', 'Open POA&M Items', 'Monthly Coverage', 'Risk Assessment']
+      'framework-coverage-matrix': {
+        title: 'Framework Coverage Matrix',
+        frameworks: ['NIST AI RMF', 'FedRAMP', 'SOC 2', 'HIPAA'],
+        sections: ['Coverage Overview', 'Control Status Matrix', 'Detailed Findings per Control', 'Evidence Links', 'Recommendations for Unmet Controls']
       },
-      'cost-usage-ledger': {
-        title: 'Cost & Usage Ledger',
-        frameworks: ['NIST 800-53 AT-2', 'AU-6'],
-        sections: ['Executive Summary', 'Usage Breakdown', 'Cost Analysis', 'Budget Tracking', 'Projections']
+      'usage-cost-dashboard': {
+        title: 'Usage & Cost Dashboard',
+        frameworks: ['Cost Control', 'Budgeting'],
+        sections: ['Cost & Usage Summary', 'Spend by Model & Team', 'Token Usage Analysis', 'Budget vs. Forecast', 'High-Cost Prompt Identification']
       },
-      'ai-rmf-profile': {
-        title: 'NIST AI RMF Compliance Profile',
-        frameworks: ['NIST AI RMF'],
-        sections: ['GOVERN', 'MAP', 'MEASURE', 'MANAGE', 'Evidence Links']
+      'continuous-monitoring': {
+        title: 'Continuous Monitoring & POA&M Integration',
+        frameworks: ['FedRAMP', 'SOC 2', 'NIST'],
+        sections: ['Monitoring Summary', 'Monthly Control Status', 'Triggered Incidents & Resolutions', 'Open POA&M Items', 'Auto-Generated Evidence']
       },
-      'owasp-llm-findings': {
-        title: 'OWASP LLM Top 10 Findings Summary',
-        frameworks: ['OWASP LLM Top 10'],
-        sections: ['Executive Summary', 'Risk Distribution', 'Detailed Findings', 'Remediation Plan', 'Detection Sources']
+      'llm-governance-policy': {
+        title: 'LLM Governance Policy Adherence Report',
+        frameworks: ['Internal Policy', 'Compliance'],
+        sections: ['Policy Adherence Overview', 'Violations by Policy Section', 'User Compliance Scores', 'Redaction Setting Adherence', 'Sensitive Data Upload Analysis']
       },
-      'soc2-evidence-pack': {
-        title: 'SOC 2 Type II Evidence Pack',
-        frameworks: ['SOC 2'],
-        sections: ['Executive Summary', 'Sampled Prompts', 'Control Mappings', 'Audit Trail', 'Monthly Comparison']
+      'ai-threat-intelligence': {
+        title: 'AI Threat Intelligence Report',
+        frameworks: ['OWASP LLM Top 10', 'NIST AI RMF'],
+        sections: ['Threat Landscape Summary', 'OWASP Top 10 Occurrences', 'Anomalous Prompt Pattern Analysis', 'Threat Trends vs. User Behavior', 'CISO Recommendations']
       }
     };
 
-    return configs[template as keyof typeof configs] || configs['framework-coverage-matrix'];
+    const selectedConfig = configs[template as keyof typeof configs];
+    return selectedConfig || configs['exec-ai-risk-summary'];
   }
 
   private buildSystemPrompt(templateConfig: any, dateRange?: any, project?: string): string {

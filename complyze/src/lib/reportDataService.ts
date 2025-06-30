@@ -56,6 +56,45 @@ class ReportDataService {
     }
   }
 
+  async aggregateReportDataFromPrompts(prompts: any[], template: string): Promise<ReportData> {
+    console.log(`Aggregating data from ${prompts.length} provided prompts for ${template} report...`);
+
+    try {
+      // The prompts are already filtered by date range on the API route
+      const promptLogs = prompts;
+      
+      // Since prompts are passed in, we can't get separate cost data by date range, 
+      // so we'll derive it from the passed prompts.
+      const costData = this.getCostDataFromPrompts(promptLogs);
+      
+      // Analyze risks from the provided prompts
+      const riskAnalysis = await this.getRiskAnalysis(promptLogs);
+      
+      // Calculate redaction stats
+      const redactionStats = await this.getRedactionStats(promptLogs);
+      
+      // Get control mappings
+      const controlMappings = await this.getControlMappings(promptLogs);
+      
+      // Calculate additional metrics based on template
+      // Note: startDate and endDate are not available here, so metrics might be less precise
+      const additionalMetrics = await this.getAdditionalMetrics(template, promptLogs, '', '');
+
+      return {
+        promptLogs,
+        costData,
+        riskAnalysis,
+        redactionStats,
+        controlMappings,
+        additionalMetrics
+      };
+
+    } catch (error) {
+      console.error('Error aggregating report data from prompts:', error);
+      return this.getEmptyReportData();
+    }
+  }
+
   private async getPromptLogs(startDate: string, endDate: string, userId?: string) {
     let query = supabase
       .from('prompt_events')
@@ -159,6 +198,52 @@ class ReportDataService {
       console.error('Error fetching cost data:', error);
       return this.getEmptyCostData();
     }
+  }
+
+  private getCostDataFromPrompts(events: any[]) {
+      if (!events || events.length === 0) {
+        return this.getEmptyCostData();
+      }
+      
+      // Calculate total spend
+      const total_spend = events.reduce((sum, event) => sum + (event.usd_cost || 0), 0);
+      
+      // Get top 5 most expensive prompts
+      const top_prompts = events
+        .sort((a, b) => (b.usd_cost || 0) - (a.usd_cost || 0))
+        .slice(0, 5)
+        .map(event => ({
+          id: event.id,
+          cost: event.usd_cost,
+          excerpt: event.prompt_text?.substring(0, 50) + '...' || 'N/A',
+          model: event.model,
+          date: event.captured_at
+        }));
+
+      // Find most used model
+      const modelCounts: Record<string, number> = {};
+      events.forEach(event => {
+        if (event.model) {
+          modelCounts[event.model] = (modelCounts[event.model] || 0) + 1;
+        }
+      });
+      
+      const most_used_model = Object.entries(modelCounts)
+        .sort(([,a], [,b]) => b - a)[0]?.[0] || 'No data';
+
+      // Get user budget (default to 500 if not set)
+      const budget = 500; // TODO: Fetch from users table
+
+      return {
+        total_spend: Math.round(total_spend * 100) / 100,
+        budget_tracker: { 
+          total_spend: Math.round(total_spend * 100) / 100, 
+          budget, 
+          status: total_spend < budget ? 'Under Budget' : 'Over Budget' 
+        },
+        top_prompts,
+        most_used_model
+      };
   }
 
   private getEmptyCostData() {

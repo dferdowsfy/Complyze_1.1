@@ -1,32 +1,103 @@
 'use client';
 
 import React, { useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from '@/lib/supabaseClient';
 import { useDashboardMetrics } from '@/lib/useDashboardMetrics';
-import { BudgetModal } from '@/components/BudgetModal';
+import NewReportsPage from './reports/page';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 
-// Inline style helpers
-const COLORS = {
-  bg: "#0E1E36",
-  header: "#0E1E36",
-  accent: "#FF6F3C",
-  riskHigh: "#E53935",
-  riskMedium: "#FBC02D",
-  riskLow: "#388E3C",
-  card: "#FFFFFF",
-  border: "#E0E0E0",
-  text: "#FFFFFF",
-  textSecondary: "#B0B0B0",
-  chartBg: "#F1F1F1",
+const THEME = {
+  background: '#0e1f36',
+  sidebar: '#252945',
+  card: '#252945',
+  primary: '#7b68ee',
+  accent: '#00d1b2',
+  text: '#ffffff',
+  textMuted: '#a0aec0',
+  border: '#323755',
+  riskHigh: '#e53935',
+  riskMedium: '#fbc02d',
+  riskLow: '#388e3c',
 };
 
-const FONT = {
-  fontFamily: 'Inter, sans-serif',
+function DashboardHeader({ title, user, logout }: { title: string, user: any, logout: () => void }) {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const projects = ['Complyze AI', 'Project Phoenix', 'Q3 Initiative'];
+  
+  return (
+    <header className="flex justify-between items-center mb-8">
+      <h1 className="text-3xl font-bold text-white">{title}</h1>
+      <div className="flex items-center gap-6">
+        <button className="text-gray-400 hover:text-white">
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+        </button>
+        <div className="relative">
+          <button onClick={() => setDropdownOpen(!dropdownOpen)} className="flex items-center gap-3 bg-white/10 px-4 py-2 rounded-full text-white hover:bg-white/20">
+            <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold">
+              {user?.email?.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <p className="font-semibold text-sm">{user?.email}</p>
+              <p className="text-xs text-gray-400">Member</p>
+            </div>
+             <svg className={`w-4 h-4 text-gray-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          {dropdownOpen && (
+            <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-[#252945] ring-1 ring-black ring-opacity-5 z-50">
+              <div className="py-1">
+                <div className="px-4 py-2 text-xs text-gray-400">Projects</div>
+                {projects.map(p => (
+                   <a href="#" key={p} className="block px-4 py-2 text-sm text-gray-200 hover:bg-white/5">{p}</a>
+                ))}
+                <div className="border-t border-white/10 my-1"></div>
+                <button onClick={logout} className="w-full text-left block px-4 py-2 text-sm text-red-400 hover:bg-white/5">
+                  Logout
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+const DonutChart = ({ percentage, color }: { percentage: number, color: string }) => {
+  const sqSize = 100;
+  const strokeWidth = 10;
+  const radius = (sqSize - strokeWidth) / 2;
+  const viewBox = `0 0 ${sqSize} ${sqSize}`;
+  const dashArray = radius * Math.PI * 2;
+  const dashOffset = dashArray - dashArray * percentage / 100;
+
+  return (
+    <svg width={sqSize} height={sqSize} viewBox={viewBox} className="transform -rotate-90">
+      <circle className="text-gray-700" cx={sqSize / 2} cy={sqSize / 2} r={radius} strokeWidth={`${strokeWidth}px`} stroke="currentColor" fill="transparent" />
+      <circle cx={sqSize / 2} cy={sqSize / 2} r={radius} strokeWidth={`${strokeWidth}px`} stroke={color} fill="transparent" strokeDasharray={dashArray} strokeDashoffset={dashOffset} strokeLinecap="round" />
+      <text x="50%" y="50%" textAnchor="middle" dy=".3em" className="text-2xl font-bold fill-white transform rotate-90" transform-origin="center">
+        {`${percentage}%`}
+      </text>
+    </svg>
+  );
 };
 
-// Authentication hook
+function StatCard({ title, value, total, percentage, icon, color }: { title: string, value: string | number, total?: string | number, percentage: number, icon: React.ReactNode, color: string }) {
+    return (
+        <div style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="p-6 rounded-lg border flex items-start justify-between">
+            <div>
+                <div className="flex items-center gap-2 text-gray-400 mb-2">
+                    {icon}
+                    <span>{title}</span>
+                </div>
+                <div className="text-3xl font-bold text-white">{value}</div>
+                {total && <div className="text-sm text-gray-500 mt-1">of {total} total</div>}
+            </div>
+            <DonutChart percentage={percentage} color={color} />
+        </div>
+    );
+}
+
 function useAuth() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -37,7 +108,6 @@ function useAuth() {
     const checkAuth = () => {
       const token = localStorage.getItem('complyze_token');
       const userData = localStorage.getItem('complyze_user');
-      
       if (token && userData) {
         try {
           const parsedUser = JSON.parse(userData);
@@ -54,7 +124,6 @@ function useAuth() {
       }
       setLoading(false);
     };
-
     checkAuth();
   }, [router]);
 
@@ -67,1348 +136,621 @@ function useAuth() {
   return { isAuthenticated, user, loading, logout };
 }
 
-function RiskBadge({ level }: { level: 'High' | 'Medium' | 'Low' }) {
-  const color =
-    level === 'High' ? COLORS.riskHigh :
-    level === 'Medium' ? COLORS.riskMedium :
-    COLORS.riskLow;
+function Sidebar({ activeTab, setActiveTab, user, logout }: { activeTab: string; setActiveTab: (tab: string) => void; user: any; logout: () => void; }) {
+  const menuItems = [
+    { id: 'overview', label: 'Dashboard', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
+    { id: 'flagged', label: 'Flagged Prompts', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> },
+    { id: 'analytics', label: 'Analytics', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg> },
+    { id: 'reports', label: 'Reports', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg> },
+    { id: 'settings', label: 'Settings', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> },
+  ];
+
+  if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+    menuItems.push({ id: 'admin', label: 'Admin', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg> });
+  }
+
   return (
-    <span style={{
-      background: color,
-      color: '#fff',
-      borderRadius: 6,
-      fontWeight: 600,
-      fontSize: 13,
-      padding: '2px 10px',
-      marginLeft: 8,
-    }}>{level} risk</span>
+    <div className="w-64 h-full fixed top-0 left-0 p-4 flex flex-col" style={{ backgroundColor: THEME.sidebar }}>
+      <div className="flex items-center gap-3 mb-10 px-2">
+        <svg className="w-8 h-8 text-indigo-400" viewBox="0 0 24 24" fill="currentColor"><path d="M6.333 21.667h11.334c.834 0 1.584-.5 1.834-1.333L21.917 12c.166-.583-.083-1.167-.583-1.5l-9.334-6.083c-.417-.25-.917-.25-1.333 0L1.333 10.5c-.5.333-.75.917-.583 1.5l2.416 8.334c.25.833 1 1.333 1.834 1.333zM8.5 13.5H15.5V15H8.5V13.5z"></path></svg>
+        <h1 className="text-2xl font-light tracking-wider text-white">COMPLYZE</h1>
+      </div>
+      <nav className="flex-grow">
+        <h2 className="px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Menu</h2>
+        {menuItems.map(item => (
+          <button key={item.id} onClick={() => setActiveTab(item.id)} className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-colors ${activeTab === item.id ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-white/5'}`}>
+            {item.icon}
+            <span className="font-medium">{item.label}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="mt-auto">
+        <button onClick={logout} className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+          <span className="font-medium">Logout</span>
+        </button>
+      </div>
+    </div>
   );
 }
 
-// Cost Summary Components
-function BudgetTrackerCard({ data, userId, onBudgetUpdate }: { data: any; userId: string; onBudgetUpdate: () => void }) {
-  const [showBudgetModal, setShowBudgetModal] = useState(false);
-  
-  if (!data) return null;
+// --- NEW DASHBOARD COMPONENTS ---
 
-  const isOverBudget = data.status === "Over Budget";
-  const indicatorColor = isOverBudget ? "#E53935" : "#388E3C";
-  const bgColor = isOverBudget ? "#FFEBEE" : "#E8F5E8";
-  
+function PromptOptimizerButton() {
   return (
-    <>
-      <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <div className="flex justify-between items-center">
-          <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Budget Tracker</div>
-          <button
-            onClick={() => setShowBudgetModal(true)}
-            className="text-xs text-[#FF6F3C] hover:text-[#E55A2B] font-medium transition-colors"
-          >
-            Set Budget
-          </button>
-        </div>
-        <div className="text-base sm:text-lg font-semibold text-gray-500 mb-2">
-          <span style={{ color: indicatorColor, fontWeight: 800, fontSize: '18px' }} className="sm:text-xl lg:text-2xl">${data.total_spend?.toFixed(2) || '0.00'}</span> 
-          <span className="text-sm sm:text-base"> / ${data.budget?.toFixed(2) || '500.00'}</span>
-        </div>
-        <div className="flex items-center gap-2 mb-3">
-          <span style={{ color: indicatorColor, fontSize: '20px' }} className="sm:text-2xl">{data.indicator || '↓'}</span>
-          <span style={{ color: indicatorColor, fontWeight: 700 }} className="text-sm sm:text-base">
-            {Math.abs(data.percent_delta || 0).toFixed(1)}% {data.status || 'Under Budget'}
-          </span>
-        </div>
-        <div className="mt-3 mb-1">
-          <div className="text-xs sm:text-sm text-gray-400 mb-1">Monthly Budget Usage</div>
-          <div className="bg-gray-100 rounded h-3 sm:h-4 w-full relative" style={{ backgroundColor: bgColor }}>
-            <div 
-              style={{ 
-                width: `${Math.min(100, (data.total_spend || 0) / (data.budget || 500) * 100)}%`, 
-                background: indicatorColor 
-              }} 
-              className="h-3 sm:h-4 rounded transition-all duration-300" 
-            />
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-[#0E1E36]">
-              {((data.total_spend || 0) / (data.budget || 500) * 100).toFixed(1)}%
-            </div>
-          </div>
-        </div>
-        <div className="text-xs sm:text-sm text-gray-500 font-medium">
-          Status: <span style={{ color: indicatorColor, fontWeight: 'bold' }}>{data.status || 'Under Budget'}</span>
-        </div>
-      </div>
+    <button className="w-full mt-4 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3 px-4 rounded-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 shadow-lg">
+      🚀 Prompt Optimizer
+    </button>
+  );
+}
 
-      <BudgetModal
-        isOpen={showBudgetModal}
-        onClose={() => setShowBudgetModal(false)}
-        currentBudget={data.budget || 500}
-        userId={userId}
-        onBudgetUpdate={onBudgetUpdate}
-      />
-    </>
+function BudgetTrackerCard({ data }: { data: any }) {
+  const usagePercentage = (data.total_spend / data.budget) * 100;
+  return (
+    <div className="p-6 rounded-lg h-full flex flex-col" style={{ backgroundColor: THEME.card }}>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="text-lg font-bold text-white">Budget Tracker</h3>
+        <button className="text-sm text-indigo-400 font-semibold">Set Budget</button>
+      </div>
+      <div className="text-3xl font-bold text-white">${data.total_spend.toFixed(2)} / <span className="text-lg font-medium text-gray-400">${data.budget.toFixed(2)}</span></div>
+      <div className={`mt-1 text-sm font-bold ${data.indicator === '↓' ? 'text-green-400' : 'text-red-400'}`}>
+        {data.indicator} {Math.abs(data.percent_delta)}% {data.status}
+      </div>
+      <div className="mt-auto">
+        <p className="text-xs text-gray-400 mb-1">Monthly Budget Usage {usagePercentage.toFixed(1)}%</p>
+        <div className="w-full bg-gray-700 rounded-full h-2.5">
+          <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${usagePercentage}%` }}></div>
+        </div>
+        <p className="text-sm font-semibold text-white mt-2">Status: <span className="text-green-400">{data.status}</span></p>
+      </div>
+    </div>
   );
 }
 
 function TopPromptsCard({ data }: { data: any[] }) {
   return (
-    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Top 5 Most Expensive Prompts</div>
-      <div className="flex flex-col gap-2 sm:gap-3 flex-1">
-        {data && data.length > 0 ? (
-          data.map((prompt, index) => (
-            <div key={index} className="border-l-4 border-[#FF6F3C] pl-2 sm:pl-3 py-2 bg-gray-50 rounded">
-              <div className="text-xs sm:text-sm font-semibold text-gray-800 mb-1">
-                {prompt.prompt}
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600">{prompt.model}</span>
-                <span className="text-xs sm:text-sm font-bold text-[#FF6F3C]">${prompt.cost?.toFixed(4)}</span>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-500">
-            <div className="text-center">
-              <div className="text-base sm:text-lg mb-2">📊</div>
-              <div className="text-sm sm:text-base">No prompts analyzed yet</div>
-              <div className="text-xs mt-1">Start using the extension to see cost data</div>
+    <div className="p-6 rounded-lg h-full" style={{ backgroundColor: THEME.card }}>
+      <h3 className="text-lg font-bold text-white mb-4">Top 5 Most Expensive Prompts</h3>
+      <div className="space-y-3">
+        {data.map((prompt, index) => (
+          <div key={index} className="p-3 rounded-md" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
+            <p className="text-sm text-gray-300 truncate">{prompt.prompt}</p>
+            <div className="flex justify-between items-center mt-1">
+              <span className="text-xs text-gray-400">{prompt.model}</span>
+              <span className="text-sm font-bold text-orange-400">${prompt.cost.toFixed(4)}</span>
             </div>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
 }
 
 function MostUsedModelCard({ model }: { model: string }) {
-  const getModelColor = (modelName: string) => {
-    if (modelName.includes('gpt') || modelName.includes('GPT') || modelName.includes('OpenAI')) return '#10A37F';
-    if (modelName.includes('claude') || modelName.includes('Claude') || modelName.includes('Anthropic')) return '#D97706';
-    if (modelName.includes('gemini') || modelName.includes('Gemini') || modelName.includes('Google')) return '#4285F4';
-    if (modelName.includes('llama') || modelName.includes('Llama')) return '#8B5CF6';
-    return '#6366F1';
-  };
-
-  const modelColor = getModelColor(model || '');
-
   return (
-    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Most Used Model</div>
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div 
-          className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 rounded-full flex items-center justify-center mb-3 sm:mb-4"
-          style={{ backgroundColor: `${modelColor}20`, border: `3px solid ${modelColor}` }}
-        >
-          <span className="text-xl sm:text-2xl font-bold" style={{ color: modelColor }}>
-            {model && model !== 'No data' ? model.charAt(0).toUpperCase() : '?'}
-          </span>
+    <div className="p-6 rounded-lg h-full flex flex-col items-center justify-center text-center" style={{ backgroundColor: THEME.card }}>
+      <h3 className="text-lg font-bold text-white mb-4">Most Used Model</h3>
+      <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+        <span className="text-5xl font-bold text-green-300">{model.charAt(0).toUpperCase()}</span>
+      </div>
+      <p className="text-2xl font-bold text-white">{model}</p>
+      <p className="text-xs text-gray-400">Based on prompt frequency</p>
+    </div>
+  );
+}
+
+function TotalSpendCard({ amount }: { amount: number }) {
+  return (
+    <div className="p-6 rounded-lg h-full flex flex-col" style={{ backgroundColor: THEME.card }}>
+      <h3 className="text-lg font-bold text-white mb-4">Total Spend</h3>
+      <div className="my-auto text-center">
+        <p className="text-5xl font-bold text-white">${amount.toFixed(2)}</p>
+        <p className="text-md text-gray-400">This Month</p>
+        <div className="w-full bg-gray-700 rounded-full h-1 mt-4">
+          <div className="bg-indigo-500 h-1 rounded-full" style={{ width: '100%' }}></div>
         </div>
-        <div className="text-lg sm:text-xl font-bold text-[#0E1E36] text-center">
-          {model || 'No data'}
-        </div>
-        <div className="text-xs sm:text-sm text-gray-500 text-center mt-2">
-          {model && model !== 'No data' ? 'Based on prompt frequency' : 'Start using the extension to see data'}
-        </div>
+        <p className="text-xs text-gray-500 mt-1">Cumulative monthly spend from all LLM interactions</p>
+      </div>
+      <div className="mt-auto">
+        <PromptOptimizerButton />
       </div>
     </div>
   );
 }
 
-function TotalSpendCard({ totalSpend }: { totalSpend: number }) {
+function RiskFrequencyCard({ data }: { data: Record<string, number> }) {
+  const colors = ['#FF6B6B', '#FFD166', '#06D6A0', '#118AB2', '#073B4C'];
+  const total = Object.values(data).reduce((sum, count) => sum + count, 0);
+
   return (
-    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-2 sm:gap-3 min-h-[280px] sm:min-h-[300px] lg:min-h-[320px]" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="font-extrabold text-xl sm:text-2xl text-[#0E1E36] mb-1">Total Spend</div>
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#FF6F3C] mb-2">
-          ${(totalSpend || 0).toFixed(2)}
-        </div>
-        <div className="text-base sm:text-lg text-gray-600 mb-3 sm:mb-4">This Month</div>
-        <div className="w-full bg-gray-100 rounded-full h-2">
-          <div 
-            className="bg-gradient-to-r from-[#FF6F3C] to-[#FF8A5C] h-2 rounded-full transition-all duration-500"
-            style={{ width: `${Math.min(100, (totalSpend || 0) / 5)}%` }}
-          />
-        </div>
-        <div className="text-xs text-gray-500 mt-2 text-center">
-          Cumulative monthly spend from all LLM interactions
-        </div>
+    <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card }}>
+       <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold text-white">Risk Type Frequency</h3>
+        <span className="text-sm text-gray-400">{total} prompts analyzed</span>
       </div>
-    </div>
-  );
-}
-
-// Cost Summary Panel Component
-function CostSummaryPanel({ userId }: { userId: string }) {
-  const { data: dashboardData, loading, error, refetch } = useDashboardMetrics(userId);
-
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white rounded-2xl shadow-md p-7 flex items-center justify-center min-h-[320px]">
-            <div className="text-gray-500">Loading...</div>
+      <div className="flex flex-wrap gap-3">
+        {Object.entries(data).map(([type, count], index) => (
+          <div key={type} className="px-4 py-2 rounded-full font-semibold text-white" style={{ backgroundColor: colors[index % colors.length] + '40', border: `1px solid ${colors[index % colors.length]}` }}>
+            {type} ({count})
           </div>
         ))}
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-10">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="text-red-800">Error loading dashboard data: {error}</div>
-          <button 
-            onClick={refetch}
-            className="mt-2 text-red-600 hover:text-red-800 underline"
-          >
-            Try again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-      <BudgetTrackerCard data={dashboardData?.budget_tracker} userId={userId} onBudgetUpdate={refetch} />
-      <TopPromptsCard data={dashboardData?.top_prompts || []} />
-      <MostUsedModelCard model={dashboardData?.most_used_model || 'No data'} />
-      <TotalSpendCard totalSpend={dashboardData?.total_spend || 0} />
     </div>
   );
 }
 
-// --- Framework Tag Colors ---
-const FRAMEWORK_COLORS: Record<string, string> = {
-  NIST: 'bg-blue-500',
-  'NIST AI RMF': 'bg-indigo-500',
-  FedRAMP: 'bg-orange-500',
-  'SOC 2': 'bg-green-600',
-  'ISO 27001': 'bg-pink-500',
-  SO: 'bg-yellow-500',
-  'NIST AI RMP SOC': 'bg-cyan-600',
-  NSST: 'bg-purple-500',
-};
+function RiskTrendsCard({ data }: { data: any }) {
+   const chartData = data.total_prompts.map((total: any, index: number) => ({
+    name: `Day ${index + 1}`,
+    total,
+    highRisk: data.high_risk_prompts[index],
+  }));
 
-// --- Flagged Prompt Interface ---
-interface FlaggedPrompt {
-  id: string;
-  summary: string;
-  frameworks: string[];
-  date: string;
-  risk: 'High' | 'Medium' | 'Low';
-  status: string;
-  platform?: string;
-  url?: string;
-  piiTypes?: string[];
-  mappedControls?: any[];
-  detectionTime: string;
-  category?: string;
-  subcategory?: string;
-  riskType?: string;
-}
-
-function FrameworkTag({ fw }: { fw: string }) {
-  const color = FRAMEWORK_COLORS[fw] || 'bg-gray-400';
   return (
-    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold text-white mr-2 mb-1 ${color}`}>{fw}</span>
+    <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card }}>
+       <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold text-white">Prompt Risk Trends</h3>
+        <span className="text-sm text-gray-400">Last 7 Days</span>
+      </div>
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+            <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" fontSize={12} />
+            <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} />
+            <Tooltip contentStyle={{ backgroundColor: '#252945', border: '1px solid #323755' }} />
+            <Legend wrapperStyle={{fontSize: "14px"}}/>
+            <Line type="monotone" dataKey="total" name="Total Prompts" stroke="#3b82f6" strokeWidth={2} />
+            <Line type="monotone" dataKey="highRisk" name="High Risk" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="text-center mt-6">
+        <div className="inline-block p-3 rounded-full bg-green-500/20 mb-2">
+            <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+        </div>
+        <p className="text-lg font-bold text-white">Excellent</p>
+        <p className="text-sm text-gray-400">No high-risk prompts detected</p>
+      </div>
+      <div className="flex justify-around mt-4">
+          <div className="text-center">
+              <p className="text-3xl font-bold text-blue-400">{data.total_prompts.reduce((a: any,b: any) => a+b, 0)}</p>
+              <p className="text-sm text-gray-400">Total Prompts</p>
+          </div>
+          <div className="text-center">
+              <p className="text-3xl font-bold text-red-400">{data.high_risk_prompts.reduce((a: any,b: any) => a+b, 0)}</p>
+              <p className="text-sm text-gray-400">High Risk</p>
+          </div>
+      </div>
+    </div>
   );
 }
 
-// Component to display flagged categories with reveal functionality
-function FlaggedCategoriesDisplay({ 
-  prompt, 
-  isRevealed, 
-  decryptedText, 
-  onReveal, 
-  isAdmin 
-}: { 
-  prompt: FlaggedPrompt; 
-  isRevealed: boolean; 
-  decryptedText?: string; 
-  onReveal: () => void; 
-  isAdmin: boolean; 
-}) {
-  const getFlaggedCategories = () => {
-    const categories: string[] = [];
-    
-    // Add PII types with better formatting
-    if (prompt.piiTypes && prompt.piiTypes.length > 0) {
-      const piiItems = prompt.piiTypes.map(type => {
-        // Format common PII types to be more readable
-        switch (type.toLowerCase()) {
-          case 'email': return 'Email Address';
-          case 'phone': return 'Phone Number';
-          case 'ssn': return 'Social Security Number';
-          case 'credit_card': return 'Credit Card';
-          case 'api_key': return 'API Key';
-          case 'password': return 'Password';
-          case 'address': return 'Physical Address';
-          case 'name': return 'Personal Name';
-          case 'medical': return 'Medical Information';
-          case 'financial': return 'Financial Data';
-          default: return type.charAt(0).toUpperCase() + type.slice(1);
-        }
-      });
-      categories.push(...piiItems);
-    }
-    
-    // Add risk type with better formatting
-    if (prompt.riskType) {
-      const formattedRisk = prompt.riskType.charAt(0).toUpperCase() + prompt.riskType.slice(1);
-      categories.push(`${formattedRisk} Risk`);
-    }
-    
-    // Add category if available
-    if (prompt.category && prompt.category.toLowerCase() !== 'general') {
-      categories.push(prompt.category);
-    }
-    
-    // Add subcategory if available and different from category
-    if (prompt.subcategory && prompt.subcategory !== prompt.category) {
-      categories.push(prompt.subcategory);
-    }
-    
-    return categories;
-  };
-
-  const categories = getFlaggedCategories();
-
-  if (isRevealed && decryptedText) {
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">Original Prompt:</span>
-          {isAdmin && (
-            <button
-              onClick={() => window.location.reload()} // Simple way to hide again
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              Hide
-            </button>
-          )}
-        </div>
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-          <div className="text-sm text-gray-900 whitespace-pre-wrap font-mono">
-            {decryptedText}
-          </div>
-        </div>
-      </div>
-    );
-  }
+function OverviewContent({ metrics, setActiveTab }: { metrics: any; setActiveTab: (tab: string) => void; }) {
+  if (!metrics) return <div className="text-center py-10 text-white">No data available.</div>;
 
   return (
-    <div className="space-y-2 mb-2">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="lg:col-span-1 md:col-span-1">
+        <BudgetTrackerCard data={metrics.budget_tracker} />
+      </div>
+      <div className="lg:col-span-1 md:col-span-1">
+         <TopPromptsCard data={metrics.top_prompts} />
+      </div>
+      <div className="lg:col-span-1 md:col-span-1">
+        <MostUsedModelCard model={metrics.most_used_model} />
+      </div>
+       <div className="lg:col-span-1 md:col-span-1">
+        <TotalSpendCard amount={metrics.total_spend} />
+      </div>
+      <div className="lg:col-span-2 md:col-span-2">
+        <RiskFrequencyCard data={metrics.risk_types} />
+      </div>
+      <div className="lg:col-span-2 md:col-span-2">
+        <RiskTrendsCard data={metrics.trends} />
+      </div>
+    </div>
+  );
+}
+
+function FlaggedPromptItem({ prompt }: { prompt: any }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const getRiskColor = (level: string) => {
+    switch (level) {
+      case 'high': return 'bg-red-500/80 text-red-100';
+      case 'medium': return 'bg-yellow-500/80 text-yellow-100';
+      case 'low': return 'bg-green-500/80 text-green-100';
+      default: return 'bg-gray-500/80 text-gray-100';
+    }
+  };
+  
+  const getRiskIndicatorColor = (level: string) => {
+    switch (level) {
+      case 'high': return 'bg-red-500';
+      case 'medium': return 'bg-yellow-500';
+      case 'low': return 'bg-green-500';
+      default: return 'bg-gray-500';
+    }
+  }
+
+  const getTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + " years ago";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + " months ago";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + " days ago";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + " hours ago";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + " minutes ago";
+    return Math.floor(seconds) + " seconds ago";
+  };
+
+  const complianceTags = prompt.compliance_tags || ['GDPR', 'CCPA', 'OWASP'];
+
+  return (
+    <div className="p-3 rounded-md" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">Flagged Content:</span>
-        {isAdmin && (
-          <button
-            onClick={onReveal}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+        <div>
+          <p className="font-semibold text-red-400 text-sm">{prompt.risk_type || 'Undefined Risk'}</p>
+          <p className="text-gray-300 truncate max-w-md">{prompt.prompt_text}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className={`w-3 h-3 rounded-full ${getRiskIndicatorColor(prompt.risk_level)}`}></div>
+          <button 
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="bg-indigo-600 px-4 py-1.5 rounded-md text-sm font-semibold text-white hover:bg-indigo-500"
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            Reveal
+            Review
           </button>
-        )}
+        </div>
       </div>
       
-      {categories.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
-          {categories.map((category, index) => (
-            <span 
-              key={index}
-              className="inline-block px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800"
-            >
-              {category}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <div className="text-sm text-gray-500 italic">
-          Sensitive content detected - admin required to view
+      {isExpanded && (
+        <div className="mt-4 p-4 rounded-lg bg-black/20">
+          <div className="flex justify-between items-start">
+            <h3 className="text-gray-400 text-sm font-semibold mb-2">Original Prompt</h3>
+            <div className="flex items-center gap-2">
+              <span className={`px-3 py-1 text-xs font-bold rounded-full ${getRiskColor(prompt.risk_level)}`}>
+                {prompt.risk_level?.toUpperCase() || 'UNKNOWN'} RISK
+              </span>
+              <span className="px-3 py-1 text-xs font-bold rounded-full bg-yellow-400/80 text-yellow-900">FLAGGED</span>
+            </div>
+          </div>
+
+          <div className="bg-red-900/10 border border-red-500/30 p-3 rounded-md text-gray-200 mb-4">
+            {prompt.prompt_text}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex gap-2">
+              {complianceTags.map((tag: string) => (
+                <span key={tag} className="px-3 py-1 text-xs rounded-full bg-gray-600 text-gray-200">{tag}</span>
+              ))}
+            </div>
+            <div className="text-sm text-gray-400">
+              <strong>Platform:</strong> {prompt.platform || 'Unknown'} · <strong>LLM:</strong> {prompt.model || 'Unknown'}
+            </div>
+          </div>
+          
+          <div className="border-t border-white/10 mt-4 pt-2 text-xs text-gray-500 flex justify-between">
+            <span>{getTimeAgo(prompt.captured_at)}</span>
+            <span className="font-mono text-red-400"><strong>PII:</strong> {prompt.risk_type}</span>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function FlaggedPromptsPanel() {
-  const [flaggedPrompts, setFlaggedPrompts] = useState<FlaggedPrompt[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const [revealedPrompts, setRevealedPrompts] = useState<Set<string>>(new Set());
-  const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
-  const { user } = useAuth();
-
-  useEffect(() => {
-    fetchFlaggedPrompts();
-  }, []);
-
-  const fetchFlaggedPrompts = async () => {
-    try {
-      setRefreshing(true);
-      setError(null);
-      
-      console.log('Complyze Dashboard: Fetching flagged prompts...');
-      const response = await fetch('/api/prompts/flagged?limit=20');
-      console.log('Complyze Dashboard: Response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Complyze Dashboard: API error:', errorText);
-        throw new Error(`Failed to fetch flagged prompts: ${response.status} ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Complyze Dashboard: API response:', data);
-      console.log('Complyze Dashboard: Number of flagged prompts:', data.prompts?.length || 0);
-      
-      setFlaggedPrompts(data.prompts || []);
-    } catch (err) {
-      console.error('Error fetching flagged prompts:', err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      // Fall back to empty array on error
-      setFlaggedPrompts([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const createTestData = async () => {
-    try {
-      console.log('Complyze Dashboard: Creating test data...');
-      
-      const response = await fetch('/api/test-db', { method: 'POST' });
-      console.log('Complyze Dashboard: Create test response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Complyze Dashboard: Create test error:', errorText);
-        throw new Error(`Failed to create test data: ${response.status} ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      console.log('Complyze Dashboard: Create test result:', result);
-      
-      // Refresh the list after creating test data
-      await fetchFlaggedPrompts();
-      
-      // Show success message
-      console.log('Complyze Dashboard: Test data created successfully');
-      
-    } catch (error) {
-      console.error('Failed to create test data:', error);
-      setError('Failed to create test data: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    }
-  };
-
-  const revealPrompt = async (promptId: string) => {
-    if (!user?.id) {
-      console.error('User not authenticated');
-      return;
-    }
-
-    try {
-      console.log('Complyze Dashboard: Revealing prompt:', promptId);
-      
-      const response = await fetch('/api/prompts/decrypt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          promptId,
-          userId: user.id
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (response.status === 403) {
-          alert('Access denied. Admin privileges required to view original prompts.');
-          return;
-        }
-        throw new Error(errorData.error || 'Failed to decrypt prompt');
-      }
-
-      const data = await response.json();
-      console.log('Complyze Dashboard: Prompt revealed:', data);
-
-      // Update the revealed prompts set and decrypted texts map
-      setRevealedPrompts(prev => new Set([...prev, promptId]));
-      setDecryptedTexts(prev => new Map([...prev, [promptId, data.decryptedText]]));
-
-    } catch (error) {
-      console.error('Failed to reveal prompt:', error);
-      alert('Failed to reveal prompt: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    }
-  };
-
-  if (loading && !refreshing) {
+function FlaggedPrompts({ prompts }: { prompts: any[] }) {
+  if (!prompts || prompts.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <div className="font-bold text-xl text-[#0E1E36] mb-2">Flagged Prompts</div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-gray-500">Loading flagged prompts...</div>
-        </div>
+      <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: '1px' }}>
+        <h2 className="text-xl font-bold text-white mb-4">Flagged Prompts</h2>
+        <p className="text-gray-400">No prompts have been flagged recently.</p>
       </div>
     );
   }
 
-  if (error && !refreshing) {
-    return (
-      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={createTestData}
-              className="text-sm text-green-600 hover:text-green-800 transition-colors"
-            >
-              Create Test Data
-            </button>
-            <button 
-              onClick={fetchFlaggedPrompts}
-              className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
-              disabled={refreshing}
-            >
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-red-500">Error loading flagged prompts: {error}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (flaggedPrompts.length === 0 && !refreshing) {
-    return (
-      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-bold text-xl text-[#0E1E36]">Flagged Prompts</div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={createTestData}
-              className="text-sm text-green-600 hover:text-green-800 transition-colors"
-            >
-              Create Test Data
-            </button>
-            <button 
-              onClick={fetchFlaggedPrompts}
-              className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
-              disabled={refreshing}
-            >
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-gray-500">No flagged prompts found. Your prompts are looking secure! 🛡️</div>
-        </div>
-      </div>
-    );
-  }
+  const flagged = prompts.filter(p => p.status === 'flagged');
 
   return (
-    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 lg:p-7 flex flex-col gap-3 sm:gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2 sm:gap-0">
-        <div className="font-bold text-lg sm:text-xl text-[#0E1E36]">
-          Flagged Prompts {refreshing && <span className="text-sm text-gray-500">(Refreshing...)</span>}
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <button 
-            onClick={createTestData}
-            className="text-green-600 hover:text-green-800 transition-colors"
-          >
-            Create Test Data
-          </button>
-          <button 
-            onClick={fetchFlaggedPrompts}
-            className="text-blue-600 hover:text-blue-800 transition-colors"
-            disabled={refreshing}
-          >
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-      </div>
-      {flaggedPrompts.map((row, i) => (
-        <div key={row.id || i} className="flex flex-col lg:flex-row lg:items-start justify-between border-b border-gray-100 py-3 sm:py-4 last:border-b-0 gap-3 lg:gap-4">
-          <div className="flex-1">
-            {/* Replaced summary with flagged categories display */}
-            <FlaggedCategoriesDisplay
-              prompt={row}
-              isRevealed={revealedPrompts.has(row.id)}
-              decryptedText={decryptedTexts.get(row.id)}
-              onReveal={() => revealPrompt(row.id)}
-              isAdmin={user?.role === 'admin' || user?.role === 'super_admin' || user?.plan === 'enterprise'}
-            />
-            
-            {/* Framework Tags */}
-            <div className="flex flex-wrap gap-1 mb-2">
-              {row.frameworks?.map(fw => <FrameworkTag key={fw} fw={fw} />)}
-            </div>
-            
-            {/* Platform and LLM Provider Info */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
-              {row.platform && (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-medium text-gray-500">Platform:</span>
-                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold text-white ${
-                    row.platform === 'chatgpt' ? 'bg-green-600' :
-                    row.platform === 'claude' ? 'bg-orange-600' :
-                    row.platform === 'gemini' ? 'bg-blue-600' :
-                    'bg-gray-600'
-                  }`}>
-                    {row.platform === 'chatgpt' ? 'ChatGPT' :
-                     row.platform === 'claude' ? 'Claude' :
-                     row.platform === 'gemini' ? 'Gemini' :
-                     row.platform.toUpperCase()}
-                  </span>
-                </div>
-              )}
-              
-              {/* LLM Provider Badge */}
-              {row.platform && (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-medium text-gray-500">LLM:</span>
-                  <span className={`inline-block px-2 py-1 rounded text-xs font-semibold text-white ${
-                    row.platform === 'chatgpt' ? 'bg-green-500' :
-                    row.platform === 'claude' ? 'bg-orange-500' :
-                    row.platform === 'gemini' ? 'bg-blue-500' :
-                    'bg-gray-500'
-                  }`}>
-                    {row.platform === 'chatgpt' ? 'OpenAI GPT-4' :
-                     row.platform === 'claude' ? 'Anthropic Claude' :
-                     row.platform === 'gemini' ? 'Google Gemini' :
-                     'Unknown LLM'}
-                  </span>
-                </div>
-              )}
-            </div>
-            
-            {/* Metadata Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs text-gray-400">
-              <span>{row.date}</span>
-              {row.piiTypes && row.piiTypes.length > 0 && (
-                <>
-                  <span className="hidden sm:inline">•</span>
-                  <span className="text-red-600 font-medium">
-                    PII: {row.piiTypes.join(', ')}
-                  </span>
-                </>
-              )}
-              {row.url && (
-                <>
-                  <span className="hidden sm:inline">•</span>
-                  <span className="text-blue-600 font-medium truncate max-w-[200px] sm:max-w-[300px]" title={row.url}>
-                    {row.url}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-          
-          {/* Risk and Status Badges */}
-          <div className="flex flex-row lg:flex-col gap-2 lg:mt-0">
-            <span className={`inline-block px-2 sm:px-3 py-1 rounded-full text-xs font-bold text-center ${
-              row.risk === 'High' ? 'bg-red-100 text-red-700' : 
-              row.risk === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 
-              'bg-green-100 text-green-700'
-            }`}>
-              {row.risk} Risk
-            </span>
-            <span className={`inline-block px-2 py-1 rounded text-xs font-medium text-center ${
-              row.status === 'flagged' ? 'bg-yellow-100 text-yellow-800' :
-              row.status === 'blocked' ? 'bg-red-100 text-red-800' :
-              'bg-gray-100 text-gray-800'
-            }`}>
-              {row.status?.toUpperCase()}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Prompt Integrity Score Card Component
-function PromptIntegrityScoreCard({ data }: { data: any }) {
-  if (!data) {
-    return (
-      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Integrity Score</h3>
-        <div className="flex justify-center items-center h-48">
-          <div className="text-gray-500">Loading...</div>
-        </div>
-      </div>
-    );
-  }
-
-  const getStatus = (score: number) => {
-    if (score >= 80) return { text: 'Stable', color: '#10b981' };
-    if (score >= 60) return { text: 'Suspicious', color: '#f59e0b' };
-    return { text: 'Critical', color: '#ef4444' };
-  };
-
-  const status = getStatus(data.avg_integrity);
-  const circumference = 2 * Math.PI * 45; // radius = 45
-  const strokeDashoffset = circumference - (data.avg_integrity / 100) * circumference;
-
-  return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Integrity Score</h3>
-      
-      {/* Radial Gauge */}
-      <div className="relative flex justify-center items-center">
-        <svg width="120" height="120" className="transform -rotate-90">
-          {/* Background circle */}
-          <circle
-            cx="60"
-            cy="60"
-            r="45"
-            stroke="#e5e7eb"
-            strokeWidth="10"
-            fill="none"
-          />
-          {/* Progress circle */}
-          <circle
-            cx="60"
-            cy="60"
-            r="45"
-            stroke={status.color}
-            strokeWidth="10"
-            fill="none"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            className="transition-all duration-1000 ease-out"
-            strokeLinecap="round"
-          />
-        </svg>
-        <div className="absolute transform rotate-0 text-center">
-          <div className="text-3xl font-bold text-[#0E1E36]">{data.avg_integrity}</div>
-          <div className="text-sm text-gray-500">/ 100</div>
-        </div>
-      </div>
-
-      {/* Status */}
-      <div className="text-center">
-        <span className="text-lg font-semibold" style={{ color: status.color }}>
-          {status.text}
-        </span>
-        {data.total > 0 && (
-          <div className="text-xs text-gray-500 mt-1">
-            Based on {data.total} prompts
-          </div>
-        )}
-      </div>
-
-      {/* Counts */}
-      <div className="grid grid-cols-3 gap-2 mt-2">
-        <div className="text-center p-2 rounded-lg bg-green-50">
-          <div className="text-2xl font-bold text-green-600">{data.stable}</div>
-          <div className="text-xs text-gray-600">Stable</div>
-        </div>
-        <div className="text-center p-2 rounded-lg bg-orange-50">
-          <div className="text-2xl font-bold text-orange-600">{data.suspicious}</div>
-          <div className="text-xs text-gray-600">Suspicious</div>
-        </div>
-        <div className="text-center p-2 rounded-lg bg-red-50">
-          <div className="text-2xl font-bold text-red-600">{data.critical}</div>
-          <div className="text-xs text-gray-600">Critical</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Risk Type Frequency Card Component
-function RiskTypeFrequencyCard({ data }: { data: Record<string, number> }) {
-  const riskTypeColors: Record<string, string> = {
-    'PII': '#ef4444',
-    'IP': '#f97316',
-    'Compliance': '#ec4899',
-    'Jailbreak': '#a855f7',
-    'Credential Exposure': '#3b82f6',
-    'Data Leakage': '#eab308',
-    'Regulatory': '#22c55e',
-    'Other': '#6b7280'
-  };
-
-  // Sort by frequency
-  const sortedRisks = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
-  const totalPrompts = Object.values(data || {}).reduce((sum, count) => sum + count, 0);
-
-  return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="flex justify-between items-center">
-        <h3 className="font-bold text-xl text-[#0E1E36]">Risk Type Frequency</h3>
-        {totalPrompts > 0 && (
-          <span className="text-sm text-gray-500">
-            {totalPrompts} prompts analyzed
-          </span>
-        )}
-      </div>
-      
-      <div className="flex flex-wrap gap-2">
-        {sortedRisks.map(([riskType, count]) => {
-          const color = riskTypeColors[riskType] || riskTypeColors['Other'];
-          const size = count > 5 ? 'text-base px-4 py-2' : 'text-sm px-3 py-1.5';
-          
-          return (
-            <div
-              key={riskType}
-              className={`inline-flex items-center rounded-full font-medium ${size} transition-transform hover:scale-105`}
-              style={{
-                backgroundColor: `${color}20`,
-                color: color,
-                border: `1px solid ${color}40`
-              }}
-            >
-              <span>{riskType}</span>
-              <span className="ml-2 font-bold">({count})</span>
-            </div>
-          );
-        })}
-        
-        {sortedRisks.length === 0 && (
-          <div className="text-gray-500 text-center w-full py-8">
-            {totalPrompts === 0 ? 'No prompts analyzed yet' : 'No risk patterns detected'}
-            <div className="text-xs mt-2">
-              {totalPrompts === 0 ? 'Start using the extension to see risk analysis' : 'Your prompts are looking secure! 🛡️'}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Prompt Risk Trends Card Component
-function PromptRiskTrendsCard({ data }: { data: any }) {
-  if (!data) {
-    return (
-      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Risk Trends</h3>
-        <div className="flex justify-center items-center h-48">
-          <div className="text-gray-500">Loading...</div>
-        </div>
-      </div>
-    );
-  }
-
-  // Calculate metrics
-  const totalPrompts = data.total_prompts.reduce((a: number, b: number) => a + b, 0);
-  const totalHighRisk = data.high_risk_prompts.reduce((a: number, b: number) => a + b, 0);
-  const riskPercentage = totalPrompts > 0 ? Math.round((totalHighRisk / totalPrompts) * 100) : 0;
-  
-  // Determine trend direction and status
-  const getTrendInfo = () => {
-    if (totalHighRisk === 0) {
-      return { status: 'Excellent', emoji: '🟢', color: '#10b981', description: 'No high-risk prompts detected' };
-    } else if (riskPercentage <= 10) {
-      return { status: 'Good', emoji: '🟡', color: '#f59e0b', description: `${riskPercentage}% high-risk prompts` };
-    } else {
-      return { status: 'Needs Attention', emoji: '🔴', color: '#ef4444', description: `${riskPercentage}% high-risk prompts` };
-    }
-  };
-  
-  const trendInfo = getTrendInfo();
-  
-  // Create enhanced chart
-  const maxValue = Math.max(...data.total_prompts, ...data.high_risk_prompts, 1);
-  const height = 120;
-  const width = 280;
-  const padding = 20;
-  
-  // Generate points for both lines
-  const totalPromptPoints = data.total_prompts.map((value: number, index: number) => {
-    const x = padding + (index / (data.total_prompts.length - 1)) * (width - 2 * padding);
-    const y = height - padding - ((value / maxValue) * (height - 2 * padding));
-    return { x, y, value };
-  });
-  
-  const highRiskPoints = data.high_risk_prompts.map((value: number, index: number) => {
-    const x = padding + (index / (data.high_risk_prompts.length - 1)) * (width - 2 * padding);
-    const y = height - padding - ((value / maxValue) * (height - 2 * padding));
-    return { x, y, value };
-  });
-
-  return (
-    <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-4" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-      <div className="flex justify-between items-center">
-        <h3 className="font-bold text-xl text-[#0E1E36]">Prompt Risk Trends</h3>
-        <span className="text-sm text-gray-500">Last 7 Days</span>
-      </div>
-      
-      {/* Enhanced Chart */}
-      <div className="flex justify-center items-center mb-4">
-        <svg width={width} height={height} className="border rounded-lg bg-gradient-to-br from-slate-50 to-white">
-          {/* Grid lines */}
-          {[0, 1, 2, 3, 4].map(i => (
-            <line
-              key={i}
-              x1={padding}
-              y1={padding + (i * (height - 2 * padding) / 4)}
-              x2={width - padding}
-              y2={padding + (i * (height - 2 * padding) / 4)}
-              stroke="#f1f5f9"
-              strokeWidth="1"
-            />
-          ))}
-          
-          {/* Vertical grid lines */}
-          {data.total_prompts.map((_: any, index: number) => (
-            <line
-              key={`v-${index}`}
-              x1={padding + (index / (data.total_prompts.length - 1)) * (width - 2 * padding)}
-              y1={padding}
-              x2={padding + (index / (data.total_prompts.length - 1)) * (width - 2 * padding)}
-              y2={height - padding}
-              stroke="#f8fafc"
-              strokeWidth="1"
-            />
-          ))}
-          
-          {/* Total prompts area fill */}
-          <path
-            d={`M ${totalPromptPoints[0].x},${height - padding} L ${totalPromptPoints.map((p: { x: number; y: number; value: number }) => `${p.x},${p.y}`).join(' L ')} L ${totalPromptPoints[totalPromptPoints.length - 1].x},${height - padding} Z`}
-            fill="url(#totalGradient)"
-            opacity="0.3"
-          />
-          
-          {/* High risk area fill */}
-          <path
-            d={`M ${highRiskPoints[0].x},${height - padding} L ${highRiskPoints.map((p: { x: number; y: number; value: number }) => `${p.x},${p.y}`).join(' L ')} L ${highRiskPoints[highRiskPoints.length - 1].x},${height - padding} Z`}
-            fill="url(#riskGradient)"
-            opacity="0.4"
-          />
-          
-          {/* Total prompts line */}
-          <polyline
-            points={totalPromptPoints.map((p: { x: number; y: number; value: number }) => `${p.x},${p.y}`).join(' ')}
-            fill="none"
-            stroke="#3b82f6"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          
-          {/* High risk line */}
-          <polyline
-            points={highRiskPoints.map((p: { x: number; y: number; value: number }) => `${p.x},${p.y}`).join(' ')}
-            fill="none"
-            stroke="#ef4444"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          
-          {/* Data points for total prompts */}
-          {totalPromptPoints.map((point: { x: number; y: number; value: number }, index: number) => (
-            <circle
-              key={`total-${index}`}
-              cx={point.x}
-              cy={point.y}
-              r="4"
-              fill="#3b82f6"
-              stroke="white"
-              strokeWidth="2"
-            />
-          ))}
-          
-          {/* Data points for high risk */}
-          {highRiskPoints.map((point: { x: number; y: number; value: number }, index: number) => (
-            <circle
-              key={`risk-${index}`}
-              cx={point.x}
-              cy={point.y}
-              r="4"
-              fill="#ef4444"
-              stroke="white"
-              strokeWidth="2"
-            />
-          ))}
-          
-          {/* Gradients */}
-          <defs>
-            <linearGradient id="totalGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.5"/>
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.1"/>
-            </linearGradient>
-            <linearGradient id="riskGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.6"/>
-              <stop offset="100%" stopColor="#ef4444" stopOpacity="0.1"/>
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-
-      {/* Legend */}
-      <div className="flex justify-center gap-6 mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-          <span className="text-sm text-gray-600">Total Prompts</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-          <span className="text-sm text-gray-600">High Risk</span>
-        </div>
-      </div>
-
-      {/* Status Summary */}
-      <div className="text-center mb-4">
-        <div className="text-3xl mb-2">{trendInfo.emoji}</div>
-        <div className="text-lg font-semibold text-[#0E1E36] mb-1">
-          {trendInfo.status}
-        </div>
-        <div className="text-sm text-gray-600">
-          {trendInfo.description}
-        </div>
-      </div>
-
-      {/* Detailed Summary */}
-      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-blue-600">
-            {totalPrompts}
-          </div>
-          <div className="text-xs text-gray-600">Total Prompts</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-red-600">
-            {totalHighRisk}
-          </div>
-          <div className="text-xs text-gray-600">High Risk</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Analytics Panel Component  
-function AnalyticsPanel({ userId }: { userId: string }) {
-  const { data: dashboardData, loading, error } = useDashboardMetrics(userId);
-
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8 lg:mb-10">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="bg-white rounded-2xl shadow-md p-7 flex items-center justify-center min-h-[320px]">
-            <div className="text-gray-500">Loading...</div>
-          </div>
+    <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: '1px' }}>
+      <h2 className="text-xl font-bold text-white mb-4">Flagged Prompts</h2>
+      <div className="space-y-3">
+        {flagged.map((prompt) => (
+          <FlaggedPromptItem key={prompt.id} prompt={prompt} />
         ))}
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 mb-6 sm:mb-8 lg:mb-10">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="text-red-800">Error loading analytics data: {error}</div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8 lg:mb-10">
-      {/* Prompt Integrity Score Card */}
-      <PromptIntegrityScoreCard data={dashboardData?.integrity_score} />
-      
-      {/* Risk Type Frequency Card */}
-      <RiskTypeFrequencyCard data={dashboardData?.risk_types || {}} />
-      
-      {/* Prompt Risk Trends Card */}
-      <PromptRiskTrendsCard data={dashboardData?.trends} />
     </div>
   );
 }
 
-export default function Dashboard() {
-  const { user, loading, logout } = useAuth();
-  const userId = user?.id || 'fa166056-023d-4822-b250-b5b5a47f9df8';
-
-  const [optimizerOpen, setOptimizerOpen] = useState(false);
-  const [enhancedPrompt, setEnhancedPrompt] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-
-  const handleOptimize = ({ prompt, model, optimizeForCost }: { prompt: string; model: string; optimizeForCost: boolean }) => {
-    console.log('Optimizing:', { prompt, model, optimizeForCost });
-    
-    // Simulate optimization
-    const optimized = `Analyze the following data with respect to ${optimizeForCost ? 'cost efficiency' : 'accuracy'}: ${prompt.replace(/sensitive|private|confidential/gi, '[REDACTED]')}`;
-    setEnhancedPrompt(optimized);
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(enhancedPrompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const router = useRouter();
-  const pathname = usePathname();
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownOpen && !(event.target as Element)?.closest('.user-dropdown')) {
-        setDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [dropdownOpen]);
-
-  // Risk breakdown data for pie chart
-  const riskBreakdown = [
-    { label: 'Low Risk', value: 45, color: '#10b981' },
-    { label: 'Medium Risk', value: 35, color: '#f59e0b' },
-    { label: 'High Risk', value: 20, color: '#ef4444' },
-  ];
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0E1E36]">
-        <div className="text-white text-lg">Loading...</div>
-      </div>
-    );
+function AnalyticsContent({ metrics }: { metrics: any }) {
+  if (!metrics) {
+    return <div className="text-center py-10 text-white">Loading analytics data...</div>;
   }
 
-  if (!user) {
-    return null; // This will be handled by the auth redirect
-  }
-
-
-
-  // --- Prompt Optimizer Panel Component ---
-  function PromptOptimizerPanel({ onOptimize }: { onOptimize: (data: any) => void }) {
-    const [prompt, setPrompt] = useState("");
-    const [model, setModel] = useState("GPT-4o");
-    const [optCost, setOptCost] = useState(false);
-    return (
-      <div className="bg-white rounded-2xl shadow-md p-7 flex flex-col gap-5 min-w-[320px] max-w-[400px] sticky top-32" style={{ boxShadow: '0 2px 8px rgba(14,30,54,0.10)' }}>
-        <div className="font-bold text-xl text-[#0E1E36] mb-1">Prompt Optimizer</div>
-        <textarea
-          className="border border-gray-200 rounded-lg p-3 text-base min-h-[80px] resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
-          placeholder="Paste or write your prompt..."
-          value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-        />
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-gray-700">Model</label>
-          <select
-            className="border border-gray-200 rounded-lg p-2 text-base focus:outline-none focus:ring-2 focus:ring-orange-400"
-            value={model}
-            onChange={e => setModel(e.target.value)}
-          >
-            <option value="GPT-4o">GPT-4o</option>
-            <option value="Claude 3 Opus">Claude 3 Opus</option>
-            <option value="Gemini 1.5 Flash">Gemini 1.5 Flash</option>
-          </select>
-          <label className="flex items-center gap-2 mt-2 text-sm font-medium">
-            <input type="checkbox" checked={optCost} onChange={e => setOptCost(e.target.checked)} className="accent-orange-500 w-4 h-4" />
-            Optimize for cost
-          </label>
-        </div>
-        <button
-          className="w-full bg-[#FF6F3C] text-white font-bold text-lg py-3 rounded-lg shadow hover:bg-[#e65d2d] transition"
-          onClick={() => onOptimize({ prompt, model, optimizeForCost: optCost })}
-          disabled={!prompt.trim()}
-        >
-          Optimize
-        </button>
-      </div>
-    );
-  }
-
-  // --- Prompt Optimizer Drawer ---
-  function OptimizerDrawer() {
-    return (
-      <div className="fixed top-0 right-0 h-full w-[350px] max-w-full bg-white shadow-2xl z-[100] border-l border-gray-200 flex flex-col transition-transform duration-300" style={{ transform: optimizerOpen ? 'translateX(0)' : 'translateX(100%)' }}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div className="font-bold text-lg text-[#0E1E36]">Prompt Optimizer</div>
-          <button className="text-gray-400 hover:text-gray-700 text-2xl" onClick={() => setOptimizerOpen(false)} aria-label="Close">×</button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <PromptOptimizerPanel onOptimize={handleOptimize} />
-          {/* Optimized Output */}
-          {enhancedPrompt && (
-            <div className="mt-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-700 font-semibold text-sm">✅ Low Risk</span>
-              </div>
-              <div className="relative">
-                <textarea
-                  className="w-full bg-gray-100 rounded-lg p-3 text-base font-mono text-gray-800 resize-none border border-gray-200"
-                  value={enhancedPrompt}
-                  readOnly
-                  rows={4}
-                />
-                <button
-                  className="absolute top-2 right-2 px-3 py-1 bg-orange-500 text-white rounded font-semibold text-xs hover:bg-orange-600 transition"
-                  onClick={handleCopy}
-                >
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // --- Floating Optimizer Button ---
-  function FloatingOptimizerButton() {
-    return (
-      <button
-        className="fixed bottom-4 sm:bottom-6 lg:bottom-8 right-4 sm:right-6 lg:right-8 z-40 bg-[#FF6F3C] text-white font-bold text-sm sm:text-base lg:text-lg px-4 sm:px-5 lg:px-6 py-2 sm:py-2.5 lg:py-3 rounded-full shadow-lg flex items-center gap-1 sm:gap-2 hover:bg-[#e65d2d] transition"
-        onClick={() => setOptimizerOpen(true)}
-        style={{ boxShadow: '0 4px 24px rgba(255,111,60,0.18)' }}
-      >
-        <span className="text-lg sm:text-xl lg:text-2xl">✍️</span> 
-        <span className="hidden sm:inline">Prompt Optimizer</span>
-        <span className="sm:hidden">Optimize</span>
-      </button>
-    );
-  }
+  const trendData = metrics.trends.total_prompts.map((total: any, index: number) => ({
+    name: `Day ${index + 1}`,
+    total,
+    highRisk: metrics.trends.high_risk_prompts[index],
+  }));
 
   return (
-    <div className="min-h-screen font-sans" style={{ fontSize: 22, background: COLORS.bg }}>
-      {/* Sticky Nav Tabs - Standardized */}
-      <nav className="sticky top-0 z-40 flex flex-col sm:flex-row px-4 sm:px-8 py-3 sm:py-5 shadow-md justify-between items-center" style={{ background: COLORS.bg }}>
-        {/* Left: Branding */}
-        <div className="flex items-center gap-6 sm:gap-12 min-w-[180px] w-full sm:w-auto justify-between sm:justify-start">
-          <span className="text-xl sm:text-2xl font-light tracking-widest uppercase text-white select-none" style={{ letterSpacing: 2 }}>COMPLYZE</span>
-          {/* Mobile menu toggle could go here if needed */}
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-4">Risk Analytics Dashboard</h2>
+        <p className="text-gray-400">In-depth analysis of prompt activity and associated risks over the last 7 days.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        {/* Main Chart */}
+        <div className="lg:col-span-3 p-6 rounded-lg" style={{ backgroundColor: THEME.card }}>
+          <h3 className="text-lg font-bold text-white mb-4">Prompt Volume vs. High-Risk Events</h3>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" fontSize={12} />
+                <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} />
+                <Tooltip contentStyle={{ backgroundColor: '#252945', border: '1px solid #323755' }} />
+                <Legend wrapperStyle={{fontSize: "14px"}}/>
+                <Bar dataKey="total" name="Total Prompts" fill="#3b82f6" />
+                <Bar dataKey="highRisk" name="High Risk" fill="#ef4444" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        {/* Center: Nav Links */}
-        <div className="flex flex-wrap sm:flex-nowrap gap-4 sm:gap-8 lg:gap-12 items-center justify-center w-full sm:w-auto mt-3 sm:mt-0">
-          <Link href="/dashboard" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
-            Dashboard
-            {pathname && pathname.startsWith('/dashboard') && !pathname.includes('reports') && !pathname.includes('settings') && !pathname.includes('admin') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
-                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-              </span>
-            )}
-          </Link>
-          <Link href="/dashboard/reports" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
-            Reports
-            {pathname && pathname.includes('reports') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
-                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-              </span>
-            )}
-          </Link>
-          <Link href="/dashboard/settings" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
-            Settings
-            {pathname && pathname.includes('settings') && !pathname.includes('admin') && (
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
-                <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-              </span>
-            )}
-          </Link>
-          {/* Admin link - only visible to admin users */}
-          {user && (user.role === 'admin' || user.role === 'super_admin' || user.plan === 'enterprise') && (
-            <Link href="/dashboard/admin" className="relative text-white font-semibold text-lg sm:text-xl lg:text-2xl px-2 sm:px-4 py-2 transition focus:outline-none">
-              Admin
-              {pathname && pathname.includes('admin') && (
-                <span className="absolute left-1/2 -translate-x-1/2 bottom-[-8px] w-16 sm:w-20 lg:w-24 h-[6px] sm:h-[8px] block">
-                  <svg width="100%" height="8" viewBox="0 0 80 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4C16 8 64 8 76 4" stroke="#FF6F3C" strokeWidth="4" strokeLinecap="round"/></svg>
-                </span>
-              )}
-            </Link>
-          )}
-        </div>
-        {/* Right: User Info Pill */}
-        <div className="flex items-center gap-2 sm:gap-4 min-w-[120px] sm:min-w-[160px] justify-end w-full sm:w-auto mt-3 sm:mt-0">
-          {user?.email && (
-            <div className="relative user-dropdown">
-              <button
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="rounded-full bg-white/10 px-3 sm:px-4 py-1 text-white font-medium truncate max-w-[120px] sm:max-w-[140px] cursor-pointer transition-all duration-200 hover:bg-white/20 text-sm sm:text-base flex items-center gap-2"
-                title={user.email}
-              >
-                <span style={{ display: 'inline-block' }}>
-                  {user.full_name || user.email}
-                </span>
-                <svg 
-                  className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} 
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              
-              {/* Dropdown Menu */}
-              {dropdownOpen && (
-                <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-lg shadow-lg border border-gray-200 min-w-[160px] overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <div className="text-sm font-medium text-gray-900 truncate">
-                      {user.full_name || 'User'}
-                    </div>
-                    <div className="text-xs text-gray-500 truncate">
-                      {user.email}
-                    </div>
+
+        {/* Risk Type Breakdown */}
+        <div className="lg:col-span-2 p-6 rounded-lg" style={{ backgroundColor: THEME.card }}>
+            <h3 className="text-lg font-bold text-white mb-4">Risk Type Breakdown</h3>
+            <div className="space-y-4">
+              {Object.entries(metrics.risk_types).map(([type, count]) => (
+                <div key={type}>
+                  <div className="flex justify-between text-sm font-medium text-gray-300 mb-1">
+                    <span>{type}</span>
+                    <span>{count as React.ReactNode}</span>
                   </div>
-                  <button
-                    onClick={() => {
-                      logout();
-                      setDropdownOpen(false);
-                    }}
-                    className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    Logout
-                  </button>
+                  <div className="w-full bg-gray-700 rounded-full h-2.5">
+                    <div className="bg-indigo-500 h-2.5 rounded-full" style={{ width: `${(Number(count) / metrics.integrity_score.total) * 100}%`}}></div>
+                  </div>
                 </div>
-              )}
+              ))}
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const initialSettings = {
+  pii: {
+    label: 'PII',
+    enabled: true,
+    items: {
+      name: { label: 'Name', enabled: true },
+      email: { label: 'Email', enabled: true },
+      phone: { label: 'Phone Number', enabled: true },
+      address: { label: 'Address', enabled: true },
+      ssn: { label: 'SSN', enabled: true },
+      passport: { label: 'Passport Number', enabled: true },
+      ip_address: { label: 'IP Address', enabled: true },
+    },
+  },
+  credentials: {
+    label: 'Credentials & Secrets',
+    enabled: true,
+    items: {
+      api_keys: { label: 'API Keys', enabled: true },
+      oauth_tokens: { label: 'OAuth Tokens', enabled: true },
+      ssh_keys: { label: 'SSH Keys', enabled: true },
+      vault_paths: { label: 'Vault Paths', enabled: true },
+      access_tokens: { label: 'Access Tokens', enabled: true },
+    },
+  },
+  company: {
+    label: 'Company Internal',
+    enabled: true,
+    items: {
+      internal_urls: { label: 'Internal URLs', enabled: true },
+      codenames: { label: 'Project Codenames', enabled: true },
+      internal_tools: { label: 'Internal Tools', enabled: true },
+      system_ips: { label: 'System IP Ranges', enabled: true },
+    },
+  },
+  ai_leakage: {
+    label: 'AI Model & Dataset Leakage',
+    enabled: true,
+    items: {
+      model_names: { label: 'Model Names', enabled: true },
+      training_data: { label: 'Training Data References', enabled: true },
+      finetuned_logic: { label: 'Fine-tuned Logic', enabled: true },
+      private_weights: { label: 'Private Weights or Output', enabled: true },
+    },
+  },
+  regulated: {
+    label: 'Regulated Info',
+    enabled: true,
+    items: {
+      phi: { label: 'PHI (HIPAA)', enabled: true },
+      financial: { label: 'Financial Records', enabled: true },
+      itar: { label: 'Export-Controlled Terms (ITAR)', enabled: true },
+      whistleblower: { label: 'Whistleblower IDs', enabled: true },
+    },
+  },
+  jailbreak: {
+    label: 'Jailbreak Patterns',
+    enabled: true,
+    items: {
+      ignore_instructions: { label: 'Ignore previous instructions', enabled: true },
+      developer_mode: { label: 'Simulate a developer mode', enabled: true },
+      repeat_after_me: { label: 'Repeat after me...', enabled: true },
+    },
+  },
+  other: {
+    label: 'Other',
+    enabled: true,
+    items: {
+      custom_terms: { label: 'Custom-defined terms', enabled: true },
+    },
+  },
+};
+
+function SettingsToggle({ label, enabled, onToggle }: { label: string, enabled: boolean, onToggle: (enabled: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between py-3 px-4 bg-black/10 rounded-md">
+      <span className="text-gray-300">{label}</span>
+      <button onClick={() => onToggle(!enabled)} className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${enabled ? 'bg-indigo-600' : 'bg-gray-600'}`}>
+        <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${enabled ? 'translate-x-6' : ''}`}></div>
+      </button>
+    </div>
+  );
+}
+
+function SettingsCategory({ category, onToggle }: { category: any, onToggle: (itemId: string, enabled: boolean) => void }) {
+  const [isOpen, setIsOpen] = useState(true);
+  const enabledCount = Object.values(category.items).filter((item: any) => item.enabled).length;
+  const totalCount = Object.keys(category.items).length;
+
+  return (
+    <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: '1px' }}>
+      <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsOpen(!isOpen)}>
+        <div>
+          <h3 className="text-xl font-bold text-white">{category.label}</h3>
+          <p className="text-sm text-gray-400">{enabledCount} of {totalCount} enabled</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <button className="text-indigo-400 text-sm font-semibold">Collapse</button>
+          <svg className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+        </div>
+      </div>
+      {isOpen && (
+        <div className="mt-6 space-y-2">
+          {Object.entries(category.items).map(([id, item]: [string, any]) => (
+            <SettingsToggle key={id} label={item.label} enabled={item.enabled} onToggle={(enabled) => onToggle(id, enabled)} />
+          ))}
+          {category.label === 'Other' && (
+            <div className="pt-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">Custom Terms (comma-separated)</label>
+              <textarea 
+                className="w-full p-3 bg-gray-800 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 h-24"
+                placeholder="Enter custom terms to redact, separated by commas..."
+              />
+              <p className="text-xs text-gray-500 mt-2">These terms will be automatically redacted when detected in prompts</p>
             </div>
           )}
         </div>
-      </nav>
-      {/* Notification Bar */}
-      <div className="w-full bg-[#E53935] text-white font-bold text-sm sm:text-base lg:text-lg py-2 sm:py-3 text-center shadow px-4" style={{ letterSpacing: 0.2 }}>
-        <span className="block sm:inline">3 prompts were blocked today due to high-risk redactions</span>
-        <span className="hidden sm:inline"> — </span>
-        <span className="block sm:inline">Your risk score increased 12% this week</span>
-      </div>
-      {/* Main Grid */}
-      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-        {/* Top: 3 LLM Cards - REPLACED WITH COST SUMMARY */}
-        {/* {LLM_CARDS.map((d) => <LLMUsageCard key={d.model} d={d} />)} */}
-      </div>
-      
-      {/* Cost Summary Panel - NEW */}
-      <CostSummaryPanel userId={userId} />
-      
-      {/* Second Row: Compliance, Risk, Optimizer */}
-      <AnalyticsPanel userId={userId} />
-      
-      {/* Flagged Prompts Panel */}
-      <div className="max-w-7xl mx-auto px-4 pb-6 sm:pb-8 lg:pb-10">
-        <FlaggedPromptsPanel />
-      </div>
-      {/* Floating Optimizer Button */}
-      <FloatingOptimizerButton />
-      {/* Optimizer Drawer */}
-      <OptimizerDrawer />
+      )}
     </div>
   );
-} 
+}
+
+function SettingsContent() {
+  const [settings, setSettings] = useState(initialSettings);
+
+  const handleSettingToggle = (categoryKey: string, itemKey: string, enabled: boolean) => {
+    setSettings(prev => {
+      const newSettings = { ...prev };
+      (newSettings as any)[categoryKey].items[itemKey].enabled = enabled;
+      return newSettings;
+    });
+  };
+
+  const handleSave = () => {
+    // In a real app, you'd post this to your backend
+    console.log("Saving settings:", settings);
+    alert("Settings saved! (Check console for data)");
+  };
+
+  return (
+    <div className="relative pb-24">
+      <div className="space-y-6">
+        {Object.entries(settings).map(([key, category]) => (
+          <SettingsCategory key={key} category={category} onToggle={(itemKey, enabled) => handleSettingToggle(key, itemKey, enabled)} />
+        ))}
+      </div>
+      <div className="fixed bottom-0 left-64 right-0 p-4" style={{ backgroundColor: 'rgba(14, 31, 54, 0.8)', backdropFilter: 'blur(8px)' }}>
+        <div className="max-w-7xl mx-auto px-8">
+            <button 
+              onClick={handleSave}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg transition-colors w-full md:w-auto"
+            >
+              Save Settings
+            </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlaceholderContent({ title }: { title: string }) {
+    return (
+        <div style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="p-6 rounded-lg border">
+            <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
+            <p className="text-gray-400">This page will be redesigned to match the new theme.</p>
+        </div>
+    );
+}
+
+function DashboardPage() {
+  const [activeTab, setActiveTab] = useState('overview');
+  const { user, loading: userLoading, logout } = useAuth();
+  const { data: metrics, prompts, loading: metricsLoading, error, refetch } = useDashboardMetrics(user?.id || null);
+
+  useEffect(() => {
+    if (user?.id) {
+      refetch();
+    }
+    const interval = setInterval(() => {
+      if (user?.id) refetch();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user, refetch]);
+
+  const renderContent = () => {
+    if (userLoading || (metricsLoading && !metrics)) {
+      return <div className="text-center py-20 text-white">Loading Dashboard...</div>;
+    }
+    if (!user) {
+      return <div className="text-center py-20 text-white">Please log in to view the dashboard.</div>
+    }
+    if (error) {
+      return <div className="text-center py-20 text-red-400">Error loading data: {error}</div>
+    }
+    if (!metrics || !prompts) {
+      return <div className="text-center py-20 text-white">No data available for this period.</div>
+    }
+    
+    switch (activeTab) {
+      case 'overview': return <OverviewContent metrics={metrics} setActiveTab={setActiveTab} />;
+      case 'flagged': return <FlaggedPrompts prompts={prompts} />;
+      case 'analytics': return <AnalyticsContent metrics={metrics} />;
+      case 'reports': return <NewReportsPage prompts={prompts} />;
+      case 'settings': return <SettingsContent />;
+      case 'admin': return user.role === 'admin' || user.role === 'super_admin' ? <PlaceholderContent title="Admin Panel" /> : null;
+      default: return null;
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen font-sans">
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={user} logout={logout} />
+      <main className={`flex-1 ml-64 p-8 ${activeTab === 'reports' ? 'h-screen flex flex-col' : 'overflow-y-auto'}`} style={{ backgroundColor: THEME.background }}>
+        <DashboardHeader title={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} user={user} logout={logout} />
+        <div className={`${activeTab === 'reports' ? 'flex-grow overflow-hidden' : ''}`}>
+          {renderContent()}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default DashboardPage; 
