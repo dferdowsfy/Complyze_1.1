@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { supabase } from '@/lib/supabaseClient';
 import { useDashboardMetrics } from '@/lib/useDashboardMetrics';
 import NewReportsPage from './reports/page';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Area, AreaChart } from 'recharts';
 
 const THEME = {
-  background: '#0e1f36',
+  background: '#0E1E36', // Original dark blue background
   sidebar: '#252945',
   card: '#252945',
   primary: '#7b68ee',
-  accent: '#00d1b2',
+  accent: '#FF6F3C', // Original orange accent
   text: '#ffffff',
   textMuted: '#a0aec0',
   border: '#323755',
@@ -25,9 +25,13 @@ function DashboardHeader({ title, user, logout }: { title: string, user: any, lo
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const projects = ['Complyze AI', 'Project Phoenix', 'Q3 Initiative'];
   
+
+  
   return (
     <header className="flex justify-between items-center mb-8">
-      <h1 className="text-3xl font-bold text-white">{title}</h1>
+      <div className="flex items-center gap-4">
+        <h1 className="text-3xl font-bold text-white">{title}</h1>
+      </div>
       <div className="flex items-center gap-6">
         <button className="text-gray-400 hover:text-white">
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
@@ -99,41 +103,84 @@ function StatCard({ title, value, total, percentage, icon, color }: { title: str
 }
 
 function useAuth() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem('complyze_token');
-      const userData = localStorage.getItem('complyze_user');
-      if (token && userData) {
-        try {
-          const parsedUser = JSON.parse(userData);
-          setUser(parsedUser);
-          setIsAuthenticated(true);
-        } catch (error) {
-          console.error('Error parsing user data:', error);
+    // Get current user
+    const getUser = async () => {
+      try {
+        // First check if we have tokens in localStorage
+        const token = localStorage.getItem('complyze_token');
+        const userStr = localStorage.getItem('complyze_user');
+        
+        if (token && userStr) {
+          // Set up the session with the stored token
+          const { data, error } = await supabase.auth.setSession({
+            access_token: token,
+            refresh_token: localStorage.getItem('complyze_refresh_token') || ''
+          });
+          
+          if (!error && data.user) {
+            setUser(data.user);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Fallback to normal auth check
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error || !user) {
+          // Clear any stale tokens
           localStorage.removeItem('complyze_token');
           localStorage.removeItem('complyze_user');
+          localStorage.removeItem('complyze_refresh_token');
           router.push('/');
+          return;
         }
-      } else {
+        setUser(user);
+        setLoading(false);
+      } catch (error) {
+        console.error('Auth error:', error);
+        // Clear any stale tokens
+        localStorage.removeItem('complyze_token');
+        localStorage.removeItem('complyze_user');
+        localStorage.removeItem('complyze_refresh_token');
         router.push('/');
       }
-      setLoading(false);
     };
-    checkAuth();
+
+    getUser();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        // Clear tokens and redirect
+        localStorage.removeItem('complyze_token');
+        localStorage.removeItem('complyze_user');
+        localStorage.removeItem('complyze_refresh_token');
+        router.push('/');
+      } else if (session?.user) {
+        setUser(session.user);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [router]);
 
-  const logout = () => {
+  const logout = async () => {
+    // Clear tokens first
     localStorage.removeItem('complyze_token');
     localStorage.removeItem('complyze_user');
+    localStorage.removeItem('complyze_refresh_token');
+    // Then sign out from Supabase
+    await supabase.auth.signOut();
     router.push('/');
   };
 
-  return { isAuthenticated, user, loading, logout };
+  return { user, loading, logout };
 }
 
 function Sidebar({ activeTab, setActiveTab, user, logout }: { activeTab: string; setActiveTab: (tab: string) => void; user: any; logout: () => void; }) {
@@ -176,178 +223,271 @@ function Sidebar({ activeTab, setActiveTab, user, logout }: { activeTab: string;
 
 // --- NEW DASHBOARD COMPONENTS ---
 
-function PromptOptimizerButton() {
-  return (
-    <button className="w-full mt-4 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3 px-4 rounded-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 shadow-lg">
-      🚀 Prompt Optimizer
-    </button>
-  );
-}
+function BudgetTrackerCard({ currentSpend, budget }: { currentSpend: number; budget: number }) {
+  const percentage = (currentSpend / budget) * 100;
+  const remaining = budget - currentSpend;
+  const status = percentage > 90 ? 'Over Budget' : percentage > 75 ? 'Near Budget' : 'Under Budget';
+  const statusColor = percentage > 90 ? THEME.riskHigh : percentage > 75 ? THEME.riskMedium : THEME.riskLow;
 
-function BudgetTrackerCard({ data }: { data: any }) {
-  const usagePercentage = (data.total_spend / data.budget) * 100;
   return (
-    <div className="p-6 rounded-lg h-full flex flex-col" style={{ backgroundColor: THEME.card }}>
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="text-lg font-bold text-white">Budget Tracker</h3>
-        <button className="text-sm text-indigo-400 font-semibold">Set Budget</button>
-      </div>
-      <div className="text-3xl font-bold text-white">${data.total_spend.toFixed(2)} / <span className="text-lg font-medium text-gray-400">${data.budget.toFixed(2)}</span></div>
-      <div className={`mt-1 text-sm font-bold ${data.indicator === '↓' ? 'text-green-400' : 'text-red-400'}`}>
-        {data.indicator} {Math.abs(data.percent_delta)}% {data.status}
-      </div>
-      <div className="mt-auto">
-        <p className="text-xs text-gray-400 mb-1">Monthly Budget Usage {usagePercentage.toFixed(1)}%</p>
-        <div className="w-full bg-gray-700 rounded-full h-2.5">
-          <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${usagePercentage}%` }}></div>
+    <div className="p-6 rounded-lg relative overflow-hidden" style={{ backgroundColor: THEME.card }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-green-500/5 pointer-events-none"></div>
+      
+      <div className="relative z-10">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-white">Budget Tracker</h3>
+            <p className="text-sm" style={{ color: THEME.textMuted }}>Set Budget</p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-white">${currentSpend.toFixed(2)} / ${budget.toFixed(2)}</div>
+            <div className="text-sm" style={{ color: statusColor }}>↓ {(100 - percentage).toFixed(1)}% Under Budget</div>
+          </div>
         </div>
-        <p className="text-sm font-semibold text-white mt-2">Status: <span className="text-green-400">{data.status}</span></p>
-      </div>
-    </div>
-  );
-}
 
-function TopPromptsCard({ data }: { data: any[] }) {
-  return (
-    <div className="p-6 rounded-lg h-full" style={{ backgroundColor: THEME.card }}>
-      <h3 className="text-lg font-bold text-white mb-4">Top 5 Most Expensive Prompts</h3>
-      <div className="space-y-3">
-        {data.map((prompt, index) => (
-          <div key={index} className="p-3 rounded-md" style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
-            <p className="text-sm text-gray-300 truncate">{prompt.prompt}</p>
-            <div className="flex justify-between items-center mt-1">
-              <span className="text-xs text-gray-400">{prompt.model}</span>
-              <span className="text-sm font-bold text-orange-400">${prompt.cost.toFixed(4)}</span>
+        <div className="space-y-3">
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span style={{ color: THEME.textMuted }}>Monthly Budget Usage</span>
+              <span className="text-white font-medium">{percentage.toFixed(1)}%</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div 
+                className="h-2 rounded-full transition-all duration-300"
+                style={{ 
+                  width: `${Math.min(percentage, 100)}%`,
+                  backgroundColor: statusColor 
+                }}
+              ></div>
             </div>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MostUsedModelCard({ model }: { model: string }) {
-  return (
-    <div className="p-6 rounded-lg h-full flex flex-col items-center justify-center text-center" style={{ backgroundColor: THEME.card }}>
-      <h3 className="text-lg font-bold text-white mb-4">Most Used Model</h3>
-      <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
-        <span className="text-5xl font-bold text-green-300">{model.charAt(0).toUpperCase()}</span>
-      </div>
-      <p className="text-2xl font-bold text-white">{model}</p>
-      <p className="text-xs text-gray-400">Based on prompt frequency</p>
-    </div>
-  );
-}
-
-function TotalSpendCard({ amount }: { amount: number }) {
-  return (
-    <div className="p-6 rounded-lg h-full flex flex-col" style={{ backgroundColor: THEME.card }}>
-      <h3 className="text-lg font-bold text-white mb-4">Total Spend</h3>
-      <div className="my-auto text-center">
-        <p className="text-5xl font-bold text-white">${amount.toFixed(2)}</p>
-        <p className="text-md text-gray-400">This Month</p>
-        <div className="w-full bg-gray-700 rounded-full h-1 mt-4">
-          <div className="bg-indigo-500 h-1 rounded-full" style={{ width: '100%' }}></div>
-        </div>
-        <p className="text-xs text-gray-500 mt-1">Cumulative monthly spend from all LLM interactions</p>
-      </div>
-      <div className="mt-auto">
-        <PromptOptimizerButton />
-      </div>
-    </div>
-  );
-}
-
-function RiskFrequencyCard({ data }: { data: Record<string, number> }) {
-  const colors = ['#FF6B6B', '#FFD166', '#06D6A0', '#118AB2', '#073B4C'];
-  const total = Object.values(data).reduce((sum, count) => sum + count, 0);
-
-  return (
-    <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card }}>
-       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold text-white">Risk Type Frequency</h3>
-        <span className="text-sm text-gray-400">{total} prompts analyzed</span>
-      </div>
-      <div className="flex flex-wrap gap-3">
-        {Object.entries(data).map(([type, count], index) => (
-          <div key={type} className="px-4 py-2 rounded-full font-semibold text-white" style={{ backgroundColor: colors[index % colors.length] + '40', border: `1px solid ${colors[index % colors.length]}` }}>
-            {type} ({count})
+          
+          <div className="flex justify-between items-center pt-2">
+            <span style={{ color: THEME.textMuted }}>Status:</span>
+            <span className="font-medium" style={{ color: statusColor }}>{status}</span>
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function RiskTrendsCard({ data }: { data: any }) {
-   const chartData = data.total_prompts.map((total: any, index: number) => ({
-    name: `Day ${index + 1}`,
-    total,
-    highRisk: data.high_risk_prompts[index],
-  }));
+function TopExpensivePromptsCard({ prompts }: { prompts: any[] }) {
+  const topExpensive = prompts
+    .sort((a, b) => b.usd_cost - a.usd_cost)
+    .slice(0, 5);
 
   return (
-    <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card }}>
-       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold text-white">Prompt Risk Trends</h3>
-        <span className="text-sm text-gray-400">Last 7 Days</span>
+    <div className="p-6 rounded-lg relative overflow-hidden" style={{ backgroundColor: THEME.card }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5 pointer-events-none"></div>
+      
+      <div className="relative z-10">
+        <h3 className="text-lg font-bold text-white mb-4">Top 5 Most Expensive Prompts</h3>
+        
+        <div className="space-y-3">
+          {topExpensive.map((prompt, index) => (
+            <div key={prompt.id} className="flex justify-between items-center p-3 rounded-lg bg-black/20">
+              <div className="flex-1 min-w-0">
+                <div className="text-white font-medium truncate">
+                  {prompt.prompt_text ? 
+                    (prompt.prompt_text.length > 40 ? prompt.prompt_text.substring(0, 40) + '...' : prompt.prompt_text) :
+                    'Generate comprehensive technical do...'
+                  }
+                </div>
+                <div className="text-sm" style={{ color: THEME.textMuted }}>{prompt.model}</div>
+              </div>
+              <div className="text-right ml-4">
+                <div className="text-white font-bold">${prompt.usd_cost.toFixed(4)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-            <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" fontSize={12} />
-            <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} />
-            <Tooltip contentStyle={{ backgroundColor: '#252945', border: '1px solid #323755' }} />
-            <Legend wrapperStyle={{fontSize: "14px"}}/>
-            <Line type="monotone" dataKey="total" name="Total Prompts" stroke="#3b82f6" strokeWidth={2} />
-            <Line type="monotone" dataKey="highRisk" name="High Risk" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" />
-          </LineChart>
+    </div>
+  );
+}
+
+function MostUsedModelCard({ prompts }: { prompts: any[] }) {
+  const modelCounts = prompts.reduce((acc, prompt) => {
+    const modelName = prompt.model || 'Unknown';
+    acc[modelName] = (acc[modelName] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const mostUsedModel = Object.entries(modelCounts)
+    .sort(([,a], [,b]) => (b as number) - (a as number))[0];
+
+  const modelName = mostUsedModel ? mostUsedModel[0] : 'GPT-4o';
+  const usageCount = mostUsedModel ? (mostUsedModel[1] as number) : 0;
+
+  return (
+    <div className="p-6 rounded-lg relative overflow-hidden" style={{ backgroundColor: THEME.card }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-blue-500/5 pointer-events-none"></div>
+      
+      <div className="relative z-10">
+        <h3 className="text-lg font-bold text-white mb-4">Most Used Model</h3>
+        
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-3 rounded-full flex items-center justify-center text-2xl font-bold" 
+               style={{ backgroundColor: THEME.primary, color: 'white' }}>
+            {modelName.charAt(0).toUpperCase()}
+          </div>
+          <div className="text-xl font-bold text-white">{modelName}</div>
+          <div className="text-sm" style={{ color: THEME.textMuted }}>
+            Based on prompt frequency ({usageCount} uses)
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TotalSpendCard({ totalSpend }: { totalSpend: number }) {
+  return (
+    <div className="p-6 rounded-lg relative overflow-hidden" style={{ backgroundColor: THEME.card }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-teal-500/5 pointer-events-none"></div>
+      
+      <div className="relative z-10">
+        <h3 className="text-lg font-bold text-white mb-4">Total Spend</h3>
+        
+        <div className="text-center">
+          <div className="text-3xl font-bold text-white mb-2">${totalSpend.toFixed(2)}</div>
+          <div className="text-sm" style={{ color: THEME.textMuted }}>This Month</div>
+          <div className="text-xs mt-1" style={{ color: THEME.textMuted }}>
+            Cumulative monthly spend from all LLM interactions
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RiskTrendsChart({ prompts }: { prompts: any[] }) {
+  // Process data for the last 30 days
+  const last30Days = Array.from({ length: 30 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    return date.toISOString().split('T')[0];
+  }).reverse();
+
+  const chartData = last30Days.map(date => {
+    const dayPrompts = prompts.filter(p => 
+      p.captured_at && p.captured_at.startsWith(date)
+    );
+    
+    const totalPrompts = dayPrompts.length;
+    const highRiskPrompts = dayPrompts.filter(p => p.risk_level === 'high').length;
+    const mediumRiskPrompts = dayPrompts.filter(p => p.risk_level === 'medium').length;
+    const lowRiskPrompts = dayPrompts.filter(p => p.risk_level === 'low').length;
+    
+    return {
+      date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      total: totalPrompts,
+      high: highRiskPrompts,
+      medium: mediumRiskPrompts,
+      low: lowRiskPrompts,
+    };
+  });
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-black/90 backdrop-blur-sm border border-gray-600 rounded-lg p-3 shadow-2xl">
+          <p className="text-white font-medium mb-2">{label}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} className="text-sm" style={{ color: entry.color }}>
+              {entry.name}: {entry.value}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="p-6 rounded-lg relative overflow-hidden" style={{ backgroundColor: THEME.card }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 pointer-events-none"></div>
+      
+      <div className="relative z-10">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-2xl font-bold text-white">Risk Trends</h3>
+            <p className="text-sm" style={{ color: THEME.textMuted }}>
+              30-day risk level distribution with animated gradients
+            </p>
+          </div>
+          <div className="flex space-x-4 text-sm">
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: THEME.riskHigh }}></div>
+              <span className="text-white">High Risk</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: THEME.riskMedium }}></div>
+              <span className="text-white">Medium Risk</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: THEME.riskLow }}></div>
+              <span className="text-white">Low Risk</span>
+            </div>
+          </div>
+        </div>
+        
+        <ResponsiveContainer width="100%" height={400}>
+          <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <defs>
+              <linearGradient id="highGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={THEME.riskHigh} stopOpacity={0.8}/>
+                <stop offset="95%" stopColor={THEME.riskHigh} stopOpacity={0.1}/>
+              </linearGradient>
+              <linearGradient id="mediumGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={THEME.riskMedium} stopOpacity={0.8}/>
+                <stop offset="95%" stopColor={THEME.riskMedium} stopOpacity={0.1}/>
+              </linearGradient>
+              <linearGradient id="lowGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={THEME.riskLow} stopOpacity={0.8}/>
+                <stop offset="95%" stopColor={THEME.riskLow} stopOpacity={0.1}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#323755" />
+            <XAxis 
+              dataKey="date" 
+              stroke="#a0aec0" 
+              fontSize={12}
+              tick={{ fill: '#a0aec0' }}
+            />
+            <YAxis 
+              stroke="#a0aec0" 
+              fontSize={12}
+              tick={{ fill: '#a0aec0' }}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Area
+              type="monotone"
+              dataKey="high"
+              stackId="1"
+              stroke={THEME.riskHigh}
+              fill="url(#highGradient)"
+              strokeWidth={2}
+            />
+            <Area
+              type="monotone"
+              dataKey="medium"
+              stackId="1"
+              stroke={THEME.riskMedium}
+              fill="url(#mediumGradient)"
+              strokeWidth={2}
+            />
+            <Area
+              type="monotone"
+              dataKey="low"
+              stackId="1"
+              stroke={THEME.riskLow}
+              fill="url(#lowGradient)"
+              strokeWidth={2}
+            />
+          </AreaChart>
         </ResponsiveContainer>
-      </div>
-      <div className="text-center mt-6">
-        <div className="inline-block p-3 rounded-full bg-green-500/20 mb-2">
-            <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
-        </div>
-        <p className="text-lg font-bold text-white">Excellent</p>
-        <p className="text-sm text-gray-400">No high-risk prompts detected</p>
-      </div>
-      <div className="flex justify-around mt-4">
-          <div className="text-center">
-              <p className="text-3xl font-bold text-blue-400">{data.total_prompts.reduce((a: any,b: any) => a+b, 0)}</p>
-              <p className="text-sm text-gray-400">Total Prompts</p>
-          </div>
-          <div className="text-center">
-              <p className="text-3xl font-bold text-red-400">{data.high_risk_prompts.reduce((a: any,b: any) => a+b, 0)}</p>
-              <p className="text-sm text-gray-400">High Risk</p>
-          </div>
-      </div>
-    </div>
-  );
-}
-
-function OverviewContent({ metrics, setActiveTab }: { metrics: any; setActiveTab: (tab: string) => void; }) {
-  if (!metrics) return <div className="text-center py-10 text-white">No data available.</div>;
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div className="lg:col-span-1 md:col-span-1">
-        <BudgetTrackerCard data={metrics.budget_tracker} />
-      </div>
-      <div className="lg:col-span-1 md:col-span-1">
-         <TopPromptsCard data={metrics.top_prompts} />
-      </div>
-      <div className="lg:col-span-1 md:col-span-1">
-        <MostUsedModelCard model={metrics.most_used_model} />
-      </div>
-       <div className="lg:col-span-1 md:col-span-1">
-        <TotalSpendCard amount={metrics.total_spend} />
-      </div>
-      <div className="lg:col-span-2 md:col-span-2">
-        <RiskFrequencyCard data={metrics.risk_types} />
-      </div>
-      <div className="lg:col-span-2 md:col-span-2">
-        <RiskTrendsCard data={metrics.trends} />
       </div>
     </div>
   );
@@ -449,6 +589,9 @@ function FlaggedPromptItem({ prompt }: { prompt: any }) {
 }
 
 function FlaggedPrompts({ prompts }: { prompts: any[] }) {
+  console.log('FlaggedPrompts: Received prompts:', prompts?.length || 0);
+  console.log('FlaggedPrompts: Sample prompt statuses:', prompts?.slice(0, 3).map(p => ({ id: p.id, status: p.status, risk_level: p.risk_level })));
+
   if (!prompts || prompts.length === 0) {
     return (
       <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: '1px' }}>
@@ -458,11 +601,12 @@ function FlaggedPrompts({ prompts }: { prompts: any[] }) {
     );
   }
 
-  const flagged = prompts.filter(p => p.status === 'flagged');
+  // Don't double filter - prompts are already filtered in the parent
+  const flagged = prompts;
 
   return (
     <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: '1px' }}>
-      <h2 className="text-xl font-bold text-white mb-4">Flagged Prompts</h2>
+      <h2 className="text-xl font-bold text-white mb-4">Flagged Prompts ({flagged.length})</h2>
       <div className="space-y-3">
         {flagged.map((prompt) => (
           <FlaggedPromptItem key={prompt.id} prompt={prompt} />
@@ -473,6 +617,8 @@ function FlaggedPrompts({ prompts }: { prompts: any[] }) {
 }
 
 function AnalyticsContent({ metrics }: { metrics: any }) {
+  console.log('AnalyticsContent: Received metrics:', metrics);
+  
   if (!metrics) {
     return <div className="text-center py-10 text-white">Loading analytics data...</div>;
   }
@@ -716,34 +862,104 @@ function DashboardPage() {
   }, [user, refetch]);
 
   const renderContent = () => {
-    if (userLoading || (metricsLoading && !metrics)) {
-      return <div className="text-center py-20 text-white">Loading Dashboard...</div>;
-    }
-    if (!user) {
-      return <div className="text-center py-20 text-white">Please log in to view the dashboard.</div>
+    if (metricsLoading) {
+      return (
+        <div className="space-y-8">
+          <div className="text-center py-10 text-white">Loading metrics...</div>
+        </div>
+      );
     }
     if (error) {
-      return <div className="text-center py-20 text-red-400">Error loading data: {error}</div>
+      return (
+        <div className="space-y-8">
+          <div className="text-center py-10">
+            <div className="text-red-400 mb-4">Database connection issue detected</div>
+            <div className="text-gray-300 text-sm">
+              {error.includes('does not exist') ? 
+                'Database tables are not set up yet. The dashboard will work once the database is configured.' :
+                `Error: ${error}`
+              }
+            </div>
+          </div>
+        </div>
+      );
     }
-    if (!metrics || !prompts) {
-      return <div className="text-center py-20 text-white">No data available for this period.</div>
+
+    const currentPrompts = prompts || [];
+    const currentSpend = currentPrompts.reduce((sum: number, p: any) => sum + (p.usd_cost || 0), 0);
+    const budget = 1000.00; // Default budget since metrics.budget doesn't exist
+
+    if (activeTab === 'overview') {
+      return (
+        <div className="space-y-8">
+          {/* Top Row - Budget and Key Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <BudgetTrackerCard currentSpend={currentSpend} budget={budget} />
+            <MostUsedModelCard prompts={currentPrompts} />
+            <TotalSpendCard totalSpend={currentSpend} />
+            <div className="lg:col-span-1">
+              <div className="p-6 rounded-lg" style={{ backgroundColor: THEME.card }}>
+                <h3 className="text-lg font-bold text-white mb-2">Flagged Prompts</h3>
+                <div className="text-3xl font-bold text-white">
+                  {currentPrompts.filter((p: any) => p.status === 'flagged').length}
+                </div>
+                <div className="text-sm" style={{ color: THEME.textMuted }}>This Month</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Second Row - Top Expensive Prompts */}
+          <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
+            <TopExpensivePromptsCard prompts={currentPrompts} />
+          </div>
+
+          {/* Bottom Row - Full Width Risk Trends Chart */}
+          <div className="grid grid-cols-1 gap-6">
+            <RiskTrendsChart prompts={currentPrompts} />
+          </div>
+        </div>
+      );
     }
-    
-    switch (activeTab) {
-      case 'overview': return <OverviewContent metrics={metrics} setActiveTab={setActiveTab} />;
-      case 'flagged': return <FlaggedPrompts prompts={prompts} />;
-      case 'analytics': return <AnalyticsContent metrics={metrics} />;
-      case 'reports': return <NewReportsPage prompts={prompts} />;
-      case 'settings': return <SettingsContent />;
-      case 'admin': return user.role === 'admin' || user.role === 'super_admin' ? <PlaceholderContent title="Admin Panel" /> : null;
-      default: return null;
+
+    if (activeTab === 'flagged') {
+      // Show prompts that have any risk level or are flagged
+      const flaggedPrompts = currentPrompts.filter((p: any) => 
+        p.status === 'flagged' || p.risk_level === 'high' || p.risk_level === 'medium' || p.risk_level === 'low'
+      );
+      console.log('Dashboard: Filtering flagged prompts from', currentPrompts.length, 'total, found', flaggedPrompts.length);
+      return <FlaggedPrompts prompts={flaggedPrompts} />;
     }
+
+    if (activeTab === 'analytics') {
+      return <AnalyticsContent metrics={metrics} />;
+    }
+
+    if (activeTab === 'reports') {
+      return <NewReportsPage prompts={prompts || []} />;
+    }
+
+    if (activeTab === 'settings') {
+      return <SettingsContent />;
+    }
+
+    if (activeTab === 'admin' && user && (user.role === 'admin' || user.role === 'super_admin')) {
+      return <PlaceholderContent title="Admin Panel" />;
+    }
+
+    return <div className="text-white">Unknown tab: {activeTab}</div>;
   };
+
+  if (userLoading) {
+    return <div className="min-h-screen flex items-center justify-center text-white">Loading...</div>;
+  }
 
   return (
     <div className="flex min-h-screen font-sans">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={user} logout={logout} />
-      <main className={`flex-1 ml-64 p-8 ${activeTab === 'reports' ? 'h-screen flex flex-col' : 'overflow-y-auto'}`} style={{ backgroundColor: THEME.background }}>
+      <main 
+        className={`flex-1 ml-64 p-8 ${activeTab === 'reports' ? 'h-screen flex flex-col' : 'overflow-y-auto'}`} 
+        style={{ background: THEME.background }}
+      >
         <DashboardHeader title={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} user={user} logout={logout} />
         <div className={`${activeTab === 'reports' ? 'flex-grow overflow-hidden' : ''}`}>
           {renderContent()}

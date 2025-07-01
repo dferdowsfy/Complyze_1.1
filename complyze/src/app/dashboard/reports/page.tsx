@@ -4,6 +4,14 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import PromptRiskAssessmentReport from "@/app/components/PromptRiskAssessmentReport";
+import ExecutiveAIRiskSummary from "@/app/components/ExecutiveAIRiskSummary";
+import AuditLogReport from "@/app/components/AuditLogReport";
+import RedactionEffectivenessReport from "@/app/components/RedactionEffectivenessReport";
+import FrameworkCoverageMatrix from "@/app/components/FrameworkCoverageMatrix";
+import RiskAssessmentDashboard from "@/app/components/RiskAssessmentDashboard";
+import UsageCostDashboard from "@/app/components/UsageCostDashboard";
+import ContinuousMonitoring from "@/app/components/ContinuousMonitoring";
+import LLMGovernancePolicyAdherence from "@/app/components/LLMGovernancePolicyAdherence";
 
 // New Report Templates
 const TEMPLATES = [
@@ -98,7 +106,7 @@ function TemplateCard({ template, selected, onClick }: TemplateCardProps) {
       }}
     >
       <h3 className="font-bold text-lg mb-2">{template.name}</h3>
-      <p className="text-sm text-white/80 mb-3 h-12">{template.description}</p>
+      <p className="text-sm text-white/80 mb-3 h-20">{template.description}</p>
       <div className="flex flex-wrap">
         {template.frameworks.map((fw: string) => (
           <FrameworkPill key={fw} fw={fw} />
@@ -331,7 +339,603 @@ export default function Reports({ prompts }: { prompts: any[] }) {
     setSelectedTemplate(templateId);
     generateReport(templateId);
   };
-  
+
+  // Transform raw data for ExecutiveAIRiskSummary component
+  const transformDataForExecutiveSummary = () => {
+    if (!dataInfo) return null;
+
+    // Calculate metrics from actual prompt data
+    const totalPrompts = dataInfo.promptCount || 0;
+    const uniqueUsers = prompts ? [...new Set(prompts.map(p => p.user_id))].length : 1;
+    const avgPromptsPerUser = Math.round(totalPrompts / uniqueUsers);
+    
+    // Mock data structure matching the interface - in a real app, this would come from your actual data processing
+    return {
+      total_prompts: totalPrompts,
+      unique_users: uniqueUsers,
+      avg_prompts_per_user: avgPromptsPerUser,
+      top_ai_tools: ['ChatGPT', 'Claude', 'Gemini', 'Other'],
+      redactions: {
+        pii: Math.floor(totalPrompts * 0.15),
+        financial: Math.floor(totalPrompts * 0.08),
+        code: Math.floor(totalPrompts * 0.12),
+        dates: Math.floor(totalPrompts * 0.05)
+      },
+      rewrite_count: Math.floor(totalPrompts * 0.25),
+      manual_flags: Math.floor(totalPrompts * 0.03),
+      top_risk_category: 'PII Exposure',
+      violations_by_role: [
+        { role: 'Engineering', violations: 12, common_type: 'PII Exposure' },
+        { role: 'Marketing', violations: 8, common_type: 'Data Classification' },
+        { role: 'Sales', violations: 15, common_type: 'PII Exposure' },
+        { role: 'HR', violations: 3, common_type: 'Confidential Info' },
+        { role: 'Finance', violations: 6, common_type: 'Financial Data' }
+      ],
+      framework_alignment: [
+        { control_id: 'NIST-AI-RMF-1.1', framework: 'NIST AI RMF', status: 'compliant' as const },
+        { control_id: 'NIST-AI-RMF-2.1', framework: 'NIST AI RMF', status: 'partial' as const },
+        { control_id: 'ISO-42001-5.1', framework: 'ISO/IEC 42001', status: 'compliant' as const },
+        { control_id: 'ISO-42001-6.1', framework: 'ISO/IEC 42001', status: 'non-compliant' as const },
+        { control_id: 'SOC2-CC1.1', framework: 'SOC 2', status: 'compliant' as const },
+        { control_id: 'SOC2-CC2.1', framework: 'SOC 2', status: 'compliant' as const }
+      ],
+      percentage_mitigated: 87,
+      blocked_count: Math.floor(totalPrompts * 0.05),
+      fully_aligned_frameworks: ['SOC 2'],
+      org_name: 'Complyze Organization',
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      report_date: new Date().toISOString().split('T')[0]
+    };
+  };
+
+  // Transform raw data for AuditLogReport component
+  const transformDataForAuditLog = () => {
+    if (!dataInfo || !prompts) return null;
+
+    const totalPrompts = dataInfo.promptCount || 0;
+    const uniqueUsers = prompts ? [...new Set(prompts.map(p => p.user_id))].length : 1;
+    const avgPromptsPerUser = Math.round(totalPrompts / uniqueUsers);
+    
+    return {
+      organization_name: projectName,
+      report_date: new Date().toISOString(),
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      total_prompts: totalPrompts,
+      unique_users: uniqueUsers,
+      top_ai_tools: ['ChatGPT', 'Claude', 'Gemini', 'GitHub Copilot'],
+      avg_prompts_per_user: avgPromptsPerUser,
+      redactions: {
+        pii: Math.floor(totalPrompts * 0.15),
+        financial: Math.floor(totalPrompts * 0.08),
+        code: Math.floor(totalPrompts * 0.12),
+        dates: Math.floor(totalPrompts * 0.05),
+      },
+      rewrite_count: Math.floor(totalPrompts * 0.25),
+      blocked_prompts: Math.floor(totalPrompts * 0.03),
+      manual_flags: Math.floor(totalPrompts * 0.02),
+      top_risk_category: 'PII Exposure',
+      violations_by_role: [
+        { role: 'Engineering', violations: 15, common_type: 'Code exposure' },
+        { role: 'Sales', violations: 8, common_type: 'Customer PII' },
+        { role: 'Marketing', violations: 5, common_type: 'Contact information' },
+        { role: 'Finance', violations: 12, common_type: 'Financial data' },
+      ],
+      framework_alignment: [
+        { control_id: 'AI.RM.1.1', framework: 'NIST AI RMF', description: 'AI risk management governance', status: 'compliant' as const },
+        { control_id: 'AI.RM.2.1', framework: 'NIST AI RMF', description: 'AI system documentation', status: 'partial' as const },
+        { control_id: 'AI.RM.3.1', framework: 'NIST AI RMF', description: 'AI system monitoring', status: 'compliant' as const },
+        { control_id: 'ISO.42001.5.1', framework: 'ISO/IEC 42001', description: 'AI management system requirements', status: 'compliant' as const },
+        { control_id: 'ISO.42001.6.1', framework: 'ISO/IEC 42001', description: 'AI system lifecycle management', status: 'partial' as const },
+        { control_id: 'SOC2.CC6.1', framework: 'SOC 2', description: 'Logical access controls', status: 'compliant' as const },
+        { control_id: 'SOC2.CC6.2', framework: 'SOC 2', description: 'Data transmission controls', status: 'non-compliant' as const },
+        { control_id: 'SOC2.CC6.3', framework: 'SOC 2', description: 'Data disposal controls', status: 'partial' as const },
+      ],
+      percentage_redacted: 40,
+      rewrite_coverage: 85,
+      blocked_count: Math.floor(totalPrompts * 0.03),
+      non_overridable_flags: Math.floor(totalPrompts * 0.01),
+    };
+  };
+
+  // Transform raw data for RedactionEffectivenessReport component
+  const transformDataForRedactionEffectiveness = () => {
+    if (!dataInfo || !prompts) return null;
+
+    const totalPrompts = dataInfo.promptCount || 0;
+    const redactedCount = Math.floor(totalPrompts * 0.25); // Mock: 25% of prompts redacted
+    
+    return {
+      organization_name: projectName,
+      report_date: new Date().toISOString(),
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      total_prompts: totalPrompts,
+      redacted_count: redactedCount,
+      percent_redacted: Math.round((redactedCount / totalPrompts) * 100),
+      rewrite_count: Math.floor(totalPrompts * 0.12),
+      top_trigger: "PII Detection",
+      pii_precision: 94,
+      pii_recall: 89,
+      code_precision: 88,
+      code_recall: 92,
+      financial_precision: 91,
+      financial_recall: 85,
+      missed_prompts_count: Math.floor(totalPrompts * 0.02),
+      framework_mapping: [
+        { framework: "NIST AI RMF", control_id: "MAP-2", status: "compliant" as const },
+        { framework: "ISO 42001", control_id: "6.3.1", status: "partial" as const },
+        { framework: "SOC 2", control_id: "CC7.2", status: "compliant" as const },
+      ],
+    };
+  };
+
+  // Transform raw data for FrameworkCoverageMatrix component
+  const transformDataForFrameworkMatrix = () => {
+    if (!dataInfo || !prompts) return null;
+
+    const totalPrompts = dataInfo.promptCount || 0;
+    
+    return {
+      organization_name: projectName,
+      report_date: new Date().toISOString(),
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      nist_coverage: 85,
+      iso_coverage: 72,
+      soc2_coverage: 91,
+      total_controls: 15,
+      controls_matrix: [
+        {
+          framework: "NIST AI RMF",
+          control_id: "MAP-2",
+          observed_activity: "Prompt flagged for PII",
+          mitigation_applied: "✅ Redacted",
+          status: "compliant" as const,
+        },
+        {
+          framework: "ISO 42001",
+          control_id: "6.3.1",
+          observed_activity: "Financial data in prompt",
+          mitigation_applied: "⚠️ Partial redaction",
+          status: "partial" as const,
+        },
+        {
+          framework: "SOC 2",
+          control_id: "CC7.2",
+          observed_activity: "Code repository access",
+          mitigation_applied: "✅ Access controlled",
+          status: "compliant" as const,
+        },
+        {
+          framework: "NIST AI RMF",
+          control_id: "GOVERN-1",
+          observed_activity: "User training prompt",
+          mitigation_applied: "✅ Policy enforced",
+          status: "compliant" as const,
+        },
+        {
+          framework: "ISO 42001",
+          control_id: "5.1.1",
+          observed_activity: "Prompt risk assessment",
+          mitigation_applied: "❌ Not implemented",
+          status: "non_compliant" as const,
+        },
+      ],
+      gaps_identified: [
+        "Manual review process for healthcare data not fully automated",
+        "Integration with SIEM system requires configuration updates",
+      ],
+      enhancement_suggestions: [
+        "Implement automated PHI detection for healthcare prompts",
+        "Add real-time alerts for high-risk prompt patterns",
+        "Enhance training data with domain-specific examples",
+      ],
+      integration_recommendations: [
+        "Connect Complyze to existing GRC platform for unified reporting",
+        "Implement SSO integration for seamless user management",
+        "Set up automated evidence collection for audit workflows",
+      ],
+        };
+  };
+
+  // Transform raw data for RiskAssessmentDashboard component
+  const transformDataForRiskAssessment = () => {
+    if (!dataInfo || !prompts) return null;
+
+    const totalPrompts = dataInfo.promptCount || 0;
+    
+    return {
+      organization_name: projectName,
+      report_date: new Date().toISOString(),
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      overall_risk_score: 72,
+      risk_level: "high" as const,
+      total_incidents: Math.floor(totalPrompts * 0.08),
+      incidents_resolved: Math.floor(totalPrompts * 0.06),
+      average_resolution_time: 4.2,
+      risk_metrics: [
+        {
+          category: "PII Exposure",
+          current_score: 78,
+          previous_score: 82,
+          trend: "down" as const,
+          incidents: Math.floor(totalPrompts * 0.03),
+          mitigation_rate: 85,
+        },
+        {
+          category: "Code Injection",
+          current_score: 65,
+          previous_score: 60,
+          trend: "up" as const,
+          incidents: Math.floor(totalPrompts * 0.02),
+          mitigation_rate: 92,
+        },
+        {
+          category: "Data Leakage",
+          current_score: 71,
+          previous_score: 71,
+          trend: "stable" as const,
+          incidents: Math.floor(totalPrompts * 0.015),
+          mitigation_rate: 88,
+        },
+        {
+          category: "Prompt Injection",
+          current_score: 58,
+          previous_score: 63,
+          trend: "down" as const,
+          incidents: Math.floor(totalPrompts * 0.01),
+          mitigation_rate: 94,
+        },
+      ],
+      risk_trends: [
+        { date: "Week 1", critical: 15, high: 28, medium: 45, low: 65, total_prompts: Math.floor(totalPrompts * 0.2) },
+        { date: "Week 2", critical: 12, high: 32, medium: 48, low: 68, total_prompts: Math.floor(totalPrompts * 0.25) },
+        { date: "Week 3", critical: 18, high: 29, medium: 52, low: 72, total_prompts: Math.floor(totalPrompts * 0.3) },
+        { date: "Week 4", critical: 14, high: 35, medium: 49, low: 78, total_prompts: Math.floor(totalPrompts * 0.25) },
+      ],
+      team_risks: [
+        { team: "Engineering", risk_score: 82, violations: 24, top_risk_type: "Code Exposure", mitigation_compliance: 78 },
+        { team: "Sales", risk_score: 67, violations: 18, top_risk_type: "Customer PII", mitigation_compliance: 85 },
+        { team: "Marketing", risk_score: 55, violations: 12, top_risk_type: "Contact Data", mitigation_compliance: 91 },
+        { team: "Finance", risk_score: 74, violations: 15, top_risk_type: "Financial Data", mitigation_compliance: 82 },
+        { team: "HR", risk_score: 43, violations: 8, top_risk_type: "Employee Data", mitigation_compliance: 95 },
+      ],
+      top_vulnerabilities: [
+        "Unencrypted API keys exposed in prompts to coding assistants",
+        "Customer email addresses being shared in support query examples", 
+        "Financial data patterns detected in business analysis prompts",
+        "Internal code snippets containing proprietary algorithms",
+      ],
+      recommendations: [
+        "Implement real-time API key detection and automatic redaction",
+        "Train teams on data classification and proper prompt hygiene",
+        "Deploy enhanced pattern matching for financial data detection",
+        "Establish code review process for AI-assisted development",
+      ],
+      compliance_gaps: [
+        "GDPR Article 32 - Technical safeguards for personal data processing",
+        "SOX Section 404 - Internal controls over financial reporting accuracy",
+      ],
+    };
+  };
+
+  // Transform raw data for UsageCostDashboard component
+  const transformDataForUsageCost = () => {
+    if (!dataInfo || !prompts) return null;
+
+    const totalPrompts = dataInfo.promptCount || 0;
+    
+    return {
+      organization_name: projectName,
+      report_date: new Date().toISOString(),
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      total_cost: 2547.85,
+      budget_limit: 5000.00,
+      cost_savings: 892.34,
+      total_tokens: 15750000,
+      total_prompts: totalPrompts,
+      unique_users: Math.floor(totalPrompts / 25) || 12,
+      model_usage: [
+        {
+          model: "GPT-4",
+          provider: "OpenAI",
+          total_tokens: 8500000,
+          cost: 1275.50,
+          prompts: Math.floor(totalPrompts * 0.4),
+          avg_cost_per_prompt: 0.045,
+          trend: "up" as const,
+        },
+        {
+          model: "Claude-3-Sonnet",
+          provider: "Claude",
+          total_tokens: 4200000,
+          cost: 840.25,
+          prompts: Math.floor(totalPrompts * 0.35),
+          avg_cost_per_prompt: 0.038,
+          trend: "stable" as const,
+        },
+        {
+          model: "Gemini-Pro",
+          provider: "Gemini",
+          total_tokens: 3050000,
+          cost: 432.10,
+          prompts: Math.floor(totalPrompts * 0.25),
+          avg_cost_per_prompt: 0.029,
+          trend: "down" as const,
+        },
+      ],
+      cost_trends: [
+        { date: "Week 1", total_cost: 580.25, openai_cost: 320.15, claude_cost: 160.50, gemini_cost: 99.60, token_count: 3500000 },
+        { date: "Week 2", total_cost: 640.80, openai_cost: 355.40, claude_cost: 185.20, gemini_cost: 100.20, token_count: 3800000 },
+        { date: "Week 3", total_cost: 720.90, openai_cost: 395.85, claude_cost: 220.15, gemini_cost: 104.90, token_count: 4100000 },
+        { date: "Week 4", total_cost: 605.90, openai_cost: 204.10, claude_cost: 274.40, gemini_cost: 127.40, token_count: 4350000 },
+      ],
+      user_adoption: [],
+      cost_controls: [
+        {
+          control_type: "Monthly Budget Limit",
+          threshold: 5000,
+          current_value: 2547.85,
+          status: "safe" as const,
+          savings_achieved: 892.34,
+        },
+        {
+          control_type: "Per-User Daily Limit",
+          threshold: 50,
+          current_value: 28.5,
+          status: "safe" as const,
+          savings_achieved: 245.60,
+        },
+        {
+          control_type: "Token Rate Limiting",
+          threshold: 1000000,
+          current_value: 850000,
+          status: "warning" as const,
+          savings_achieved: 156.80,
+        },
+      ],
+      top_spenders: [
+        { user: "Engineering Team Lead", cost: 485.20, department: "Engineering" },
+        { user: "Senior Data Scientist", cost: 362.75, department: "Analytics" },
+        { user: "Product Manager", cost: 298.50, department: "Product" },
+        { user: "Marketing Analyst", cost: 215.40, department: "Marketing" },
+        { user: "DevOps Engineer", cost: 187.65, department: "Engineering" },
+      ],
+      efficiency_metrics: {
+        cost_per_token: 0.000162,
+        tokens_per_prompt: totalPrompts > 0 ? Math.floor(15750000 / totalPrompts) : 450,
+        cost_per_user: 212.32,
+      },
+    };
+  };
+
+  // Transform raw data for ContinuousMonitoring component
+  const transformDataForContinuousMonitoring = () => {
+    if (!dataInfo || !prompts) return null;
+
+    const totalPrompts = dataInfo.promptCount || 0;
+    
+    return {
+      organization_name: projectName,
+      report_date: new Date().toISOString(),
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      overall_compliance_score: 87,
+      total_findings: 24,
+      open_findings: 8,
+      overdue_findings: 3,
+      findings: [
+        {
+          finding_id: "FIND-2024-001",
+          title: "Inadequate PII redaction in customer service prompts",
+          severity: "high" as const,
+          status: "open" as const,
+          framework: "GDPR",
+          control_id: "Art. 32",
+          description: "Customer email addresses not consistently redacted",
+          remediation_plan: "Implement enhanced pattern matching for email detection",
+          due_date: "2024-02-15",
+          assigned_to: "Security Team",
+          days_overdue: 5,
+        },
+                 {
+           finding_id: "FIND-2024-002",
+           title: "Missing audit logs for administrative actions",
+           severity: "moderate" as const,
+           status: "in_progress" as const,
+          framework: "SOC 2",
+          control_id: "CC7.2",
+          description: "Administrative access to prompt data not fully logged",
+          remediation_plan: "Configure comprehensive audit logging",
+          due_date: "2024-03-01",
+          assigned_to: "IT Operations",
+          days_overdue: 0,
+        },
+        {
+          finding_id: "FIND-2024-003",
+          title: "Incomplete security awareness training",
+          severity: "low" as const,
+          status: "closed" as const,
+          framework: "NIST",
+          control_id: "AT-2",
+          description: "Not all users completed LLM security training",
+          remediation_plan: "Mandatory training completion tracking",
+          due_date: "2024-01-30",
+          assigned_to: "HR Department",
+          days_overdue: 0,
+        },
+      ],
+      control_status: [
+        {
+          control_id: "GDPR-32",
+          framework: "GDPR",
+          control_name: "Security of processing",
+          implementation_status: "implemented" as const,
+          effectiveness: "effective" as const,
+          last_assessed: "2024-01-15",
+          next_assessment: "2024-04-15",
+          findings_count: 1,
+        },
+        {
+          control_id: "SOC2-CC7.2",
+          framework: "SOC 2",
+          control_name: "System monitoring",
+          implementation_status: "partially_implemented" as const,
+          effectiveness: "partially_effective" as const,
+          last_assessed: "2024-01-20",
+          next_assessment: "2024-03-20",
+          findings_count: 2,
+        },
+      ],
+      monitoring_metrics: [
+        {
+          metric_name: "Redaction Accuracy",
+          current_value: 94.5,
+          threshold: 95.0,
+          status: "yellow" as const,
+          trend: "up" as const,
+          last_updated: "2024-02-20",
+        },
+        {
+          metric_name: "Prompt Flagging Rate",
+          current_value: 12.8,
+          threshold: 15.0,
+          status: "green" as const,
+          trend: "stable" as const,
+          last_updated: "2024-02-20",
+        },
+      ],
+      compliance_trends: [
+        { date: "Week 1", fedramp_score: 85, soc2_score: 88, nist_score: 82 },
+        { date: "Week 2", fedramp_score: 86, soc2_score: 87, nist_score: 84 },
+        { date: "Week 3", fedramp_score: 87, soc2_score: 89, nist_score: 85 },
+        { date: "Week 4", fedramp_score: 87, soc2_score: 87, nist_score: 87 },
+      ],
+      upcoming_assessments: [
+        {
+          assessment_type: "SOC 2 Type II Audit",
+          due_date: "2024-06-30",
+          framework: "SOC 2",
+          responsible_party: "External Auditor",
+        },
+        {
+          assessment_type: "GDPR Compliance Review",
+          due_date: "2024-05-15",
+          framework: "GDPR",
+          responsible_party: "Privacy Team",
+        },
+      ],
+    };
+  };
+
+  // Transform raw data for LLMGovernancePolicyAdherence component
+  const transformDataForPolicyAdherence = () => {
+    if (!dataInfo || !prompts) return null;
+
+    const totalPrompts = dataInfo.promptCount || 0;
+    
+    return {
+      organization_name: projectName,
+      report_date: new Date().toISOString(),
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      overall_compliance_rate: 91,
+      total_violations: 18,
+      resolved_violations: 12,
+      active_violations: 6,
+      policy_violations: [
+        {
+          violation_id: "POL-2024-001",
+          user_id: "john.doe@company.com",
+          department: "Sales",
+          policy_section: "Data Handling Policy 3.2",
+          violation_type: "Unauthorized customer data sharing",
+          severity: "high" as const,
+          description: "Shared customer contact information in ChatGPT prompt",
+          action_taken: "User training and warning issued",
+          resolution_status: "resolved" as const,
+          date_reported: "2024-02-10",
+          resolution_date: "2024-02-12",
+        },
+        {
+          violation_id: "POL-2024-002",
+          user_id: "jane.smith@company.com",
+          department: "Engineering",
+          policy_section: "Code Security Policy 2.1",
+          violation_type: "Source code exposure",
+          severity: "critical" as const,
+          description: "Proprietary algorithm shared in coding assistant",
+          action_taken: "Immediate system lockout and investigation",
+          resolution_status: "open" as const,
+          date_reported: "2024-02-18",
+        },
+      ],
+      department_compliance: [
+        {
+          department: "Engineering",
+          total_users: 25,
+          compliant_users: 22,
+          compliance_rate: 88,
+          violations_count: 4,
+          training_completion: 96,
+          risk_score: 12,
+        },
+        {
+          department: "Sales",
+          total_users: 18,
+          compliant_users: 16,
+          compliance_rate: 89,
+          violations_count: 3,
+          training_completion: 94,
+          risk_score: 11,
+        },
+        {
+          department: "Marketing",
+          total_users: 12,
+          compliant_users: 12,
+          compliance_rate: 100,
+          violations_count: 0,
+          training_completion: 100,
+          risk_score: 2,
+        },
+      ],
+      policy_metrics: [
+        {
+          policy_name: "Data Handling Policy",
+          adherence_rate: 92,
+          violations_count: 8,
+          last_review: "2024-01-15",
+          next_review: "2024-07-15",
+          effectiveness_score: 88,
+        },
+        {
+          policy_name: "Code Security Policy",
+          adherence_rate: 87,
+          violations_count: 6,
+          last_review: "2024-01-10",
+          next_review: "2024-07-10",
+          effectiveness_score: 85,
+        },
+      ],
+      training_records: [],
+      compliance_trends: [
+        { date: "Week 1", compliance_rate: 88, violations_count: 6, training_completion: 92 },
+        { date: "Week 2", compliance_rate: 90, violations_count: 4, training_completion: 94 },
+        { date: "Week 3", compliance_rate: 89, violations_count: 5, training_completion: 96 },
+        { date: "Week 4", compliance_rate: 91, violations_count: 3, training_completion: 98 },
+      ],
+      top_violations: [
+        { violation_type: "Unauthorized data sharing", count: 8, trend: "down" as const },
+        { violation_type: "Code exposure", count: 6, trend: "stable" as const },
+        { violation_type: "Policy acknowledgment missing", count: 4, trend: "down" as const },
+      ],
+    };
+  };
+   
   if (!user) {
     return <div>Loading user...</div>;
   }
@@ -390,7 +994,25 @@ export default function Reports({ prompts }: { prompts: any[] }) {
 
       {/* Right Column: Preview */}
       <div className="lg:col-span-2 h-full overflow-y-auto custom-scrollbar">
-         <PreviewAccordion sections={reportSections} isGenerating={isGenerating} dataInfo={dataInfo} />
+        {selectedTemplate === 'exec-ai-risk-summary' && dataInfo && !isGenerating && transformDataForExecutiveSummary() ? (
+          <ExecutiveAIRiskSummary data={transformDataForExecutiveSummary()!} />
+        ) : selectedTemplate === 'prompt-risk-audit-log' && dataInfo && !isGenerating && transformDataForAuditLog() ? (
+          <AuditLogReport data={transformDataForAuditLog()!} />
+        ) : selectedTemplate === 'redaction-effectiveness' && dataInfo && !isGenerating && transformDataForRedactionEffectiveness() ? (
+          <RedactionEffectivenessReport data={transformDataForRedactionEffectiveness()!} />
+        ) : selectedTemplate === 'framework-coverage-matrix' && dataInfo && !isGenerating && transformDataForFrameworkMatrix() ? (
+          <FrameworkCoverageMatrix data={transformDataForFrameworkMatrix()!} />
+        ) : selectedTemplate === 'usage-cost-dashboard' && dataInfo && !isGenerating && transformDataForUsageCost() ? (
+          <UsageCostDashboard data={transformDataForUsageCost()!} />
+        ) : selectedTemplate === 'continuous-monitoring' && dataInfo && !isGenerating && transformDataForContinuousMonitoring() ? (
+          <ContinuousMonitoring data={transformDataForContinuousMonitoring()!} />
+        ) : selectedTemplate === 'llm-governance-policy' && dataInfo && !isGenerating && transformDataForPolicyAdherence() ? (
+          <LLMGovernancePolicyAdherence data={transformDataForPolicyAdherence()!} />
+        ) : selectedTemplate === 'ai-threat-intelligence' && dataInfo && !isGenerating && transformDataForRiskAssessment() ? (
+          <RiskAssessmentDashboard data={transformDataForRiskAssessment()!} />
+        ) : (
+          <PreviewAccordion sections={reportSections} isGenerating={isGenerating} dataInfo={dataInfo} />
+        )}
       </div>
     </div>
   );

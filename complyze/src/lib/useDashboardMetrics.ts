@@ -61,9 +61,12 @@ export function useDashboardMetrics(userId: string | null): {
 
   const fetchMetrics = useCallback(async () => {
     if (!userId) {
+      console.log('useDashboardMetrics: No userId provided');
       setLoading(false);
       return;
     }
+
+    console.log('useDashboardMetrics: Fetching metrics for userId:', userId);
 
     try {
       setError(null);
@@ -92,12 +95,15 @@ export function useDashboardMetrics(userId: string | null): {
         .order('captured_at', { ascending: false });
 
       if (eventsError) {
+        console.error('useDashboardMetrics: Events error:', eventsError);
         throw new Error(`Failed to fetch prompt events: ${eventsError.message}`);
       }
 
+      console.log('useDashboardMetrics: Fetched prompt events:', promptEvents?.length || 0, 'events');
       setPrompts(promptEvents || []);
 
       if (!promptEvents || promptEvents.length === 0) {
+        console.log('useDashboardMetrics: No prompt events found, returning empty state');
         // Return empty state
         setData({
           budget_tracker: {

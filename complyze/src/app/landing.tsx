@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import PromptJourney from "./components/PromptJourney";
+import PersonaCards from "./components/PersonaCards";
 
 export default function Landing() {
   const [showModal, setShowModal] = useState<null | 'login' | 'signup' | 'pricing' | 'demo'>(null);
@@ -91,6 +92,9 @@ export default function Landing() {
         // Store auth data in localStorage for the dashboard
         localStorage.setItem('complyze_token', data.access_token);
         localStorage.setItem('complyze_user', JSON.stringify(data.user));
+        if (data.refresh_token) {
+          localStorage.setItem('complyze_refresh_token', data.refresh_token);
+        }
         
         // Redirect to dashboard
         window.location.href = '/dashboard';
@@ -149,6 +153,9 @@ export default function Landing() {
           // Store auth data and redirect to dashboard
           localStorage.setItem('complyze_token', data.access_token);
           localStorage.setItem('complyze_user', JSON.stringify(data.user));
+          if (data.refresh_token) {
+            localStorage.setItem('complyze_refresh_token', data.refresh_token);
+          }
           window.location.href = '/dashboard';
         } else {
           console.log('Complyze: No auto-login, showing success message');
@@ -750,6 +757,9 @@ export default function Landing() {
           </button>
         </div>
       </section>
+
+      {/* Persona Cards Section */}
+      <PersonaCards />
 
       {/* Count-up Section */}
       <section className="bg-[#FAF9F6] text-[#0E1E36] py-16 sm:py-20 px-4">

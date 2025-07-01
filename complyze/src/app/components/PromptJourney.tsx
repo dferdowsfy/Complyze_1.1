@@ -618,14 +618,13 @@ function FinalOutput({ inView }: { inView: boolean }) {
               transition={{ duration: 0.7, delay: 0.2 }}
               whileHover={{ scale: 1.05, boxShadow: "0px 10px 25px rgba(255, 111, 60, 0.4)" }}
               whileTap={{ scale: 0.98 }}
-              className="px-6 md:px-10 py-3 md:py-4 rounded-lg font-bold text-lg md:text-2xl shadow transition w-full md:w-auto"
+              className="px-6 md:px-10 py-3 md:py-4 rounded-lg font-bold text-lg md:text-xl shadow transition w-full"
               style={{ 
                 background: COLORS.accent, 
                 color: '#fff', 
                 border: 'none', 
                 borderRadius: 12, 
-                fontFamily: 'Inter, sans-serif', 
-                minWidth: isMobile ? 'auto' : 180 
+                fontFamily: 'Inter, sans-serif'
               }}
             >
               Insert New Prompt
@@ -634,10 +633,15 @@ function FinalOutput({ inView }: { inView: boolean }) {
               initial={{ opacity: 0, y: 20 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.7, delay: 0.3 }}
-              className="px-4 md:px-6 py-3 md:py-4 rounded-lg font-bold text-lg md:text-xl border border-[#FF6F3C] text-[#FF6F3C] bg-white hover:bg-[#fff5f0] transition shadow w-full md:w-auto"
+              whileHover={{ scale: 1.05, boxShadow: "0px 10px 25px rgba(0, 30, 54, 0.4)" }}
+              whileTap={{ scale: 0.98 }}
+              className="px-6 md:px-10 py-3 md:py-4 rounded-lg font-bold text-lg md:text-xl shadow transition w-full"
               style={{ 
-                fontFamily: 'Inter, sans-serif', 
-                minWidth: isMobile ? 'auto' : 160 
+                background: COLORS.header, 
+                color: '#fff', 
+                border: 'none', 
+                borderRadius: 12, 
+                fontFamily: 'Inter, sans-serif'
               }}
             >
               View Audit Log
@@ -682,65 +686,48 @@ function FinalOutput({ inView }: { inView: boolean }) {
 }
 
 function FAQSection({ faqRef }: { faqRef?: React.RefObject<HTMLDivElement | null> }) {
-  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const [openItems, setOpenItems] = useState<number[]>([]);
+
+  const toggleItem = (index: number) => {
+    setOpenItems(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
+  };
+
   return (
-    <section ref={faqRef} className="max-w-3xl mx-auto my-24 px-4">
-      <motion.h2
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.7 }}
-        className="text-4xl md:text-5xl font-bold mb-12 text-center tracking-tight"
-        style={{ color: '#0E1E36', letterSpacing: '-0.02em' }}
-      >
-        Frequently Asked Questions
-      </motion.h2>
-      <div className="flex flex-col gap-6">
-        {FAQS.map((faq, idx) => (
-          <motion.div
-            key={faq.q}
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: idx * 0.08 }}
-            className="rounded-2xl shadow-lg border border-[#0E1E36] overflow-hidden"
-            style={{ background: '#0E1E36', color: '#fff', backdropFilter: 'blur(2px)' }}
-          >
+    <section ref={faqRef as React.LegacyRef<HTMLElement>} className="max-w-3xl mx-auto my-24 px-4">
+      <h2 className="text-4xl font-bold mb-12 text-center" style={{ color: COLORS.header }}>Frequently Asked Questions</h2>
+      
+      <div className="space-y-4">
+        {FAQS.map((faq, index) => (
+          <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
             <button
-              className="w-full flex items-center justify-between px-6 py-6 text-left focus:outline-none group"
-              onClick={() => setOpenIdx(openIdx === idx ? null : idx)}
-              aria-expanded={openIdx === idx}
-              style={{ color: '#fff' }}
+              className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition-colors"
+              onClick={() => toggleItem(index)}
             >
-              <span className="flex items-center gap-3 text-xl md:text-2xl font-semibold" style={{ color: '#fff' }}>
-                {/* Removed icon */}
-                {faq.q}
+              <span className="font-semibold text-gray-900">{faq.q}</span>
+              <span className="text-gray-500 ml-4 flex-shrink-0">
+                {openItems.includes(index) ? '−' : '+'}
               </span>
-              <motion.span
-                initial={false}
-                animate={{ rotate: openIdx === idx ? 90 : 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="ml-2 text-2xl text-[#FF6F3C]"
-              >
-                ▶
-              </motion.span>
             </button>
-            <AnimatePresence initial={false}>
-              {openIdx === idx && (
+            <AnimatePresence>
+              {openItems.includes(index) && (
                 <motion.div
-                  key="content"
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.5, ease: 'easeInOut' }}
-                  className="px-8 pb-8 text-lg whitespace-pre-line"
-                  style={{ color: '#fff' }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
                 >
-                  {faq.a}
+                  <div className="px-6 py-4 border-t border-gray-200 text-gray-700">
+                    {faq.a}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
-          </motion.div>
+          </div>
         ))}
       </div>
     </section>
@@ -808,9 +795,13 @@ export default function PromptJourney({ journeyRef, faqRef }: PromptJourneyProps
         </>
       )}
       <div className="relative z-10 max-w-6xl mx-auto flex flex-col gap-16 md:gap-24 lg:gap-32 px-4 md:px-0">
-        <div ref={el => {
-          if (journeyRef) journeyRef.current = el;
-          if (ref1) (ref1 as any).current = el;
+        <div ref={(el) => {
+          if (journeyRef && el) {
+            (journeyRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+          }
+          if (ref1 && el) {
+            (ref1 as React.MutableRefObject<HTMLDivElement | null>).current = el;
+          }
         }}><RiskDetection inView={inView1} /></div>
         <div ref={ref2}><PromptOptimizer inView={inView2} /></div>
         <div ref={ref3}><ComplianceMapping inView={inView3} /></div>
