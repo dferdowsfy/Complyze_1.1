@@ -1,40 +1,10 @@
 [build]
-  base = "complyze"
-  command = "npm install && npm run build"
+  base    = "complyze"
   publish = ".next"
+  command = "npm install && npm run build"
 
 [build.environment]
   NODE_VERSION = "18"
 
-# Next.js plugin for proper handling
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-
-# Environment variables (set in Netlify dashboard)
-[context.production.environment]
-  NEXT_PUBLIC_SITE_URL = "https://complyze.co"
-  NODE_ENV = "production"
-
-# Force HTTPS and non-www redirects
-[[redirects]]
-  from = "http://complyze.co/*"
-  to = "https://complyze.co/:splat"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "https://www.complyze.co/*"
-  to = "https://complyze.co/:splat"
-  status = 301
-  force = true
-
-# The Netlify Next.js plugin handles all other routing,
-# so a /* redirect is not needed and will break the site.
-
-# Ensure API routes work properly
-[[headers]]
-  for = "/api/*"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Authorization" 
