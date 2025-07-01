@@ -453,7 +453,7 @@ export default function Reports({ prompts }: { prompts: any[] }) {
       end_date: dateRange.end,
       total_prompts: totalPrompts,
       redacted_count: redactedCount,
-      percent_redacted: Math.round((redactedCount / totalPrompts) * 100),
+      percent_redacted: totalPrompts > 0 ? Math.round((redactedCount / totalPrompts) * 100) : 0,
       rewrite_count: Math.floor(totalPrompts * 0.12),
       top_trigger: "PII Detection",
       pii_precision: 94,

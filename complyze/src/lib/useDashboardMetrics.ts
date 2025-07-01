@@ -90,8 +90,6 @@ export function useDashboardMetrics(userId: string | null): {
         .from('prompt_events')
         .select('*')
         .eq('user_id', userId)
-        .gte('captured_at', startOfMonth.toISOString())
-        .lte('captured_at', endOfMonth.toISOString())
         .order('captured_at', { ascending: false });
 
       if (eventsError) {

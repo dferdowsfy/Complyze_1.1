@@ -25,8 +25,6 @@ function DashboardHeader({ title, user, logout }: { title: string, user: any, lo
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const projects = ['Complyze AI', 'Project Phoenix', 'Q3 Initiative'];
   
-
-  
   return (
     <header className="flex justify-between items-center mb-8">
       <div className="flex items-center gap-4">
@@ -48,19 +46,19 @@ function DashboardHeader({ title, user, logout }: { title: string, user: any, lo
              <svg className={`w-4 h-4 text-gray-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
           </button>
           {dropdownOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-[#252945] ring-1 ring-black ring-opacity-5 z-50">
-              <div className="py-1">
-                <div className="px-4 py-2 text-xs text-gray-400">Projects</div>
-                {projects.map(p => (
-                   <a href="#" key={p} className="block px-4 py-2 text-sm text-gray-200 hover:bg-white/5">{p}</a>
-                ))}
-                <div className="border-t border-white/10 my-1"></div>
-                <button onClick={logout} className="w-full text-left block px-4 py-2 text-sm text-red-400 hover:bg-white/5">
-                  Logout
-                </button>
-              </div>
-            </div>
-          )}
+             <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-[#252945] ring-1 ring-black ring-opacity-5 z-50">
+               <div className="py-1">
+                 <div className="px-4 py-2 text-xs text-gray-400">Projects</div>
+                 {projects.map(p => (
+                    <a href="#" key={p} className="block px-4 py-2 text-sm text-gray-200 hover:bg-white/5">{p}</a>
+                 ))}
+                 <div className="border-t border-white/10 my-1"></div>
+                 <button onClick={logout} className="w-full text-left block px-4 py-2 text-sm text-red-400 hover:bg-white/5">
+                   Logout
+                 </button>
+               </div>
+             </div>
+           )}
         </div>
       </div>
     </header>

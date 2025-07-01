@@ -1,0 +1,169 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Analyze Current Implementation and Map Dependencies",
+        "description": "Identify all occurrences of the Prompt Optimizer button and map dependencies in PromptJourney.tsx and related files.",
+        "details": "Review PromptJourney.tsx and any imported components or utilities for references to the Prompt Optimizer button. Use static code analysis tools (e.g., ESLint, TypeScript compiler) to detect unused imports and dependencies. Document all findings for reference in subsequent tasks.",
+        "testStrategy": "Manual code review and static analysis to ensure all dependencies are identified. No automated tests required at this stage.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Remove Prompt Optimizer Button from UI",
+        "description": "Remove the Prompt Optimizer button from the FinalOutput component in PromptJourney.tsx.",
+        "details": "Locate the button element in PromptJourney.tsx and remove it. Ensure the removal does not affect the layout or functionality of surrounding components. Use React best practices to avoid unnecessary divs and maintain clean component structure[1][5].",
+        "testStrategy": "Manual UI inspection and automated snapshot testing to verify button removal and layout integrity.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Clean Up Unused Imports and References",
+        "description": "Remove any unused imports and direct references to the Prompt Optimizer button.",
+        "details": "Remove all unused imports related to the Prompt Optimizer from PromptJourney.tsx and any associated files. Use ESLint with the 'unused-imports' plugin for automated detection. Ensure no orphaned code remains.",
+        "testStrategy": "Run ESLint and TypeScript compiler to check for unused imports and references. Manual code review for thoroughness.",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Remove Associated Event Handlers and Functions",
+        "description": "Clean up any event handlers or functions specifically tied to the Prompt Optimizer button.",
+        "details": "Identify and remove any event handlers or utility functions that are only used by the Prompt Optimizer button. Ensure remaining event handlers for 'Insert New Prompt' and 'View Audit Log' are preserved.",
+        "testStrategy": "Manual code review and unit tests to verify removal of targeted handlers and preservation of others.",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          2,
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Adjust Layout and Styling",
+        "description": "Adjust layout and styling to maintain responsiveness and visual integrity after button removal.",
+        "details": "Update CSS or styling utilities to ensure the UI remains responsive and visually consistent. Use CSS Grid or Flexbox for layout adjustments. Avoid adding unnecessary margins; prefer padding or gap for spacing[1][5].",
+        "testStrategy": "Manual UI inspection and automated visual regression testing to confirm layout and styling integrity.",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Test UI Integrity and Responsiveness",
+        "description": "Verify that the UI remains intact and responsive after changes.",
+        "details": "Test the application on different screen sizes and browsers. Use tools like BrowserStack or Chrome DevTools for responsive testing. Ensure animations and transitions are preserved.",
+        "testStrategy": "Manual and automated responsive testing, visual regression, and animation checks.",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Test Remaining Button Functionality",
+        "description": "Ensure 'Insert New Prompt' and 'View Audit Log' buttons remain functional.",
+        "details": "Test all remaining button functionalities. Use Jest and React Testing Library for automated unit and integration tests. Verify event handlers and state management are unaffected.",
+        "testStrategy": "Automated unit and integration tests, manual click-through testing.",
+        "priority": "high",
+        "dependencies": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Check for Console Errors and Warnings",
+        "description": "Ensure no console errors or warnings are introduced by the changes.",
+        "details": "Run the application and monitor the browser console for errors or warnings. Use ESLint and TypeScript for static analysis. Address any issues found.",
+        "testStrategy": "Manual console inspection and automated linting/compilation checks.",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Update Documentation",
+        "description": "Update relevant documentation to reflect the removal of the Prompt Optimizer button.",
+        "details": "Remove references to the Prompt Optimizer button from all documentation. Document any changes in component structure or dependencies. Use Markdown or Confluence for documentation updates.",
+        "testStrategy": "Manual review of updated documentation for accuracy and completeness.",
+        "priority": "low",
+        "dependencies": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Final Review and Regression Testing",
+        "description": "Conduct a final review and regression testing to ensure all requirements are met.",
+        "details": "Perform a comprehensive code review and regression test suite. Ensure all tests pass, no visual artifacts remain, and documentation is updated. Use automated CI/CD pipelines for regression testing.",
+        "testStrategy": "Automated regression testing, manual code review, and final UI inspection.",
+        "priority": "high",
+        "dependencies": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-06-30T23:17:44.898Z",
+      "updated": "2025-06-30T23:18:01.260Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
