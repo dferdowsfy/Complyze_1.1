@@ -910,6 +910,18 @@ export default function Landing() {
       </section>
       {/* Insert PromptJourney below the prompt enhancement section */}
       <PromptJourney journeyRef={journeyRef} faqRef={faqRef} />
+
+      {/* Footer */}
+      <footer className="bg-[#0E1E36] text-white py-8 px-4">
+        <div className="max-w-7xl mx-auto flex flex-col items-center">
+          <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-4">
+            <a href="#" className="text-gray-400 hover:text-white transition">Terms of Service</a>
+            <a href="/privacypolicy" className="text-gray-400 hover:text-white transition">Privacy Policy</a>
+            <a href="mailto:support@complyze.co" className="text-gray-400 hover:text-white transition">Support</a>
+          </div>
+          <div className="mt-6 text-gray-400 text-sm">© 2023 Complyze. All rights reserved.</div>
+        </div>
+      </footer>
     </div>
   );
 } 

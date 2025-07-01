@@ -51,7 +51,22 @@ export default function RootLayout({
         <meta name="theme-color" content="#FF6F3C" />
         <meta name="msapplication-TileColor" content="#FF6F3C" />
       </head>
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.className} flex flex-col min-h-screen`}>
+        <main className="flex-grow">
+          {children}
+        </main>
+        <footer className="bg-[#0E1E36] text-white py-6 px-4">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center text-center sm:text-left">
+            <div className="text-gray-400 text-sm mb-4 sm:mb-0">
+              © 2023 Complyze. All rights reserved.
+            </div>
+            <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2">
+              <a href="/privacypolicy" className="text-gray-400 hover:text-white transition text-sm">Privacy Policy</a>
+              <a href="mailto:support@complyze.co" className="text-gray-400 hover:text-white transition text-sm">Support</a>
+            </div>
+          </div>
+        </footer>
+      </body>
     </html>
   )
 }
