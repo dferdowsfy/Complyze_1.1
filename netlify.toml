@@ -10,17 +10,26 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Environment variables (you'll need to set these in Netlify dashboard)
-# The following are examples - set the actual values in Netlify dashboard
+# Environment variables (set in Netlify dashboard)
 [context.production.environment]
-  NEXT_PUBLIC_SITE_URL = "https://your-domain.netlify.app"
+  NEXT_PUBLIC_SITE_URL = "https://complyze.co"
   NODE_ENV = "production"
 
-# Next.js redirects - let the plugin handle routing
+# Force HTTPS and non-www redirects
 [[redirects]]
-  from = "/*"
-  to = "/404.html"
-  status = 404
+  from = "http://complyze.co/*"
+  to = "https://complyze.co/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://www.complyze.co/*"
+  to = "https://complyze.co/:splat"
+  status = 301
+  force = true
+
+# The Netlify Next.js plugin handles all other routing,
+# so a /* redirect is not needed and will break the site.
 
 # Ensure API routes work properly
 [[headers]]
